@@ -7,6 +7,8 @@
 #include <boost/property_tree/json_parser.hpp>
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <iostream>
+
 namespace polysolve::linear
 {
 
@@ -207,6 +209,8 @@ namespace polysolve::linear
 
         assert(solver_ != nullptr);
         std::tie(iterations_, residual_error_) = (*solver_)(*rhs_b, *x_b);
+        std::cout << "Iterations: " << iterations_ << std::endl;
+        std::cout << "Final Relative Residual Norm: " << residual_error_ << std::endl;
 
         std::copy(&(*x_b)[0], &(*x_b)[0] + result.size(), result.data());
     }

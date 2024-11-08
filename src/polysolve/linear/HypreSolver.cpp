@@ -7,6 +7,8 @@
 #include <HYPRE_utilities.h>
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <iostream>
+
 namespace polysolve::linear
 {
 
@@ -270,10 +272,12 @@ namespace polysolve::linear
         HYPRE_PCGGetNumIterations(solver, &num_iterations);
         HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
 
-        // printf("\n");
-        // printf("Iterations = %lld\n", num_iterations);
-        // printf("Final Relative Residual Norm = %g\n", final_res_norm);
-        // printf("\n");
+        //printf("\n");
+        std::cout << "Iterations: " << num_iterations << std::endl;
+        std::cout << "Final Relative Residual Norm: " << final_res_norm << std::endl;
+        //printf("Iterations = %lld\n", num_iterations);
+        //printf("Final Relative Residual Norm = %g\n", final_res_norm);
+        //printf("\n");
 
         /* Destroy solver and preconditioner */
         HYPRE_BoomerAMGDestroy(precond);

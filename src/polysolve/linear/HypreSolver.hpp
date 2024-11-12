@@ -27,6 +27,9 @@ namespace polysolve::linear
     public:
         HypreSolver();
         ~HypreSolver();
+        typedef Eigen::VectorXd VectorXd;
+        template <typename T>
+        using Ref = Eigen::Ref<T>;
 
     private:
         POLYSOLVE_DELETE_MOVE_COPY(HypreSolver)
@@ -53,8 +56,6 @@ namespace polysolve::linear
 
         void set_problematic_dofs(std::set<int> &bad_indices) {bad_indices_ = bad_indices;}
 
-        void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x);
-
         // Name of the solver type (for debugging purposes)
         virtual std::string name() const override { return "Hypre"; }
 
@@ -75,6 +76,8 @@ namespace polysolve::linear
 
         HYPRE_IJMatrix A;
         HYPRE_ParCSRMatrix parcsr_A;
+
+        void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x);
     };
 
 } // namespace polysolve::linear

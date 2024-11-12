@@ -178,6 +178,9 @@ namespace polysolve::nonlinear
         {
             POLYSOLVE_SCOPED_STOPWATCH("bad dof time", this->bad_dof_time, m_logger);
             objFunc.problematic_indices(bad_indices);
+            if (linear_solver->name() == "Hypre") {
+                linear_solver->set_problematic_dofs(bad_indices);
+            }
         }
 
         {
@@ -198,7 +201,7 @@ namespace polysolve::nonlinear
                 return std::nan("");
             }
 
-            linear_solver->solve(-grad, direction, bad_indices); // H Δx = -g
+            linear_solver->solve(-grad, direction); // H Δx = -g
         }
 
         const double residual = (hessian * direction + grad).norm(); // H Δx + g = 0
@@ -226,6 +229,9 @@ namespace polysolve::nonlinear
         {
             POLYSOLVE_SCOPED_STOPWATCH("bad dof time", this->bad_dof_time, m_logger);
             objFunc.problematic_indices(bad_indices);
+            if (linear_solver->name() == "Hypre") {
+                linear_solver->set_problematic_dofs(bad_indices);
+            }
         }
 
         {
@@ -235,7 +241,7 @@ namespace polysolve::nonlinear
             {
                 linear_solver->analyze_pattern_dense(hessian, hessian.rows());
                 linear_solver->factorize_dense(hessian);
-                linear_solver->solve(-grad, direction, bad_indices);
+                linear_solver->solve(-grad, direction);
             }
             catch (const std::runtime_error &err)
             {

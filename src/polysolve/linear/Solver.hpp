@@ -3,6 +3,7 @@
 #include <polysolve/Types.hpp>
 
 #include <memory>
+#include <set>
 
 #define POLYSOLVE_DELETE_MOVE_COPY(Base) \
     Base(Base &&) = delete;              \
@@ -112,6 +113,8 @@ namespace polysolve::linear
 
         /// If the problem is nullspace for multigrid solvers
         virtual void set_is_nullspace(const VectorXd &x) {}
+
+        virtual void set_problematic_dofs(std::set<int> &bad_indices) {}
 
         ///
         /// @brief         { Solve the linear system Ax = b }

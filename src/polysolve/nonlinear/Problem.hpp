@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <vector>
+#include <set>
 
 namespace polysolve::nonlinear
 {
@@ -102,6 +103,8 @@ namespace polysolve::nonlinear
         /// @param x Current solution.
         /// @return True if the solver should stop, false otherwise.
         virtual bool stop(const TVector &x) { return false; }
+
+        virtual void problematic_indices(std::set<int>& bad_indices) {};
 
         /// --- Misc ----------------------------------------------------------
 

@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <vector>
+#include <set>
 
 #include <HYPRE_utilities.h>
 #include <HYPRE.h>
@@ -50,6 +51,10 @@ namespace polysolve::linear
         // Solve the linear system Ax = b
         virtual void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) override;
 
+        void set_problematic_dofs(std::set<int> &bad_indices) {bad_indices_ = bad_indices;}
+
+        void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x);
+
         // Name of the solver type (for debugging purposes)
         virtual std::string name() const override { return "Hypre"; }
 
@@ -58,6 +63,8 @@ namespace polysolve::linear
         int max_iter_ = 1000;
         int pre_max_iter_ = 1;
         double conv_tol_ = 1e-10;
+
+        std::set<int> bad_indices_;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

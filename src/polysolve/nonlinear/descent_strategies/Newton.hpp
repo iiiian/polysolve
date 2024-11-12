@@ -54,6 +54,7 @@ namespace polysolve::nonlinear
 
         double assembly_time;
         double inverting_time;
+        double bad_dof_time;
 
     protected:
         std::string internal_name() const { return is_sparse ? "Sparse" : "Dense"; }

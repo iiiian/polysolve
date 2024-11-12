@@ -27,9 +27,6 @@ namespace polysolve::linear
     public:
         HypreSolver();
         ~HypreSolver();
-        typedef Eigen::VectorXd VectorXd;
-        template <typename T>
-        using Ref = Eigen::Ref<T>;
 
     private:
         POLYSOLVE_DELETE_MOVE_COPY(HypreSolver)

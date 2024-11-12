@@ -297,9 +297,9 @@ namespace polysolve::linear
         HYPRE_IJVectorDestroy(x);
     }
 
-    void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
+    void HypreSolver::mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
-        
+
     }
 
     ////////////////////////////////////////////////////////////////////////////////

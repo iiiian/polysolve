@@ -170,9 +170,9 @@ namespace polysolve::linear
             // refinement (this is generally applicable for any system)
             int interp_refine = 1;
 
-            HYPRE_BoomerAMGSetNodal(amg_precond, nodal);
-            HYPRE_BoomerAMGSetNodalDiag(amg_precond, nodal_diag);
-            HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_coarse, 3);
+            //HYPRE_BoomerAMGSetNodal(amg_precond, nodal);
+            //HYPRE_BoomerAMGSetNodalDiag(amg_precond, nodal_diag);
+            //HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_coarse, 3);
             // HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
             // HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
             // HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);

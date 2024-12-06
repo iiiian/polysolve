@@ -54,6 +54,22 @@ namespace polysolve::linear
             {
                 conv_tol_ = params["Hypre"]["tolerance"];
             }
+            if (params["Hypre"].contains("theta"))
+            {
+                theta = params["Hypre"]["theta"];
+            }
+            if (params["Hypre"].contains("nodal_coarsening"))
+            {
+                nodal_coarsening = params["Hypre"]["nodal_coarsening"];
+            }
+            if (params["Hypre"].contains("interp_rbms"))
+            {
+                interp_rbms = params["Hypre"]["interp_rbms"];
+            }
+            if (params["Hypre"].contains("dimension"))
+            {
+                dimension_ = params["Hypre"]["dimension"];
+            }
         }
     }
 
@@ -146,14 +162,14 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetTol(amg_precond, 0.0);
         }
 
-        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim)
+        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms)
         {
             // Make sure the systems AMG options are set
-            HYPRE_BoomerAMGSetNumFunctions(amg_precond, /*dim*/2);
+            HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
 
             // More robust options with respect to convergence
-            //HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
-            //HYPRE_BoomerAMGSetStrongThreshold(amg_precond, 0.5);
+            HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
+            HYPRE_BoomerAMGSetStrongThreshold(amg_precond, theta);
 
             // Nodal coarsening options (nodal coarsening is required for this solver)
             // See hypre's new_ij driver and the paper for descriptions.
@@ -170,16 +186,23 @@ namespace polysolve::linear
             // refinement (this is generally applicable for any system)
             int interp_refine = 1;
 
-            //HYPRE_BoomerAMGSetNodal(amg_precond, nodal);
-            //HYPRE_BoomerAMGSetNodalDiag(amg_precond, nodal_diag);
-            //HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_coarse, 3);
-            // HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
-            // HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
-            // HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);
-            // HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
+            if (nodal_coarsening) 
+            {
+                HYPRE_BoomerAMGSetNodal(amg_precond, nodal);
+                HYPRE_BoomerAMGSetNodalDiag(amg_precond, nodal_diag);
+                HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_coarse, 3);
+            }
 
-            // RecomputeRBMs();
-            // HYPRE_BoomerAMGSetInterpVectors(amg_precond, rbms.Size(), rbms.GetData());
+            if (interp_rbms)
+            {
+                HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
+                HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
+                HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);
+                HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
+
+                // RecomputeRBMs();
+                // HYPRE_BoomerAMGSetInterpVectors(amg_precond, rbms.Size(), rbms.GetData());
+            }
         }
 
     } // anonymous namespace
@@ -257,9 +280,9 @@ namespace polysolve::linear
 #endif
 
         HypreBoomerAMG_SetDefaultOptions(precond);
-        if (true || dimension_ > 1)
+        if (dimension_ > 1)
         {
-            HypreBoomerAMG_SetElasticityOptions(precond, dimension_);
+            HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms);
         }
 
         /* Set the PCG preconditioner */

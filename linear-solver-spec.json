@@ -139,7 +139,10 @@
         "optional": [
             "max_iter",
             "pre_max_iter",
-            "tolerance"
+            "tolerance",
+            "theta",
+            "nodal_coarsening",
+            "interp_rbms"
         ],
         "doc": "Settings for the Hypre solver."
     },

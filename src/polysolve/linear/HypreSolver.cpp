@@ -198,7 +198,7 @@ namespace polysolve::linear
                 HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
                 HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
                 HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);
-                HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
+                // HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
 
                 // RecomputeRBMs();
                 // HYPRE_BoomerAMGSetInterpVectors(amg_precond, rbms.Size(), rbms.GetData());

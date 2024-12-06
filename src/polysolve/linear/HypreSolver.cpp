@@ -152,8 +152,8 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetNumFunctions(amg_precond, /*dim*/2);
 
             // More robust options with respect to convergence
-            HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
-            HYPRE_BoomerAMGSetStrongThreshold(amg_precond, 0.5);
+            //HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
+            //HYPRE_BoomerAMGSetStrongThreshold(amg_precond, 0.5);
 
             // Nodal coarsening options (nodal coarsening is required for this solver)
             // See hypre's new_ij driver and the paper for descriptions.

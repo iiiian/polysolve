@@ -1,3 +1,4 @@
+#define POLYSOLVE_WITH_HYPRE
 #ifdef POLYSOLVE_WITH_HYPRE
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,7 +149,7 @@ namespace polysolve::linear
         void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim)
         {
             // Make sure the systems AMG options are set
-            HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
+            HYPRE_BoomerAMGSetNumFunctions(amg_precond, /*dim*/2);
 
             // More robust options with respect to convergence
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
@@ -172,8 +173,8 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetNodal(amg_precond, nodal);
             HYPRE_BoomerAMGSetNodalDiag(amg_precond, nodal_diag);
             HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_coarse, 3);
-            HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
-            HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
+            // HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
+            // HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
             // HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);
             // HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
 
@@ -256,7 +257,7 @@ namespace polysolve::linear
 #endif
 
         HypreBoomerAMG_SetDefaultOptions(precond);
-        if (dimension_ > 1)
+        if (true || dimension_ > 1)
         {
             HypreBoomerAMG_SetElasticityOptions(precond, dimension_);
         }
@@ -299,7 +300,7 @@ namespace polysolve::linear
 
     void HypreSolver::mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
-
+        
     }
 
     ////////////////////////////////////////////////////////////////////////////////

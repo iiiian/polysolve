@@ -162,7 +162,7 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetTol(amg_precond, 0.0);
         }
 
-        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms)
+        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms, const Eigen::MatrixXd &nullspace)
         {
             // Make sure the systems AMG options are set
             HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
@@ -195,13 +195,68 @@ namespace polysolve::linear
 
             if (interp_rbms)
             {
+                if (dim != 3)
+                {
+                    assert(false);
+                }
                 HYPRE_BoomerAMGSetInterpVecVariant(amg_precond, interp_vec_variant);
                 HYPRE_BoomerAMGSetInterpVecQMax(amg_precond, q_max);
                 // HYPRE_BoomerAMGSetSmoothInterpVectors(amg_precond, smooth_interp_vectors);
                 // HYPRE_BoomerAMGSetInterpRefine(amg_precond, interp_refine);
 
+                Eigen::VectorXd rbm_xy, rbm_zx, rbm_yz;
+                rbm_xy.resize(nullspace.size());
+                rbm_zx.resize(nullspace.size());
+                rbm_yz.resize(nullspace.size());
+                rbm_xy.setZero();
+                rbm_zx.setZero();
+                rbm_yz.setZero();
+
+                for (int i = 0; i < nullspace.rows(); ++i)
+                {
+                    rbm_xy(0 + i*dim) = nullspace(i, 1);
+                    rbm_xy(1 + i*dim) = -1 * nullspace(i, 0);
+
+                    rbm_zx(1 + i*dim) = nullspace(i, 2);
+                    rbm_zx(2 + i*dim) = -1 * nullspace(i, 1);
+
+                    rbm_yz(2 + i*dim) = nullspace(i, 0);
+                    rbm_yz(0 + i*dim) = -1 * nullspace(i, 2);
+                }
+
+                HYPRE_IJVector rbms[3];
+                HYPRE_ParVector par_rbms[3];
+
+                for (int i = 0; i < 3; ++i)
+                {
+                    HYPRE_IJVectorCreate(0, 0, nullspace.size() - 1, &(rbms[i]));
+                    HYPRE_IJVectorSetObjectType(rbms[i], HYPRE_PARCSR);
+                    HYPRE_IJVectorInitialize(rbms[i]);  
+                }
+
+                for (HYPRE_Int i = 0; i < nullspace.size(); ++i)
+                {
+                    const HYPRE_Int index[1] = {i};
+                    
+                    const HYPRE_Complex vxy[1] = {HYPRE_Complex(rbm_xy(i))};
+                    HYPRE_IJVectorSetValues(rbms[0], 1, index, vxy);
+                    
+                    const HYPRE_Complex vzx[1] = {HYPRE_Complex(rbm_zx(i))};
+                    HYPRE_IJVectorSetValues(rbms[1], 1, index, vzx);
+                    
+                    const HYPRE_Complex vyz[1] = {HYPRE_Complex(rbm_yz(i))};
+                    HYPRE_IJVectorSetValues(rbms[2], 1, index, vyz);
+                }
+
+            
+                for (int i = 0; i < 3; ++i)
+                {
+                    HYPRE_IJVectorAssemble(rbms[i]);
+                    HYPRE_IJVectorGetObject(rbms[i], (void **)&(par_rbms[i]));
+                }
+
                 // RecomputeRBMs();
-                // HYPRE_BoomerAMGSetInterpVectors(amg_precond, rbms.Size(), rbms.GetData());
+                HYPRE_BoomerAMGSetInterpVectors(amg_precond, 3, par_rbms);
             }
         }
 
@@ -282,7 +337,120 @@ namespace polysolve::linear
         HypreBoomerAMG_SetDefaultOptions(precond);
         if (dimension_ > 1)
         {
-            HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms);
+            assert(false);
+            //HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms);
+        }
+
+        /* Set the PCG preconditioner */
+        HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
+
+        /* Now setup and solve! */
+        HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
+        HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
+
+        /* Run info - needed logging turned on */
+        HYPRE_PCGGetNumIterations(solver, &num_iterations);
+        HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+
+        //printf("\n");
+        std::cout << "Iterations: " << num_iterations << std::endl;
+        std::cout << "Final Relative Residual Norm: " << final_res_norm << std::endl;
+        //printf("Iterations = %lld\n", num_iterations);
+        //printf("Final Relative Residual Norm = %g\n", final_res_norm);
+        //printf("\n");
+
+        /* Destroy solver and preconditioner */
+        HYPRE_BoomerAMGDestroy(precond);
+        HYPRE_ParCSRPCGDestroy(solver);
+
+        assert(result.size() == rhs.size());
+        for (HYPRE_Int i = 0; i < rhs.size(); ++i)
+        {
+            const HYPRE_Int index[1] = {i};
+            HYPRE_Complex v[1];
+            HYPRE_IJVectorGetValues(x, 1, index, v);
+
+            result(i) = v[0];
+        }
+
+        HYPRE_IJVectorDestroy(b);
+        HYPRE_IJVectorDestroy(x);
+    }
+
+    void HypreSolver::solve(const Eigen::Ref<const VectorXd> rhs, const Ref<const MatrixXd> nullspace, Eigen::Ref<VectorXd> result)
+    {
+        HYPRE_IJVector b;
+        HYPRE_ParVector par_b;
+        HYPRE_IJVector x;
+        HYPRE_ParVector par_x;
+
+#ifdef HYPRE_WITH_MPI
+        HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, rhs.size() - 1, &b);
+#else
+        HYPRE_IJVectorCreate(0, 0, rhs.size() - 1, &b);
+#endif
+        HYPRE_IJVectorSetObjectType(b, HYPRE_PARCSR);
+        HYPRE_IJVectorInitialize(b);
+#ifdef HYPRE_WITH_MPI
+        HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, rhs.size() - 1, &x);
+#else
+        HYPRE_IJVectorCreate(0, 0, rhs.size() - 1, &x);
+#endif
+        HYPRE_IJVectorSetObjectType(x, HYPRE_PARCSR);
+        HYPRE_IJVectorInitialize(x);
+
+        assert(result.size() == rhs.size());
+
+        for (HYPRE_Int i = 0; i < rhs.size(); ++i)
+        {
+            const HYPRE_Int index[1] = {i};
+            const HYPRE_Complex v[1] = {HYPRE_Complex(rhs(i))};
+            const HYPRE_Complex z[1] = {HYPRE_Complex(result(i))};
+
+            HYPRE_IJVectorSetValues(b, 1, index, v);
+            HYPRE_IJVectorSetValues(x, 1, index, z);
+        }
+
+        HYPRE_IJVectorAssemble(b);
+        HYPRE_IJVectorGetObject(b, (void **)&par_b);
+
+        HYPRE_IJVectorAssemble(x);
+        HYPRE_IJVectorGetObject(x, (void **)&par_x);
+
+        /* PCG with AMG preconditioner */
+
+        /* Create solver */
+        HYPRE_Solver solver, precond;
+#ifdef HYPRE_WITH_MPI
+        HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &solver);
+#else
+        HYPRE_ParCSRPCGCreate(0, &solver);
+#endif
+
+        /* Set some parameters (See Reference Manual for more parameters) */
+        HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
+        HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
+        HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
+        // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
+        HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
+
+        /* Now set up the AMG preconditioner and specify any parameters */
+        HYPRE_BoomerAMGCreate(&precond);
+
+#if 0
+    //HYPRE_BoomerAMGSetPrintLevel(precond, 2); /* print amg solution info */
+    HYPRE_BoomerAMGSetCoarsenType(precond, 6);
+    HYPRE_BoomerAMGSetOldDefault(precond);
+    HYPRE_BoomerAMGSetRelaxType(precond, 6); /* Sym G.S./Jacobi hybrid */
+    HYPRE_BoomerAMGSetNumSweeps(precond, 1);
+    HYPRE_BoomerAMGSetTol(precond, 0.0); /* conv. tolerance zero */
+    HYPRE_BoomerAMGSetMaxIter(precond, pre_max_iter_); /* do only one iteration! */
+#endif
+
+        HypreBoomerAMG_SetDefaultOptions(precond);
+        if (dimension_ > 1)
+        {
+            HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms, nullspace);
         }
 
         /* Set the PCG preconditioner */

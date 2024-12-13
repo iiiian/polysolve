@@ -35,6 +35,7 @@ namespace polysolve::linear
     public:
         // Shortcut alias
         typedef Eigen::VectorXd VectorXd;
+        typedef Eigen::MatrixXd MatrixXd;
         template <typename T>
         using Ref = Eigen::Ref<T>;
 
@@ -126,6 +127,7 @@ namespace polysolve::linear
         ///                      and initialized. }
         ///
         virtual void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) = 0;
+        virtual void solve(const Ref<const VectorXd> b, const Ref<const MatrixXd> nullspace, Ref<VectorXd> x) {solve(b, x);}
 
         /// @brief Name of the solver type (for debugging purposes)
         virtual std::string name() const { return ""; }

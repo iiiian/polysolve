@@ -49,6 +49,8 @@ namespace polysolve::linear
 
         // Solve the linear system Ax = b
         virtual void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) override;
+        virtual void solve(const Ref<const VectorXd> b, const Ref<const MatrixXd> nullspace, Ref<VectorXd> x) override;
+
 
         virtual void set_problematic_dofs(std::set<int> &bad_indices) override {bad_indices_ = bad_indices;}
 

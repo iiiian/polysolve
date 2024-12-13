@@ -201,7 +201,7 @@ namespace polysolve::nonlinear
                 return std::nan("");
             }
 
-            linear_solver->solve(-grad, direction); // H Δx = -g
+            linear_solver->solve(-grad, nullspace, direction); // H Δx = -g
         }
 
         const double residual = (hessian * direction + grad).norm(); // H Δx + g = 0
@@ -241,7 +241,7 @@ namespace polysolve::nonlinear
             {
                 linear_solver->analyze_pattern_dense(hessian, hessian.rows());
                 linear_solver->factorize_dense(hessian);
-                linear_solver->solve(-grad, direction);
+                linear_solver->solve(-grad, nullspace, direction);
             }
             catch (const std::runtime_error &err)
             {

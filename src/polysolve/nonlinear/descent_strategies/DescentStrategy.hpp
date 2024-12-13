@@ -50,7 +50,10 @@ namespace polysolve::nonlinear
             const TVector &grad,
             TVector &direction) = 0;
 
+        void set_nullspace(Eigen::MatrixXd &new_nullspace) {nullspace = new_nullspace;}
+
     protected:
         spdlog::logger &m_logger;
+        Eigen::MatrixXd nullspace;
     };
 } // namespace polysolve::nonlinear

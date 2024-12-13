@@ -4,6 +4,7 @@
 #include <polysolve/Utils.hpp>
 
 #include <polysolve/linear/Solver.hpp>
+#include <polysolve/linear/HypreSolver.hpp>
 
 namespace polysolve::nonlinear
 {
@@ -50,7 +51,7 @@ namespace polysolve::nonlinear
         const double characteristic_length;
         double residual_tolerance;
 
-        std::unique_ptr<polysolve::linear::Solver> linear_solver; ///< Linear solver used to solve the linear system
+        std::shared_ptr<polysolve::linear::Solver> linear_solver; ///< Linear solver used to solve the linear system
 
         double assembly_time;
         double inverting_time;

@@ -112,9 +112,6 @@ namespace polysolve::linear
         /// Set block size for multigrid solvers
         virtual void set_block_size(int block_size) {}
 
-        /// If the problem is nullspace for multigrid solvers
-        virtual void set_is_nullspace(const VectorXd &x) {}
-
         virtual void set_problematic_dofs(std::set<int> &bad_indices) {}
 
         ///
@@ -128,12 +125,14 @@ namespace polysolve::linear
         ///
         virtual void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) = 0;
 
-        void set_nullspace(const Ref<const MatrixXd> nullspace) {nullspace_ = nullspace;}
+        void set_positions(const Ref<const MatrixXd> positions) {positions_ = positions;}
+        void set_dof_to_function(const Ref<const VectorXd> dof_to_function) {dof_to_function_ = dof_to_function;}
 
         /// @brief Name of the solver type (for debugging purposes)
         virtual std::string name() const { return ""; }
 
-        MatrixXd nullspace_;
+        MatrixXd positions_;
+        VectorXd dof_to_function_;
     };
 
 } // namespace polysolve::linear

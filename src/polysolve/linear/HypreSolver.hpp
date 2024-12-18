@@ -2,6 +2,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 #include "Solver.hpp"
+#include "../Utils.hpp"
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <vector>
@@ -55,6 +56,8 @@ namespace polysolve::linear
         // Name of the solver type (for debugging purposes)
         virtual std::string name() const override { return "Hypre"; }
 
+        spdlog::logger *logger = nullptr;
+
     protected:
         int dimension_ = 1; // 1 = scalar (Laplace), 2 or 3 = vector (Elasticity)
         int max_iter_ = 1000;
@@ -79,6 +82,10 @@ namespace polysolve::linear
         HYPRE_ParCSRMatrix parcsr_A;
 
         void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x);
+
+        double copy_b_and_x_time;
+        double set_options_time;
+        double actual_solve_time;
     };
 
 } // namespace polysolve::linear

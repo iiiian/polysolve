@@ -86,29 +86,9 @@ namespace polysolve::nonlinear
         /// @brief Get the line search object
         const std::shared_ptr<line_search::LineSearch> &line_search() const { return m_line_search; };
 
-        void update_nullspace(const Eigen::MatrixXd &vertices, const std::vector<int> &boundary_nodes)
+        void set_positions(const Eigen::MatrixXd &positions_)
         {
-            // Remove boundary vertices
-            if (boundary_nodes.empty())
-            {
-                nullspace = vertices;
-            }
-            else
-            {
-                std::vector<int> order_nodes = boundary_nodes;
-                std::sort(order_nodes.begin(), order_nodes.end());
-                Eigen::MatrixXd out_vertices;
-                std::vector<int> keep;
-                for (int i = 0; i < vertices.rows(); i++)
-                {
-                    if (!std::binary_search(order_nodes.begin(), order_nodes.end(),i))
-                    {
-                        keep.push_back(i);
-                    }
-                }
-                out_vertices = vertices(keep, Eigen::indexing::all);
-                nullspace = out_vertices;
-            }
+            positions = positions_;
         }
 
     protected:
@@ -124,7 +104,7 @@ namespace polysolve::nonlinear
             const TVector &grad,
             TVector &direction)
         {
-            m_strategies[m_descent_strategy]->set_nullspace(nullspace);
+            m_strategies[m_descent_strategy]->set_positions(positions);
             return m_strategies[m_descent_strategy]->compute_update_direction(objFunc, x, grad, direction);
         }
 
@@ -201,7 +181,7 @@ namespace polysolve::nonlinear
         double line_search_time;
         double constraint_set_update_time;
 
-        Eigen::MatrixXd nullspace;
+        Eigen::MatrixXd positions;
 
         // ====================================================================
         //                                 END

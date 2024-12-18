@@ -183,7 +183,7 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetTol(amg_precond, 0.0);
         }
 
-        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms, const Eigen::MatrixXd &positions)
+        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms, const Eigen::MatrixXd &positions, std::vector<HYPRE_IJVector> &rbms, std::vector<HYPRE_ParVector> &par_rbms)
         {
             // Make sure the systems AMG options are set
             HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
@@ -255,10 +255,6 @@ namespace polysolve::linear
                     }
                 }
 
-                const int num_rbms = dim == 2 ? 1 : 3;
-                std::vector<HYPRE_ParVector> par_rbms(num_rbms);
-                std::vector<HYPRE_IJVector> rbms(num_rbms);
-
                 eigen_to_hypre_par_vec(par_rbms[0], rbms[0], rbm_xy);
                 if (dim == 3)
                 {
@@ -266,7 +262,7 @@ namespace polysolve::linear
                     eigen_to_hypre_par_vec(par_rbms[2], rbms[2], rbm_yz);
                 }
             
-                HYPRE_BoomerAMGSetInterpVectors(amg_precond, num_rbms, &(par_rbms[0]));
+                HYPRE_BoomerAMGSetInterpVectors(amg_precond, par_rbms.size(), &(par_rbms[0]));
             }
         }
 
@@ -320,14 +316,16 @@ namespace polysolve::linear
     HYPRE_BoomerAMGSetTol(precond, 0.0); /* conv. tolerance zero */
     HYPRE_BoomerAMGSetMaxIter(precond, pre_max_iter_); /* do only one iteration! */
 #endif
-        
+        const int num_rbms = dimension_ == 2 ? 1 : 3;
+        std::vector<HYPRE_ParVector> par_rbms(num_rbms);
+        std::vector<HYPRE_IJVector> rbms(num_rbms);
         
         {
             POLYSOLVE_SCOPED_STOPWATCH("set options", set_options_time, *logger);
             HypreBoomerAMG_SetDefaultOptions(precond);
             if (dimension_ > 1)
             {
-                HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms, positions_);
+                HypreBoomerAMG_SetElasticityOptions(precond, dimension_, theta, nodal_coarsening, interp_rbms, positions_, rbms, par_rbms);
             }
         }
 
@@ -365,6 +363,9 @@ namespace polysolve::linear
 
             result(i) = v[0];
         }
+
+        HYPRE_IJVectorDestroy(x);
+        HYPRE_IJVectorDestroy(b);
 
     }
 

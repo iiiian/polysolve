@@ -2,6 +2,8 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 #include "Solver.hpp"
+
+#include "../Utils.hpp"
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace polysolve::linear
@@ -18,6 +20,8 @@ namespace polysolve::linear
 
         // Name of the solver
         std::string m_Name;
+
+        double actual_solve_time;
 
     public:
         // Name of the solver type (for debugging purposes)

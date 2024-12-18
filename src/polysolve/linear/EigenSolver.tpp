@@ -56,7 +56,10 @@ namespace polysolve::linear
     void EigenDirect<SparseSolver>::solve(
         const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
-        x = m_Solver.solve(b);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
+            x = m_Solver.solve(b);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -110,6 +113,7 @@ namespace polysolve::linear
     {
         assert(x.size() == b.size());
         x = m_Solver.solveWithGuess(b, x);
+        
     }
 
     ////////////////////////////////////////////////////////////////////////////////

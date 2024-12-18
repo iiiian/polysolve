@@ -147,7 +147,6 @@ namespace polysolve::linear
 
             HYPRE_IJVectorAssemble(ij_x);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
-            HYPRE_IJVectorDestroy(ij_x);
         }
 
         void HypreBoomerAMG_SetDefaultOptions(HYPRE_Solver &amg_precond)

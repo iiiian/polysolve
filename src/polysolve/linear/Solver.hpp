@@ -5,6 +5,8 @@
 #include <memory>
 #include <set>
 
+#include <spdlog/spdlog.h>
+
 #define POLYSOLVE_DELETE_MOVE_COPY(Base) \
     Base(Base &&) = delete;              \
     Base &operator=(Base &&) = delete;   \
@@ -133,6 +135,8 @@ namespace polysolve::linear
 
         MatrixXd positions_;
         VectorXd dof_to_function_;
+
+        spdlog::logger *logger = nullptr;
     };
 
 } // namespace polysolve::linear

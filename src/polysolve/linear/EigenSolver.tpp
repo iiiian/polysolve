@@ -37,14 +37,20 @@ namespace polysolve::linear
     template <typename SparseSolver>
     void EigenDirect<SparseSolver>::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
     {
-        m_Solver.analyzePattern(A);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("actual pattern analysis time", analysis_time, *logger);
+            m_Solver.analyzePattern(A);
+        }
     }
 
     // Factorize system matrix
     template <typename SparseSolver>
     void EigenDirect<SparseSolver>::factorize(const StiffnessMatrix &A)
     {
-        m_Solver.factorize(A);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("actual factorization time", factorization_time, *logger);
+            m_Solver.factorize(A);
+        }
         if (m_Solver.info() == Eigen::NumericalIssue)
         {
             throw std::runtime_error("[EigenDirect] NumericalIssue encountered.");

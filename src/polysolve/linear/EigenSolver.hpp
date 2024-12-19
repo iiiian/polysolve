@@ -22,6 +22,8 @@ namespace polysolve::linear
         std::string m_Name;
 
         double actual_solve_time;
+        double factorization_time;
+        double analysis_time;
 
     public:
         // Name of the solver type (for debugging purposes)

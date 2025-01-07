@@ -330,9 +330,9 @@ namespace polysolve::linear
         }
 
         /* Set the PCG preconditioner */
+        HYPRE_BoomerAMGSetPrintLevel(precond, 1);
         HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
-        HYPRE_BoomerAMGSetPrintLevel(precond, 3);
 
         /* Now setup and solve! */
         {

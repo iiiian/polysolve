@@ -85,6 +85,12 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
 
+        Eigen::JacobiSVD<Eigen::MatrixXd> svd(Ain);
+        double cond = svd.singularValues()(0) 
+            / svd.singularValues()(svd.singularValues().size()-1);
+
+        std::cout << "Condition number: " << cond << std::endl;
+
         if (has_matrix_)
         {
             HYPRE_IJMatrixDestroy(A);
@@ -330,7 +336,7 @@ namespace polysolve::linear
         }
 
         /* Set the PCG preconditioner */
-        HYPRE_BoomerAMGSetPrintLevel(precond, 1);
+        //HYPRE_BoomerAMGSetPrintLevel(precond, 1);
         HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 

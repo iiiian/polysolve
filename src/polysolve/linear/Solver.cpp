@@ -161,6 +161,7 @@ namespace polysolve::linear
 
         auto res = create(params["solver"], params["precond"]);
         res->set_parameters(params);
+        res->logger = logger;
 
         return res;
     }

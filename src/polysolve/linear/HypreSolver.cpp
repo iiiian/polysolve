@@ -85,7 +85,7 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
 
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd(Ain);
+        Eigen::BDCSVD<Eigen::MatrixXd> svd(Ain);
         double cond = svd.singularValues()(0) 
             / svd.singularValues()(svd.singularValues().size()-1);
 

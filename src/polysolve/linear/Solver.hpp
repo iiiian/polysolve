@@ -130,11 +130,14 @@ namespace polysolve::linear
         void set_positions(const Ref<const MatrixXd> positions) {positions_ = positions;}
         void set_dof_to_function(const Ref<const VectorXd> dof_to_function) {dof_to_function_ = dof_to_function;}
 
+        void set_problematic_dofs(std::vector<std::set<int>> &bad_indices) {bad_indices_ = bad_indices;}
+
         /// @brief Name of the solver type (for debugging purposes)
         virtual std::string name() const { return ""; }
 
         MatrixXd positions_;
         VectorXd dof_to_function_;
+        std::vector<std::set<int>> bad_indices_;
 
         spdlog::logger *logger = nullptr;
     };

@@ -85,11 +85,13 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
 
-        Eigen::BDCSVD<Eigen::MatrixXd> svd(Ain);
-        double cond = svd.singularValues()(0) 
-            / svd.singularValues()(svd.singularValues().size()-1);
+        eigen_A = Ain;
 
-        std::cout << "Condition number: " << cond << std::endl;
+        //Eigen::BDCSVD<Eigen::MatrixXd> svd(Ain);
+        //double cond = svd.singularValues()(0) 
+        //    / svd.singularValues()(svd.singularValues().size()-1);
+
+        //std::cout << "Condition number: " << cond << std::endl;
 
         if (has_matrix_)
         {
@@ -341,14 +343,73 @@ namespace polysolve::linear
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
+        if (bad_indices_.size() == 0)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
-        }
+            /* Run info - needed logging turned on */
+            HYPRE_PCGGetNumIterations(solver, &num_iterations);
+            HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+        } 
+        else 
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
+            HYPRE_PCGSetMaxIter(solver, 1);
+            for (int i = 0; i < max_iter_; ++i)
+            {
+                HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
+                HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+                if (final_res_norm < conv_tol_)
+                {
+                    num_iterations = i;
+                    break;
+                }
+                // direct solve correction
 
-        /* Run info - needed logging turned on */
-        HYPRE_PCGGetNumIterations(solver, &num_iterations);
-        HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+                Eigen::VectorXd curr_x(result.size());
+                Eigen::VectorXd curr_residual(result.size());
+
+                for (int i = 0; i < result.size(); ++i)
+                {
+                    const HYPRE_Int index[1] = {i};
+                    HYPRE_Complex v[1];
+                    HYPRE_IJVectorGetValues(x, 1, index, v);
+                    curr_x(i) = v[0];
+                }
+
+                curr_residual = rhs - (eigen_A * curr_x);
+
+                for (auto &subdomain : bad_indices_)
+                {
+
+                    Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+                    
+                    Eigen::VectorXd sub_rhs(subdomain.size());
+                    Eigen::VectorXd sub_result(subdomain.size());
+
+                    int i_counter = 0;
+                    for (auto &i : subdomain)
+                    {
+                        sub_rhs(i_counter) = curr_residual(i);
+                        int j_counter = 0;
+                        for (auto &j : subdomain)
+                        {
+                            D(i_counter, j_counter) = eigen_A(i, j);
+                            ++j_counter;
+                        }
+                        ++i_counter;
+                    }
+
+                    sub_result = D.colPivHouseholderQr().solve(sub_rhs);
+                    i_counter = 0;
+                    for (auto &i : subdomain)
+                    {
+                        curr_x(i) += sub_result(i_counter);
+                    }
+                }
+                eigen_to_hypre_par_vec(par_x, x, curr_x);
+            }
+        }
 
         //printf("\n");
         std::cout << "Iterations: " << num_iterations << std::endl;

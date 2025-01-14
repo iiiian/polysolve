@@ -91,6 +91,11 @@ namespace polysolve::nonlinear
             positions = positions_;
         }
 
+        void set_problematic_indices(const std::vector<std::set<int>> &problematic_indices_)
+        {
+            problematic_indices = problematic_indices_;
+        }
+
     protected:
         /// @brief Compute direction in which the argument should be updated 
         /// @param objFunc Problem to be minimized
@@ -182,6 +187,7 @@ namespace polysolve::nonlinear
         double constraint_set_update_time;
 
         Eigen::MatrixXd positions;
+        std::vector<std::set<int>> problematic_indices;
 
         // ====================================================================
         //                                 END

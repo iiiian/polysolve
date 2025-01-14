@@ -51,9 +51,14 @@ namespace polysolve::nonlinear
             TVector &direction) = 0;
 
         void set_positions(Eigen::MatrixXd &new_positions) {positions = new_positions;}
+        void set_problematic_indices(std::vector<std::set<int>> &problematic_indices_) 
+        {
+            problematic_indices = problematic_indices_;
+        }
 
     protected:
         spdlog::logger &m_logger;
         Eigen::MatrixXd positions;
+        std::vector<std::set<int>> problematic_indices;
     };
 } // namespace polysolve::nonlinear

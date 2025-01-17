@@ -357,7 +357,8 @@ namespace polysolve::linear
             HYPRE_PCGSetMaxIter(solver, 1);
             for (int i = 0; i < max_iter_; ++i)
             {
-                HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
+                HYPRE_Int err_code = HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
+                std::cout << "error code: " << err_code << std::endl;
                 HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
                 if (final_res_norm < conv_tol_)
                 {

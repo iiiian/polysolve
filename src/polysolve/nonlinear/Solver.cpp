@@ -320,6 +320,8 @@ namespace polysolve::nonlinear
                 verify_gradient(objFunc, x, grad);
             }
 
+            objFunc.get_problematic_indices(problematic_indices);
+
             m_current.gradNorm = compute_grad_norm(x, grad);
             if (std::isnan(m_current.gradNorm))
             {

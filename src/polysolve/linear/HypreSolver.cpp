@@ -370,7 +370,7 @@ namespace polysolve::linear
                 num_iterations = k + 1;
                 double old_r_norm = r.dot(r); 
                 double alpha = old_r_norm / p.dot(eigen_A * p);
-                result = result + alpha * r;
+                result = result + alpha * p;
                 r = r - alpha * eigen_A * p;
                 if (r.norm() < conv_tol_)
                 {

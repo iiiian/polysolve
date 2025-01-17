@@ -354,7 +354,35 @@ namespace polysolve::linear
         else 
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
-            HYPRE_PCGSetMaxIter(solver, 1);
+
+            /* Custom PCG */
+
+            /* Preconditioning */
+
+            // skipping for now
+
+            Eigen::VectorXd r = rhs - (eigen_A * result);
+
+            Eigen::VectorXd p = r;
+
+            for (int k = 0; k < max_iter_; ++k)
+            {
+                num_iterations = k + 1;
+                double old_r_norm = r.dot(r); 
+                double alpha = old_r_norm / p.dot(eigen_A * p);
+                result = result + alpha * r;
+                r = r - alpha * eigen_A * p;
+                if (r.norm() < conv_tol_)
+                {
+                    break;
+                }
+                double beta = r.dot(r) / old_r_norm;
+                p = r + beta * p;
+            }
+
+
+
+            /*HYPRE_PCGSetMaxIter(solver, 1);
             for (int i = 0; i < max_iter_; ++i)
             {
                 HYPRE_Int err_code = HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -409,7 +437,7 @@ namespace polysolve::linear
                     }
                 }
                 eigen_to_hypre_par_vec(par_x, x, curr_x);
-            }
+            }*/
         }
 
         //printf("\n");

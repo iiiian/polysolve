@@ -384,6 +384,7 @@ namespace polysolve::linear
 
                 eigen_to_hypre_par_vec(par_x, x, result);
 
+                HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
                 for (HYPRE_Int i = 0; i < rhs.size(); ++i)

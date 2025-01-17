@@ -110,6 +110,7 @@ namespace polysolve::nonlinear
             TVector &direction)
         {
             m_strategies[m_descent_strategy]->set_positions(positions);
+            m_strategies[m_descent_strategy]->set_problematic_indices(problematic_indices);
             return m_strategies[m_descent_strategy]->compute_update_direction(objFunc, x, grad, direction);
         }
 

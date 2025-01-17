@@ -372,7 +372,7 @@ namespace polysolve::linear
                 double alpha = old_r_norm / p.dot(eigen_A * p);
                 result = result + alpha * p;
                 //r = r - alpha * eigen_A * p;
-                r = b - (eigen_A * result);
+                r = rhs - (eigen_A * result);
                 if (r.norm() < conv_tol_)
                 {
                     break;

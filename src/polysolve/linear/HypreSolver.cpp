@@ -343,7 +343,7 @@ namespace polysolve::linear
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0)
+        if (bad_indices_.size() == 0 && false)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);

@@ -106,7 +106,7 @@ namespace polysolve::nonlinear
 
         virtual void problematic_indices(std::set<int>& bad_indices) {};
 
-        void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
+        virtual void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
 
         /// --- Misc ----------------------------------------------------------
 

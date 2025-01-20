@@ -363,8 +363,10 @@ namespace polysolve::linear
             // skipping for now
 
             Eigen::VectorXd r = rhs - (eigen_A * result);
-            Eigen::VectorXd z = r;
+            Eigen::VectorXd p;
+            p.setZero(r.size());
 
+            eigen_to_hypre_par_vec(par_x, x, p);
             eigen_to_hypre_par_vec(par_b, b, r);
 
             HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
@@ -375,25 +377,30 @@ namespace polysolve::linear
                 HYPRE_Complex v[1];
                 HYPRE_IJVectorGetValues(x, 1, index, v);
 
-                z(i) = v[0];
+                p(i) = v[0];
             }
 
-            Eigen::VectorXd p = z;
+            double gamma = r.dot(p);
+            double gamma_old = gamma;
 
             for (int k = 0; k < max_iter_; ++k)
             {
                 num_iterations = k + 1;
-                double old_gamma = r.dot(z);
-                double alpha = old_gamma / p.dot(eigen_A * p);
+                Eigen::VectorXd s = eigen_A * p;
+                double sdotp = s.dot(p);
+                double alpha = gamma / sdotp;
+                gamma_old = gamma;
                 result = result + alpha * p;
-                r = r - alpha * eigen_A * p;
+                r = r - alpha * s;
                 //r = rhs - (eigen_A * result);
                 if (r.norm() < conv_tol_)
                 {
                     break;
                 }
 
+                s.setZero(s.size());
                 eigen_to_hypre_par_vec(par_b, b, r);
+                eigen_to_hypre_par_vec(par_x, x, s);
 
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
@@ -403,15 +410,12 @@ namespace polysolve::linear
                     HYPRE_Complex v[1];
                     HYPRE_IJVectorGetValues(x, 1, index, v);
 
-                    z(i) = v[0];
+                    s(i) = v[0];
                 }
 
-                double beta = r.dot(z) / old_gamma;
-                p = z + beta * p;
-
-                // Preconditioner
-
-                
+                gamma = r.dot(s);
+                double beta = gamma / gamma_old;
+                p = s + beta * p;
             }
 
             final_res_norm = (rhs - (eigen_A * result)).norm();

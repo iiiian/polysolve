@@ -339,11 +339,11 @@ namespace polysolve::linear
 
         /* Set the PCG preconditioner */
         //HYPRE_BoomerAMGSetPrintLevel(precond, 1);
-        HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
+        //HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0 && false)
+        if (bad_indices_.size() == 0 && interp_rbms)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -379,6 +379,8 @@ namespace polysolve::linear
                 }
                 double beta = r.dot(r) / old_r_norm;
                 p = r + beta * p;
+
+                continue;
 
                 // Preconditioner
 

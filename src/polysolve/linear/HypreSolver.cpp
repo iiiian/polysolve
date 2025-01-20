@@ -343,7 +343,7 @@ namespace polysolve::linear
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0 && interp_rbms)
+        if (bad_indices_.size() == 0 && (max_iter_ % 2 == 0))
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -358,6 +358,7 @@ namespace polysolve::linear
             /* Custom PCG */
 
             /* Preconditioning */
+            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
             // skipping for now
 
@@ -371,8 +372,8 @@ namespace polysolve::linear
                 double old_r_norm = r.dot(r); 
                 double alpha = old_r_norm / p.dot(eigen_A * p);
                 result = result + alpha * p;
-                //r = r - alpha * eigen_A * p;
-                r = rhs - (eigen_A * result);
+                r = r - alpha * eigen_A * p;
+                //r = rhs - (eigen_A * result);
                 if (r.norm() < conv_tol_)
                 {
                     break;
@@ -380,13 +381,12 @@ namespace polysolve::linear
                 double beta = r.dot(r) / old_r_norm;
                 p = r + beta * p;
 
-                continue;
-
                 // Preconditioner
+
+                continue;
 
                 eigen_to_hypre_par_vec(par_x, x, result);
 
-                HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
                 for (HYPRE_Int i = 0; i < rhs.size(); ++i)

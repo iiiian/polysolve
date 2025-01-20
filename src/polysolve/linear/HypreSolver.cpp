@@ -339,7 +339,7 @@ namespace polysolve::linear
 
         /* Set the PCG preconditioner */
         //HYPRE_BoomerAMGSetPrintLevel(precond, 1);
-        //HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
+        HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
@@ -383,9 +383,7 @@ namespace polysolve::linear
 
                 // Preconditioner
 
-                continue;
-
-                eigen_to_hypre_par_vec(par_x, x, result);
+                eigen_to_hypre_par_vec(par_x, x, r);
 
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
@@ -395,7 +393,7 @@ namespace polysolve::linear
                     HYPRE_Complex v[1];
                     HYPRE_IJVectorGetValues(x, 1, index, v);
 
-                    result(i) = v[0];
+                    result(i) = result(i) + v[0];
                 }
             }
 

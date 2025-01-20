@@ -363,14 +363,28 @@ namespace polysolve::linear
             // skipping for now
 
             Eigen::VectorXd r = rhs - (eigen_A * result);
+            Eigen::VectorXd z = r;
 
-            Eigen::VectorXd p = r;
+            eigen_to_hypre_par_vec(par_b, b, r);
+
+            HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+
+            for (HYPRE_Int i = 0; i < rhs.size(); ++i)
+            {
+                const HYPRE_Int index[1] = {i};
+                HYPRE_Complex v[1];
+                HYPRE_IJVectorGetValues(x, 1, index, v);
+
+                z(i) = v[0];
+            }
+
+            Eigen::VectorXd p = z;
 
             for (int k = 0; k < max_iter_; ++k)
             {
                 num_iterations = k + 1;
-                double old_r_norm = r.dot(r); 
-                double alpha = old_r_norm / p.dot(eigen_A * p);
+                double old_gamma = r.dot(z);
+                double alpha = old_gamma / p.dot(eigen_A * p);
                 result = result + alpha * p;
                 r = r - alpha * eigen_A * p;
                 //r = rhs - (eigen_A * result);
@@ -378,12 +392,8 @@ namespace polysolve::linear
                 {
                     break;
                 }
-                double beta = r.dot(r) / old_r_norm;
-                p = r + beta * p;
 
-                // Preconditioner
-
-                eigen_to_hypre_par_vec(par_x, x, r);
+                eigen_to_hypre_par_vec(par_b, b, r);
 
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
@@ -393,11 +403,18 @@ namespace polysolve::linear
                     HYPRE_Complex v[1];
                     HYPRE_IJVectorGetValues(x, 1, index, v);
 
-                    result(i) = result(i) + v[0];
+                    z(i) = v[0];
                 }
+
+                double beta = r.dot(z) / old_gamma;
+                p = z + beta * p;
+
+                // Preconditioner
+
+                
             }
 
-            final_res_norm = r.norm();
+            final_res_norm = (rhs - (eigen_A * result)).norm();
 
 
 

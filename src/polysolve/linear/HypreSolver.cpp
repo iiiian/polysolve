@@ -343,7 +343,7 @@ namespace polysolve::linear
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0 && (max_iter_ % 2 == 0))
+        if (bad_indices_.size() == 0 && false)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -413,7 +413,45 @@ namespace polysolve::linear
                     s(i) = v[0];
                 }
 
+                if (bad_indices_.size() > 0 && (max_iter_ % 2 == 0))
+                {
+                    for (auto &subdomain : bad_indices_)
+                    {
+
+                        Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+                        
+                        Eigen::VectorXd sub_rhs(subdomain.size());
+                        Eigen::VectorXd sub_result(subdomain.size());
+
+                        int i_counter = 0;
+                        for (auto &i : subdomain)
+                        {
+                            sub_rhs(i_counter) = r(i);
+                            int j_counter = 0;
+                            for (auto &j : subdomain)
+                            {
+                                D(i_counter, j_counter) = eigen_A(i, j);
+                                ++j_counter;
+                            }
+                            ++i_counter;
+                        }
+
+                        sub_result = D.colPivHouseholderQr().solve(sub_rhs);
+                        i_counter = 0;
+                        for (auto &i : subdomain)
+                        {
+                            s(i) = s(i) + sub_result(i_counter);
+                        }
+                    }
+                }
+
                 gamma = r.dot(s);
+                if (gamma < __DBL_MIN__)
+                {
+                    std::cout << "Subnormal alpha value" << std::endl;
+                    break;
+                }
+
                 double beta = gamma / gamma_old;
                 p = s + beta * p;
             }
@@ -448,34 +486,7 @@ namespace polysolve::linear
 
                 curr_residual = rhs - (eigen_A * curr_x);
 
-                for (auto &subdomain : bad_indices_)
-                {
-
-                    Eigen::MatrixXd D(subdomain.size(), subdomain.size());
-                    
-                    Eigen::VectorXd sub_rhs(subdomain.size());
-                    Eigen::VectorXd sub_result(subdomain.size());
-
-                    int i_counter = 0;
-                    for (auto &i : subdomain)
-                    {
-                        sub_rhs(i_counter) = curr_residual(i);
-                        int j_counter = 0;
-                        for (auto &j : subdomain)
-                        {
-                            D(i_counter, j_counter) = eigen_A(i, j);
-                            ++j_counter;
-                        }
-                        ++i_counter;
-                    }
-
-                    sub_result = D.colPivHouseholderQr().solve(sub_rhs);
-                    i_counter = 0;
-                    for (auto &i : subdomain)
-                    {
-                        curr_x(i) += sub_result(i_counter);
-                    }
-                }
+                
                 eigen_to_hypre_par_vec(par_x, x, curr_x);
             }*/
         }

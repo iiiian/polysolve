@@ -472,7 +472,7 @@ namespace polysolve::linear
                 hypre_vec_to_eigen(x, z);
                 Z.col(0) = z;
 
-                z.setZero(0);
+                z.setZero();
                 for (auto &subdomain : bad_indices_)
                 {
                     Eigen::MatrixXd D(subdomain.size(), subdomain.size());

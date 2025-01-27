@@ -462,7 +462,6 @@ namespace polysolve::linear
                 {
                     for (auto &subdomain : bad_indices_)
                     {
-
                         Eigen::MatrixXd D(subdomain.size(), subdomain.size());
                         
                         Eigen::VectorXd sub_rhs(subdomain.size());
@@ -481,7 +480,7 @@ namespace polysolve::linear
                             ++i_counter;
                         }
 
-                        sub_result = D.colPivHouseholderQr().solve(sub_rhs);
+                        sub_result = D.ldlt().solve(sub_rhs);
                         i_counter = 0;
                         for (auto &i : subdomain)
                         {

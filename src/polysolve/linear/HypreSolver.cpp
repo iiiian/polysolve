@@ -545,7 +545,7 @@ namespace polysolve::linear
                 {
                     Eigen::MatrixXd tempPTAP = Ps[i].transpose() * eigen_A * Ps[i];
                     Eigen::MatrixXd tempY = tempPTAP.ldlt().solve(Ps[i].transpose() * eigen_A * Z);
-                    Eigen::MatrixXd tempX = Ps[i].ldlt().solve(tempY);
+                    Eigen::MatrixXd tempX = Ps[i] * tempY;
                     currP -= tempX; 
                 }
 

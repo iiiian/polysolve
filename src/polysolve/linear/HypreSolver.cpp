@@ -362,7 +362,7 @@ namespace polysolve::linear
             /* Run info - needed logging turned on */
             HYPRE_PCGGetNumIterations(solver, &num_iterations);
             HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-        } 
+        }
         else 
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
@@ -374,7 +374,6 @@ namespace polysolve::linear
             double ieee_check = 0.0;
 
             bool proceed = true;
-
 
             if (bi_prod != 0.0)
             {
@@ -400,6 +399,9 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
             Eigen::VectorXd r = rhs - (eigen_A * result);
+
+            Eigen::MatrixXd P(r.size(), 2);
+            P.setZero();
             Eigen::VectorXd p(r.size());
             p.setZero();
 
@@ -409,14 +411,99 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
             hypre_vec_to_eigen(x, p);
+            P.col(0) = p;
 
-            double gamma = r.dot(p);
-            double gamma_old = gamma;
+            p.setZero(0);
+            for (auto &subdomain : bad_indices_)
+            {
+                Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+                
+                Eigen::VectorXd sub_rhs(subdomain.size());
+                Eigen::VectorXd sub_result(subdomain.size());
+
+                int i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    sub_rhs(i_counter) = r(i);
+                    int j_counter = 0;
+                    for (auto &j : subdomain)
+                    {
+                        D(i_counter, j_counter) = eigen_A(i, j);
+                        ++j_counter;
+                    }
+                    ++i_counter;
+                }
+
+                sub_result = D.ldlt().solve(sub_rhs);
+                i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    p(i) += sub_result(i_counter);
+                }
+            }
+
+            P.col(1) = p;
+
+            std::vector<Eigen::MatrixXd> Ps;
+            Ps.push_back(P);
+
+            Eigen::MatrixXd PTAP = P.transpose() * eigen_A * P;
+            Eigen::VectorXd alpha = PTAP.ldlt().solve(P.transpose() * r);
+
+            result += P * alpha;
+            r -= eigen_A * P * alpha;
+
+            //double gamma = r.dot(p);
+            //double gamma_old = gamma;
 
             for (int k = 0; k < max_iter_; ++k)
             {
                 num_iterations = k + 1;
-                Eigen::VectorXd s = eigen_A * p;
+
+                Eigen::MatrixXd Z(r.size(), 2);
+                Eigen::VectorXd z(r.size());
+                z.setZero();
+
+                eigen_to_hypre_par_vec(par_x, x, z);
+                eigen_to_hypre_par_vec(par_b, b, r);
+
+                HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+
+                hypre_vec_to_eigen(x, z);
+                Z.col(0) = z;
+
+                z.setZero(0);
+                for (auto &subdomain : bad_indices_)
+                {
+                    Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+                    
+                    Eigen::VectorXd sub_rhs(subdomain.size());
+                    Eigen::VectorXd sub_result(subdomain.size());
+
+                    int i_counter = 0;
+                    for (auto &i : subdomain)
+                    {
+                        sub_rhs(i_counter) = r(i);
+                        int j_counter = 0;
+                        for (auto &j : subdomain)
+                        {
+                            D(i_counter, j_counter) = eigen_A(i, j);
+                            ++j_counter;
+                        }
+                        ++i_counter;
+                    }
+
+                    sub_result = D.ldlt().solve(sub_rhs);
+                    i_counter = 0;
+                    for (auto &i : subdomain)
+                    {
+                        z(i) += sub_result(i_counter);
+                    }
+                }
+
+                Z.col(1) = z;
+
+                /*Eigen::VectorXd s = eigen_A * p;
                 double sdotp = s.dot(p);
 
                 if (sdotp == 0.0)
@@ -448,9 +535,41 @@ namespace polysolve::linear
                 {
                     std::cout << "Converged" << std::endl;
                     break;
+                }*/
+
+                
+                Ps.push_back({r.size(), 0});
+                Eigen::MatrixXd &currP = Ps[Ps.size() - 1];
+                currP = Z;
+                for (int i = 0; i < currP.size() - 1; ++i)
+                {
+                    Eigen::MatrixXd tempPTAP = Ps[i].transpose() * eigen_A * Ps[i];
+                    Eigen::MatrixXd tempY = tempPTAP.ldlt().solve(Ps[i].transpose() * eigen_A * Z);
+                    Eigen::MatrixXd tempX = Ps[i].ldlt().solve(tempY);
+                    currP -= tempX; 
                 }
 
-                s.setZero(s.size());
+                PTAP = currP.transpose() * eigen_A * currP;
+                alpha = PTAP.ldlt().solve(P.transpose() * r);
+
+                result += currP * alpha;
+                r -= eigen_A * currP * alpha;
+
+                double i_prod = r.dot(r);
+
+                if (i_prod / bi_prod < eps)
+                {
+                    std::cout << "Converged 2" << std::endl;
+                    break;
+                }
+                
+
+            }
+
+
+
+
+                /*s.setZero(s.size());
                 eigen_to_hypre_par_vec(par_b, b, r);
                 eigen_to_hypre_par_vec(par_x, x, s);
 
@@ -512,7 +631,7 @@ namespace polysolve::linear
 
                 double beta = gamma / gamma_old;
                 p = s + beta * p;
-            }
+            }*/
 
             final_res_norm = (rhs - (eigen_A * result)).norm();
         }

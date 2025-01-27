@@ -369,12 +369,39 @@ namespace polysolve::linear
 
             /* Custom PCG */
 
-            /* Preconditioning */
+            double bi_prod = rhs.dot(rhs);
+            double eps;
+            double ieee_check = 0.0;
+
+            bool proceed = true;
+
+
+            if (bi_prod != 0.0)
+            {
+                ieee_check = bi_prod / bi_prod;
+            }
+
+            if (ieee_check != ieee_check)
+            {
+                std::cout << "NaN Input" << std::endl;
+                proceed = false;
+            }
+
+            if (bi_prod > 0.0)
+            {
+                eps = conv_tol_ * conv_tol_;
+            }
+            else 
+            {
+                result.setZero();
+                proceed = false;
+            }
+
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
             Eigen::VectorXd r = rhs - (eigen_A * result);
-            Eigen::VectorXd p;
-            p.setZero(r.size());
+            Eigen::VectorXd p(r.size());
+            p.setZero();
 
             eigen_to_hypre_par_vec(par_x, x, p);
             eigen_to_hypre_par_vec(par_b, b, r);
@@ -391,13 +418,35 @@ namespace polysolve::linear
                 num_iterations = k + 1;
                 Eigen::VectorXd s = eigen_A * p;
                 double sdotp = s.dot(p);
-                double alpha = gamma / sdotp;
-                gamma_old = gamma;
-                result = result + alpha * p;
-                r = r - alpha * s;
-                //r = rhs - (eigen_A * result);
-                if (r.norm() < conv_tol_)
+
+                if (sdotp == 0.0)
                 {
+                    std::cout << "Zero sdotp value" << std::endl;
+                    break;
+                }
+
+                double alpha = gamma / sdotp;
+
+                if (alpha <= 0.0)
+                {
+                    std::cout << "Negative or zero alpha value" << std::endl;
+                    break;
+                } 
+                else if (alpha < __DBL_MIN__)
+                {
+                    std::cout << "Subnormal alpha value" << std::endl;
+                    break;
+                }
+
+                gamma_old = gamma;
+                result += alpha * p;
+                r -= alpha * s;
+                //r = rhs - (eigen_A * result);
+                double drob2 = alpha * alpha * s.dot(s) / bi_prod;
+
+                if (drob2 < conv_tol_ * conv_tol_)
+                {
+                    std::cout << "Converged" << std::endl;
                     break;
                 }
 
@@ -442,9 +491,23 @@ namespace polysolve::linear
                 }
 
                 gamma = r.dot(s);
-                if (gamma < __DBL_MIN__)
+
+                double i_prod = r.dot(r);
+
+                if (i_prod / bi_prod < eps)
                 {
-                    std::cout << "Subnormal alpha value" << std::endl;
+                    std::cout << "Converged 2" << std::endl;
+                    break;
+                }
+
+                if (gamma <= 0.0)
+                {
+                    std::cout << "Negative or zero gamma value" << std::endl;
+                    break;
+                }
+                else if (gamma < __DBL_MIN__)
+                {
+                    std::cout << "Subnormal gamma value" << std::endl;
                     break;
                 }
 

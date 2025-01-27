@@ -538,7 +538,7 @@ namespace polysolve::linear
                 }*/
 
                 
-                Ps.push_back({r.size(), 0});
+                Ps.push_back({r.size(), 2});
                 Eigen::MatrixXd &currP = Ps[Ps.size() - 1];
                 currP = Z;
                 for (int i = 0; i < currP.size() - 1; ++i)

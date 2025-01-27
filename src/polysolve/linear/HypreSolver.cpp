@@ -541,7 +541,7 @@ namespace polysolve::linear
                 Ps.push_back({r.size(), 2});
                 Eigen::MatrixXd &currP = Ps[Ps.size() - 1];
                 currP = Z;
-                for (int i = 0; i < currP.size() - 1; ++i)
+                for (int i = 0; i < Ps.size() - 1; ++i)
                 {
                     Eigen::MatrixXd tempPTAP = Ps[i].transpose() * eigen_A * Ps[i];
                     Eigen::MatrixXd tempY = tempPTAP.ldlt().solve(Ps[i].transpose() * eigen_A * Z);

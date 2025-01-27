@@ -157,6 +157,18 @@ namespace polysolve::linear
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
+        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
+        {
+            for (HYPRE_Int i = 0; i < x.size(); ++i)
+            {
+                const HYPRE_Int index[1] = {i};
+                HYPRE_Complex v[1];
+                HYPRE_IJVectorGetValues(ij_x, 1, index, v);
+
+                x(i) = v[0];
+            }
+        }
+
         void HypreBoomerAMG_SetDefaultOptions(HYPRE_Solver &amg_precond)
         {
             // AMG coarsening options:
@@ -343,7 +355,7 @@ namespace polysolve::linear
         HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0 && false)
+        if (bad_indices_.size() == 0 && max_iter_ == 432)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -360,8 +372,6 @@ namespace polysolve::linear
             /* Preconditioning */
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
-            // skipping for now
-
             Eigen::VectorXd r = rhs - (eigen_A * result);
             Eigen::VectorXd p;
             p.setZero(r.size());
@@ -371,14 +381,7 @@ namespace polysolve::linear
 
             HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
-            for (HYPRE_Int i = 0; i < rhs.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                HYPRE_Complex v[1];
-                HYPRE_IJVectorGetValues(x, 1, index, v);
-
-                p(i) = v[0];
-            }
+            hypre_vec_to_eigen(x, p);
 
             double gamma = r.dot(p);
             double gamma_old = gamma;
@@ -404,14 +407,7 @@ namespace polysolve::linear
 
                 HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
-                for (HYPRE_Int i = 0; i < rhs.size(); ++i)
-                {
-                    const HYPRE_Int index[1] = {i};
-                    HYPRE_Complex v[1];
-                    HYPRE_IJVectorGetValues(x, 1, index, v);
-
-                    s(i) = v[0];
-                }
+                hypre_vec_to_eigen(x, s);
 
                 if (bad_indices_.size() > 0 && (max_iter_ % 2 == 0))
                 {
@@ -440,7 +436,7 @@ namespace polysolve::linear
                         i_counter = 0;
                         for (auto &i : subdomain)
                         {
-                            s(i) = s(i) + sub_result(i_counter);
+                            s(i) += sub_result(i_counter);
                         }
                     }
                 }
@@ -457,38 +453,6 @@ namespace polysolve::linear
             }
 
             final_res_norm = (rhs - (eigen_A * result)).norm();
-
-
-
-            /*HYPRE_PCGSetMaxIter(solver, 1);
-            for (int i = 0; i < max_iter_; ++i)
-            {
-                HYPRE_Int err_code = HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
-                std::cout << "error code: " << err_code << std::endl;
-                HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-                if (final_res_norm < conv_tol_)
-                {
-                    num_iterations = i;
-                    break;
-                }
-                // direct solve correction
-
-                Eigen::VectorXd curr_x(result.size());
-                Eigen::VectorXd curr_residual(result.size());
-
-                for (int i = 0; i < result.size(); ++i)
-                {
-                    const HYPRE_Int index[1] = {i};
-                    HYPRE_Complex v[1];
-                    HYPRE_IJVectorGetValues(x, 1, index, v);
-                    curr_x(i) = v[0];
-                }
-
-                curr_residual = rhs - (eigen_A * curr_x);
-
-                
-                eigen_to_hypre_par_vec(par_x, x, curr_x);
-            }*/
         }
 
         //printf("\n");

@@ -318,7 +318,7 @@ namespace polysolve::linear
 #endif
 
         /* Set some parameters (See Reference Manual for more parameters) */
-        HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
+        HYPRE_PCGSetMaxIter(solver, 1); /* max iterations */
         HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
         HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
         // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
@@ -373,8 +373,6 @@ namespace polysolve::linear
             double eps;
             double ieee_check = 0.0;
 
-            bool proceed = true;
-
             if (bi_prod != 0.0)
             {
                 ieee_check = bi_prod / bi_prod;
@@ -383,7 +381,7 @@ namespace polysolve::linear
             if (ieee_check != ieee_check)
             {
                 std::cout << "NaN Input" << std::endl;
-                proceed = false;
+                assert(false);
             }
 
             if (bi_prod > 0.0)
@@ -393,191 +391,28 @@ namespace polysolve::linear
             else 
             {
                 result.setZero();
-                proceed = false;
+                assert(false);
             }
 
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
-            Eigen::VectorXd r = rhs - (eigen_A * result);
-
-            Eigen::MatrixXd P(r.size(), 2);
-            P.setZero();
-            Eigen::VectorXd p(r.size());
-            p.setZero();
-
-            eigen_to_hypre_par_vec(par_x, x, p);
-            eigen_to_hypre_par_vec(par_b, b, r);
-
-            HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-            hypre_vec_to_eigen(x, p);
-            P.col(0) = p;
-
-            p.setZero();
-            for (auto &subdomain : bad_indices_)
-            {
-                Eigen::MatrixXd D(subdomain.size(), subdomain.size());
-                
-                Eigen::VectorXd sub_rhs(subdomain.size());
-                Eigen::VectorXd sub_result(subdomain.size());
-
-                int i_counter = 0;
-                for (auto &i : subdomain)
-                {
-                    sub_rhs(i_counter) = r(i);
-                    int j_counter = 0;
-                    for (auto &j : subdomain)
-                    {
-                        D(i_counter, j_counter) = eigen_A(i, j);
-                        ++j_counter;
-                    }
-                    ++i_counter;
-                }
-
-                sub_result = D.ldlt().solve(sub_rhs);
-                i_counter = 0;
-                for (auto &i : subdomain)
-                {
-                    p(i) += sub_result(i_counter);
-                }
-            }
-
-            P.col(1) = p;
-
-            std::vector<Eigen::MatrixXd> Ps;
-            Ps.push_back(P);
-
-            Eigen::MatrixXd PTAP = P.transpose() * eigen_A * P;
-            Eigen::VectorXd alpha = PTAP.ldlt().solve(P.transpose() * r);
-
-            result += P * alpha;
-            r -= eigen_A * P * alpha;
-
-            //double gamma = r.dot(p);
-            //double gamma_old = gamma;
-
             for (int k = 0; k < max_iter_; ++k)
             {
                 num_iterations = k + 1;
+                Eigen::VectorXd r = rhs - (eigen_A * result);
+                Eigen::VectorXd p(r.size());
+                p.setZero();
 
-                Eigen::MatrixXd Z(r.size(), 2);
-                Eigen::VectorXd z(r.size());
-                z.setZero();
-
-                eigen_to_hypre_par_vec(par_x, x, z);
-                eigen_to_hypre_par_vec(par_b, b, r);
-
-                HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-                hypre_vec_to_eigen(x, z);
-                Z.col(0) = z;
-
-                z.setZero();
-                for (auto &subdomain : bad_indices_)
+                if (k % 2 == 0 || bad_indices_.size() > 0)
                 {
-                    Eigen::MatrixXd D(subdomain.size(), subdomain.size());
-                    
-                    Eigen::VectorXd sub_rhs(subdomain.size());
-                    Eigen::VectorXd sub_result(subdomain.size());
+                    eigen_to_hypre_par_vec(par_x, x, p);
+                    eigen_to_hypre_par_vec(par_b, b, r);
 
-                    int i_counter = 0;
-                    for (auto &i : subdomain)
-                    {
-                        sub_rhs(i_counter) = r(i);
-                        int j_counter = 0;
-                        for (auto &j : subdomain)
-                        {
-                            D(i_counter, j_counter) = eigen_A(i, j);
-                            ++j_counter;
-                        }
-                        ++i_counter;
-                    }
+                    HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
-                    sub_result = D.ldlt().solve(sub_rhs);
-                    i_counter = 0;
-                    for (auto &i : subdomain)
-                    {
-                        z(i) += sub_result(i_counter);
-                    }
+                    hypre_vec_to_eigen(x, p);               
                 }
-
-                Z.col(1) = z;
-
-                /*Eigen::VectorXd s = eigen_A * p;
-                double sdotp = s.dot(p);
-
-                if (sdotp == 0.0)
-                {
-                    std::cout << "Zero sdotp value" << std::endl;
-                    break;
-                }
-
-                double alpha = gamma / sdotp;
-
-                if (alpha <= 0.0)
-                {
-                    std::cout << "Negative or zero alpha value" << std::endl;
-                    break;
-                } 
-                else if (alpha < __DBL_MIN__)
-                {
-                    std::cout << "Subnormal alpha value" << std::endl;
-                    break;
-                }
-
-                gamma_old = gamma;
-                result += alpha * p;
-                r -= alpha * s;
-                //r = rhs - (eigen_A * result);
-                double drob2 = alpha * alpha * s.dot(s) / bi_prod;
-
-                if (drob2 < conv_tol_ * conv_tol_)
-                {
-                    std::cout << "Converged" << std::endl;
-                    break;
-                }*/
-
-                
-                Ps.push_back({r.size(), 2});
-                Eigen::MatrixXd &currP = Ps[Ps.size() - 1];
-                currP = Z;
-                for (int i = 0; i < Ps.size() - 1; ++i)
-                {
-                    Eigen::MatrixXd tempPTAP = Ps[i].transpose() * eigen_A * Ps[i];
-                    Eigen::MatrixXd tempY = tempPTAP.ldlt().solve(Ps[i].transpose() * eigen_A * Z);
-                    Eigen::MatrixXd tempX = Ps[i] * tempY;
-                    currP -= tempX; 
-                }
-
-                PTAP = currP.transpose() * eigen_A * currP;
-                alpha = PTAP.ldlt().solve(P.transpose() * r);
-
-                result += currP * alpha;
-                r -= eigen_A * currP * alpha;
-
-                double i_prod = r.dot(r);
-
-                if (i_prod / bi_prod < eps)
-                {
-                    std::cout << "Converged 2" << std::endl;
-                    break;
-                }
-                
-
-            }
-
-
-
-
-                /*s.setZero(s.size());
-                eigen_to_hypre_par_vec(par_b, b, r);
-                eigen_to_hypre_par_vec(par_x, x, s);
-
-                HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-                hypre_vec_to_eigen(x, s);
-
-                if (bad_indices_.size() > 0 && (max_iter_ % 2 == 0))
+                else
                 {
                     for (auto &subdomain : bad_indices_)
                     {
@@ -603,35 +438,52 @@ namespace polysolve::linear
                         i_counter = 0;
                         for (auto &i : subdomain)
                         {
-                            s(i) += sub_result(i_counter);
+                            p(i) = sub_result(i_counter);
                         }
                     }
                 }
 
-                gamma = r.dot(s);
+                double gamma = r.dot(p);
+                double sdotp = p.dot(eigen_A * p);
+
+                if (sdotp == 0.0)
+                {
+                    std::cout << "Zero sdotp value" << std::endl;
+                    break;
+                }
+
+                double alpha = gamma / sdotp;
+
+                if (alpha <= 0.0)
+                {
+                    std::cout << "Negative or zero alpha value" << std::endl;
+                    break;
+                } 
+                else if (alpha < __DBL_MIN__)
+                {
+                    std::cout << "Subnormal alpha value" << std::endl;
+                    break;
+                }
+
+                result += alpha * p;
+                r -= alpha * eigen_A * p;
+                //r = rhs - (eigen_A * result);
+                double drob2 = alpha * alpha * p.dot(p) / bi_prod;
+
+                if (drob2 < conv_tol_ * conv_tol_)
+                {
+                    std::cout << "Converged" << std::endl;
+                    break;
+                }
 
                 double i_prod = r.dot(r);
-
                 if (i_prod / bi_prod < eps)
                 {
                     std::cout << "Converged 2" << std::endl;
                     break;
                 }
-
-                if (gamma <= 0.0)
-                {
-                    std::cout << "Negative or zero gamma value" << std::endl;
-                    break;
-                }
-                else if (gamma < __DBL_MIN__)
-                {
-                    std::cout << "Subnormal gamma value" << std::endl;
-                    break;
-                }
-
-                double beta = gamma / gamma_old;
-                p = s + beta * p;
-            }*/
+            
+            }
 
             final_res_norm = (rhs - (eigen_A * result)).norm();
         }

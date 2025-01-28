@@ -499,7 +499,7 @@ namespace polysolve::linear
                         if (D.cols() == eigen_A.cols())
                         {
                             std::cout << "A-D norm: " << (eigen_A - D).norm() << std::endl;
-                            std::cout << "residual norm: " << (eigen_A * p - r).norm() << std::endl;
+                            std::cout << "residual norm: " << (eigen_A * z - r).norm() << std::endl;
                         }
                     }
                 }

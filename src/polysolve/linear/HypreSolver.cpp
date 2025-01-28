@@ -403,7 +403,7 @@ namespace polysolve::linear
                 Eigen::VectorXd p(r.size());
                 p.setZero();
 
-                if (k % 2 == 0 || bad_indices_.size() > 0)
+                if (max_iter_ < 500 || (max_iter_ == 500 && (k % 2 == 0 || bad_indices_.size() > 0)))
                 {
                     eigen_to_hypre_par_vec(par_x, x, p);
                     eigen_to_hypre_par_vec(par_b, b, r);
@@ -431,6 +431,7 @@ namespace polysolve::linear
                                 D(i_counter, j_counter) = eigen_A(i, j);
                                 ++j_counter;
                             }
+                        
                             ++i_counter;
                         }
 
@@ -439,6 +440,11 @@ namespace polysolve::linear
                         for (auto &i : subdomain)
                         {
                             p(i) = sub_result(i_counter);
+                        }
+                        if (D.cols() == eigen_A.cols())
+                        {
+                            std::cout << "A-D norm: " << (eigen_A - D).norm() << std::endl;
+                            std::cout << "residual norm: " << (eigen_A * p - r).norm() << std::endl;
                         }
                     }
                 }

@@ -397,8 +397,8 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
             Eigen::VectorXd r = rhs - (eigen_A * result);
-            Eigen::VectorXd p;
-            Eigen::VectorXd z;
+            Eigen::VectorXd p(r.size());
+            Eigen::VectorXd z(r.size());
             z.setZero();
 
             eigen_to_hypre_par_vec(par_x, x, z);

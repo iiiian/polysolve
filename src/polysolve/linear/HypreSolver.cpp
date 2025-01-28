@@ -458,7 +458,7 @@ namespace polysolve::linear
                 Eigen::VectorXd z(r.size());
                 z.setZero();
 
-                if (max_iter_ < 500 || (max_iter_ == 500 && (k % 2 == 0 || bad_indices_.size() > 0)))
+                if (max_iter_ < 500 || (max_iter_ == 500 && (k % 2 == 0 || bad_indices_.size() == 0)))
                 {
                     eigen_to_hypre_par_vec(par_x, x, z);
                     eigen_to_hypre_par_vec(par_b, b, r);

@@ -456,7 +456,7 @@ namespace polysolve::linear
                 }
 
                 Eigen::VectorXd z(r.size());
-                z.setZero();
+                z.setZero(); 
 
                 if (max_iter_ < 500 || (max_iter_ == 500 && (k % 2 == 0 || bad_indices_.size() == 0)))
                 {

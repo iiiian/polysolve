@@ -449,6 +449,8 @@ namespace polysolve::linear
                 }
 
                 double i_prod = r.dot(r);
+                std::cout << "i prod: " << i_prod << std::endl;
+                std::cout << "bi prod: " << bi_prod << std::endl;
                 if (i_prod / bi_prod < eps)
                 {
                     std::cout << "Converged 2" << std::endl;

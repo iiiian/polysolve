@@ -495,6 +495,7 @@ namespace polysolve::linear
                         for (auto &i : subdomain)
                         {
                             z(i) = sub_result(i_counter);
+                            ++i_counter;
                         }
                         if (D.cols() == eigen_A.cols())
                         {

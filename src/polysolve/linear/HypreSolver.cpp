@@ -394,20 +394,60 @@ namespace polysolve::linear
                 assert(false);
             }
 
-            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-
             Eigen::VectorXd r = rhs - (eigen_A * result);
             Eigen::VectorXd p(r.size());
             Eigen::VectorXd z(r.size());
             z.setZero();
 
-            eigen_to_hypre_par_vec(par_x, x, z);
-            eigen_to_hypre_par_vec(par_b, b, r);
+            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
-            HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+            assert(bad_indices_.size() == 1);
+            auto &subdomain = bad_indices_[0];
+            Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+            Eigen::VectorXd sub_rhs(subdomain.size());
 
-            hypre_vec_to_eigen(x, z); 
-            p = z;
+            Eigen::VectorXd sub_result(subdomain.size());
+
+            int i_counter = 0;
+            for (auto &i : subdomain)
+            {
+                sub_rhs(i_counter) = r(i);
+                int j_counter = 0;
+                for (auto &j : subdomain)
+                {
+                    D(i_counter, j_counter) = eigen_A(i, j);
+                    ++j_counter;
+                }
+            
+                ++i_counter;
+            }
+
+            auto D_solver = D.ldlt();
+
+            if (D.cols() == eigen_A.cols())
+            {
+                std::cout << "A-D norm: " << (eigen_A - D).norm() << std::endl;
+            }
+
+            sub_result = D_solver.solve(sub_rhs);
+            i_counter = 0;
+            for (auto &i : subdomain)
+            {
+                z(i) = sub_result(i_counter);
+                ++i_counter;
+            }
+            if (D.cols() == eigen_A.cols())
+            {
+                std::cout << "residual norm: " << (eigen_A * z - r).norm() << std::endl; 
+            }
+
+            //eigen_to_hypre_par_vec(par_x, x, z);
+            //eigen_to_hypre_par_vec(par_b, b, r);
+
+            //HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+
+            //hypre_vec_to_eigen(x, z); 
+            //p = z;
 
             double gamma = r.dot(z);
             double old_gamma = gamma;
@@ -471,39 +511,27 @@ namespace polysolve::linear
                 }
                 else
                 {
-                    for (auto &subdomain : bad_indices_)
+                    for (auto &i : subdomain)
                     {
-                        Eigen::MatrixXd D(subdomain.size(), subdomain.size());
-                        
-                        Eigen::VectorXd sub_rhs(subdomain.size());
-                        Eigen::VectorXd sub_result(subdomain.size());
+                        sub_rhs(i_counter) = r(i);
+                        ++i_counter;
+                    }
 
-                        int i_counter = 0;
-                        for (auto &i : subdomain)
-                        {
-                            sub_rhs(i_counter) = r(i);
-                            int j_counter = 0;
-                            for (auto &j : subdomain)
-                            {
-                                D(i_counter, j_counter) = eigen_A(i, j);
-                                ++j_counter;
-                            }
-                        
-                            ++i_counter;
-                        }
+                    if (D.cols() == eigen_A.cols())
+                    {
+                        std::cout << "A-D norm: " << (eigen_A - D).norm() << std::endl;
+                    }
 
-                        sub_result = D.ldlt().solve(sub_rhs);
-                        i_counter = 0;
-                        for (auto &i : subdomain)
-                        {
-                            z(i) = sub_result(i_counter);
-                            ++i_counter;
-                        }
-                        if (D.cols() == eigen_A.cols())
-                        {
-                            std::cout << "A-D norm: " << (eigen_A - D).norm() << std::endl;
-                            std::cout << "residual norm: " << (eigen_A * z - r).norm() << std::endl; 
-                        }
+                    sub_result = D_solver.solve(sub_rhs);
+                    i_counter = 0;
+                    for (auto &i : subdomain)
+                    {
+                        z(i) = sub_result(i_counter);
+                        ++i_counter;
+                    }
+                    if (D.cols() == eigen_A.cols())
+                    {
+                        std::cout << "residual norm: " << (eigen_A * z - r).norm() << std::endl; 
                     }
                 }
 

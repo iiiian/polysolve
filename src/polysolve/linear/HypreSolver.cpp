@@ -405,14 +405,18 @@ namespace polysolve::linear
 
             assert(bad_indices_.size() == 1);
             auto &subdomain = bad_indices_[0];
-            Eigen::MatrixXd D(subdomain.size(), subdomain.size());
+            Eigen::MatrixXd D;
             Eigen::LDLT<Eigen::MatrixXd> D_solver;
-            Eigen::VectorXd sub_rhs(subdomain.size());
-            Eigen::VectorXd sub_result(subdomain.size());
+            Eigen::VectorXd sub_rhs;
+            Eigen::VectorXd sub_result;
 
-            if (bad_indices_[0].size() > 0)
+            if (bad_indices_[0].size() > 0 && max_iter_ == 400)
             {
                 std::cout << "DSS Step" << std::endl;
+
+                D.resize(subdomain.size(), subdomain.size());
+                sub_rhs.resize(subdomain.size());
+                sub_result.resize(subdomain.size());
 
                 int i_counter = 0;
                 for (auto &i : subdomain)

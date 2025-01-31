@@ -177,10 +177,8 @@ namespace polysolve::nonlinear
         std::set<int> bad_indices;
         {
             POLYSOLVE_SCOPED_STOPWATCH("bad dof time", this->bad_dof_time, m_logger);
-            objFunc.problematic_indices(bad_indices);
-            if (linear_solver->name() == "Hypre") {
-                linear_solver->set_problematic_dofs(bad_indices);
-            }
+            linear_solver->set_positions(positions);
+            linear_solver->set_problematic_dofs(problematic_indices);
         }
 
         {
@@ -200,8 +198,6 @@ namespace polysolve::nonlinear
                 // Eigen::saveMarket(hessian, "problematic_hessian.mtx");
                 return std::nan("");
             }
-            linear_solver->set_positions(positions);
-            linear_solver->set_problematic_dofs(problematic_indices);
             linear_solver->solve(-grad, direction); // H Δx = -g
         }
 

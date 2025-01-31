@@ -463,7 +463,9 @@
             "theta",
             "nodal_coarsening",
             "interp_rbms",
-            "dimension"
+            "dimension",
+            "do_mixed_precond",
+            "print_conditioning"
         ],
         "doc": "Settings for the Experimental solver."
     },

@@ -114,8 +114,6 @@ namespace polysolve::linear
         /// Set block size for multigrid solvers
         virtual void set_block_size(int block_size) {}
 
-        virtual void set_problematic_dofs(std::set<int> &bad_indices) {}
-
         ///
         /// @brief         { Solve the linear system Ax = b }
         ///

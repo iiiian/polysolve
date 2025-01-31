@@ -355,19 +355,20 @@ namespace polysolve::linear
         /* PCG with AMG preconditioner */
 
         /* Create solver */
-        HYPRE_Solver solver, precond;
+        //HYPRE_Solver solver, precond;
+        HYPRE_Solver precond;
 #ifdef HYPRE_WITH_MPI
         HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &solver);
 #else
-        HYPRE_ParCSRPCGCreate(0, &solver);
+        //HYPRE_ParCSRPCGCreate(0, &solver);
 #endif
 
         /* Set some parameters (See Reference Manual for more parameters) */
-        HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
-        HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
-        HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
+        //HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
+        //HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
+        //HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
         // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
-        HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
+        //HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
 
         /* Now set up the AMG preconditioner and specify any parameters */
         HYPRE_BoomerAMGCreate(&precond);
@@ -395,28 +396,10 @@ namespace polysolve::linear
         }
 
         /* Set the PCG preconditioner */
-        HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
-        HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
+        //HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
+        //HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
-        if (!do_mixed_precond || bad_indices_.size() == 0)
-        {
-            POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
-            HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
-            /* Run info - needed logging turned on */
-            HYPRE_PCGGetNumIterations(solver, &num_iterations);
-            HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
-
-            for (HYPRE_Int i = 0; i < result.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                HYPRE_Complex v[1];
-                HYPRE_IJVectorGetValues(x, 1, index, v);
-
-                result(i) = v[0];
-            }
-        }
-        else 
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
 
@@ -450,7 +433,14 @@ namespace polysolve::linear
 
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
-            custom_mixed_precond_iter(z, precond, r);
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, r, z);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, r, z);
+            }
             
             p = z;
 
@@ -502,7 +492,15 @@ namespace polysolve::linear
                 }
 
                 z.setZero(); 
-                custom_mixed_precond_iter(z, precond, r);
+                
+                if (!do_mixed_precond || bad_indices_.size() == 0)
+                {
+                    amg_precond_iter(precond, r, z);
+                }
+                else
+                {
+                    custom_mixed_precond_iter(precond, r, z);
+                }
 
                 gamma = r.dot(z);
                 double beta = gamma / old_gamma;
@@ -519,14 +517,14 @@ namespace polysolve::linear
 
         /* Destroy solver and preconditioner */
         HYPRE_BoomerAMGDestroy(precond);
-        HYPRE_ParCSRPCGDestroy(solver);
+        //HYPRE_ParCSRPCGDestroy(solver);
 
         HYPRE_IJVectorDestroy(x);
         HYPRE_IJVectorDestroy(b);
 
     }
 
-    void ExperimentalSolver::custom_mixed_precond_iter(Eigen::VectorXd &z, const HYPRE_Solver &precond, const Eigen::VectorXd &r)
+    void ExperimentalSolver::custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z)
     {        
         Eigen::VectorXd z1(r.size());
         Eigen::VectorXd z2(r.size());

@@ -84,7 +84,7 @@ namespace polysolve::linear
         double set_options_time;
         double actual_solve_time;
 
-        void custom_mixed_precond_iter(Eigen::VectorXd &z, const HYPRE_Solver &precond, const Eigen::VectorXd &r);
+        void custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z);
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
     };
 

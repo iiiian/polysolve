@@ -363,7 +363,7 @@ namespace polysolve::linear
 #endif
 
         /* Set some parameters (See Reference Manual for more parameters) */
-        HYPRE_PCGSetMaxIter(solver, 1); /* max iterations */
+        HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
         HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
         HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
         // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
@@ -406,6 +406,15 @@ namespace polysolve::linear
             /* Run info - needed logging turned on */
             HYPRE_PCGGetNumIterations(solver, &num_iterations);
             HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+
+            for (HYPRE_Int i = 0; i < result.size(); ++i)
+            {
+                const HYPRE_Int index[1] = {i};
+                HYPRE_Complex v[1];
+                HYPRE_IJVectorGetValues(x, 1, index, v);
+
+                result(i) = v[0];
+            }
         }
         else 
         {

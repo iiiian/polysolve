@@ -66,6 +66,7 @@ namespace polysolve::linear
         bool interp_rbms = false;
         bool do_mixed_precond = false;
         bool print_conditioning = false;
+        bool use_incomplete_cholesky_precond = false;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

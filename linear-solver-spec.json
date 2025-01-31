@@ -465,7 +465,8 @@
             "interp_rbms",
             "dimension",
             "do_mixed_precond",
-            "print_conditioning"
+            "print_conditioning",
+            "use_incomplete_cholesky_precond"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -522,5 +523,11 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to print out conditioning of matrix."
+    },
+    {
+        "pointer": "/Experimental/use_incomplete_cholesky_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use incomplete cholesky preconditioner in PCG."
     }
 ]

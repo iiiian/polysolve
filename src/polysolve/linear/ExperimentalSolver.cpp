@@ -78,6 +78,10 @@ namespace polysolve::linear
             {
                 print_conditioning = params["Experimental"]["print_conditioning"];
             }
+            if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
+            {
+                use_incomplete_cholesky_precond = params["Experimental"]["use_incomplete_cholesky_precond"];
+            }
         }
     }
 

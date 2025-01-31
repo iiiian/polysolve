@@ -15,7 +15,8 @@
             "Eigen::MINRES",
             "Pardiso",
             "Hypre",
-            "AMGCL"
+            "AMGCL",
+            "Experimental"
         ],
         "doc": "Settings for the linear solver."
     },
@@ -41,6 +42,7 @@
             "Eigen::PardisoLU",
             "Pardiso",
             "Hypre",
+            "Experimental",
             "AMGCL",
             "Eigen::LeastSquaresConjugateGradient",
             "Eigen::DGMRES",
@@ -449,5 +451,74 @@
         "default": 0,
         "type": "float",
         "doc": "Aggregation epsilon strong."
+    },
+    {
+        "pointer": "/Experimental",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "max_iter",
+            "pre_max_iter",
+            "tolerance",
+            "theta",
+            "nodal_coarsening",
+            "interp_rbms",
+            "dimension"
+        ],
+        "doc": "Settings for the Experimental solver."
+    },
+    {
+        "pointer": "/Experimental/max_iter",
+        "default": 1000,
+        "type": "int",
+        "doc": "Maximum number of iterations."
+    },
+    {
+        "pointer": "/Experimental/pre_max_iter",
+        "default": 1,
+        "type": "int",
+        "doc": "Maximum number of pre iterations."
+    },
+    {
+        "pointer": "/Experimental/tolerance",
+        "default": 1e-10,
+        "type": "float",
+        "doc": "Convergence tolerance."
+    },
+    {
+        "pointer": "/Experimental/theta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Strong threshold."
+    },
+    {
+        "pointer": "/Experimental/interp_rbms",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to interp rbms."
+    },
+    {
+        "pointer": "/Experimental/nodal_coarsening",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to include nodal coarsening options."
+    },
+    {
+        "pointer": "/Experimental/dimension",
+        "default": 1,
+        "type": "int",
+        "doc": "Dimension of problem."
+    },
+    {
+        "pointer": "/Experimental/do_mixed_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use mixed preconditioner with direct subsolve."
+    },
+    {
+        "pointer": "/Experimental/print_conditioning",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to print out conditioning of matrix."
     }
 ]

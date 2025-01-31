@@ -104,8 +104,6 @@ namespace polysolve::nonlinear
         /// @return True if the solver should stop, false otherwise.
         virtual bool stop(const TVector &x) { return false; }
 
-        virtual void problematic_indices(std::set<int>& bad_indices) {};
-
         virtual void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
 
         /// --- Misc ----------------------------------------------------------

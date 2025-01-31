@@ -222,24 +222,15 @@ namespace polysolve::nonlinear
             compute_hessian(objFunc, x, hessian);
         }
 
-        std::set<int> bad_indices;
-        {
-            POLYSOLVE_SCOPED_STOPWATCH("bad dof time", this->bad_dof_time, m_logger);
-            objFunc.problematic_indices(bad_indices);
-            if (linear_solver->name() == "Hypre") {
-                linear_solver->set_problematic_dofs(bad_indices);
-            }
-        }
-
         {
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
 
             try
             {
-                linear_solver->analyze_pattern_dense(hessian, hessian.rows());
-                linear_solver->factorize_dense(hessian);   
                 linear_solver->set_positions(positions);
                 linear_solver->set_problematic_dofs(problematic_indices);
+                linear_solver->analyze_pattern_dense(hessian, hessian.rows());
+                linear_solver->factorize_dense(hessian);   
                 linear_solver->solve(-grad, direction);
             }
             catch (const std::runtime_error &err)

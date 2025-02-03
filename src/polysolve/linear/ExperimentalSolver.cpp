@@ -157,6 +157,7 @@ namespace polysolve::linear
 #if POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
         {
+            logger->trace("Factorizing for ichol");
             boost::property_tree::ptree pt;
             pt.put<double>("nei_num.value", 3.2);
             pt.put<std::ptrdiff_t>("max_su_size.value", 64);
@@ -463,16 +464,16 @@ namespace polysolve::linear
 
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
+#if POLYSOLVE_WITH_ICHOL
+            if (use_incomplete_cholesky_precond)
+            {
+                z = ichol_precond->solve(r);
+            } else
+#endif
             if (!do_mixed_precond || bad_indices_.size() == 0)
             {
                 amg_precond_iter(precond, r, z);
             }
-#if POLYSOLVE_WITH_ICHOL
-            else if (use_incomplete_cholesky_precond)
-            {
-                z = ichol_precond->solve(r);
-            }
-#endif
             else
             {
                 custom_mixed_precond_iter(precond, r, z);

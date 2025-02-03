@@ -82,7 +82,7 @@ namespace polysolve::linear
             {
                 dss_in_middle = params["Experimental"]["dss_in_middle"];
             }
-            #if POLYSOLVE_WITH_ICHOL
+#if POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
             {
                 use_incomplete_cholesky_precond = params["Experimental"]["use_incomplete_cholesky_precond"];

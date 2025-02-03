@@ -12,8 +12,6 @@
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 
-#define POLYSOLVE_WITH_ICHOL 1
-
 #if POLYSOLVE_WITH_ICHOL
 #include "cholesky.h"
 #include <boost/property_tree/ptree.hpp>

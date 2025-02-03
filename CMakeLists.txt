@@ -85,9 +85,9 @@ option(POLYSOLVE_WITH_MKL           "Enable MKL library"  ${POLYSOLVE_NOT_ON_APP
 option(POLYSOLVE_WITH_CUSOLVER      "Enable cuSOLVER library"                           OFF)
 option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                            OFF)
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
-option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          OFF)
+option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
-option(POlYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   ON)
+option(POlYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   OFF)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)

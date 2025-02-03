@@ -465,6 +465,7 @@
             "interp_rbms",
             "dimension",
             "do_mixed_precond",
+            "dss_in_middle",
             "print_conditioning",
             "use_incomplete_cholesky_precond"
         ],
@@ -529,5 +530,11 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to use incomplete cholesky preconditioner in PCG."
+    },
+    {
+        "pointer": "/Experimental/dss_in_middle",
+        "default": true,
+        "type": "bool",
+        "doc": "If using the mixed preconditioner, whether or not to use dss in middle (or AMG if false)."
     }
 ]

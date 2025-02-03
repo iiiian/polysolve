@@ -78,6 +78,10 @@ namespace polysolve::linear
             {
                 print_conditioning = params["Experimental"]["print_conditioning"];
             }
+            if (params["Experimental"].contains("dss_in_middle"))
+            {
+                dss_in_middle = params["Experimental"]["dss_in_middle"];
+            }
             #if POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
             {
@@ -539,42 +543,33 @@ namespace polysolve::linear
         z2.setZero();
         z3.setZero();
 
-        assert(bad_indices_.size() == 1);
-        auto &subdomain = bad_indices_[0];
-
-        Eigen::VectorXd sub_rhs;
-        Eigen::VectorXd sub_result;
-        sub_rhs.resize(subdomain.size());
-        sub_result.resize(subdomain.size());
+        
 
         amg_precond_iter(precond, r, z1);
 
-        if (subdomain.size() > 0)
+        assert(bad_indices_.size() == 1);
+        if (bad_indices_[0].size() == 0)
         {
-            logger->trace("DSS Step");
+            amg_precond_iter(precond, r, z1);
+            z = z1;
+            return;
+        }
 
-            int i_counter = 0;
-            for (auto &i : subdomain)
-            {
-                sub_rhs(i_counter) = r(i) - eigen_A.row(i).dot(z1);
-                ++i_counter;
-            }
-
-            sub_result = D_solver.solve(sub_rhs);
-            i_counter = 0;
-            z2 = z1;
-            for (auto &i : subdomain)
-            {
-                z2(i) += sub_result(i_counter);
-                ++i_counter;
-            }
-
+        if (dss_in_middle)
+        {
+            amg_precond_iter(precond, r, z1);
+            dss_precond_iter(z1, r, z2);
             amg_precond_iter(precond, r - eigen_A * z2, z3);
             z = z2 + z3;
         }
         else
         {
-            z = z1;
+            Eigen::VectorXd z0(r.size());
+            z0.setZero();
+            dss_precond_iter(z0, r, z1);
+            amg_precond_iter(precond, r - eigen_A * z1, z2);
+            z2 += z1;
+            dss_precond_iter(z2, r, z);
         }
 
     }
@@ -592,6 +587,34 @@ namespace polysolve::linear
         HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
 
         hypre_vec_to_eigen(x, eigen_x);
+    }
+
+    void ExperimentalSolver::dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z)
+    {
+        logger->trace("DSS Step");
+
+        auto &subdomain = bad_indices_[0];
+
+        Eigen::VectorXd sub_rhs;
+        Eigen::VectorXd sub_result;
+        sub_rhs.resize(subdomain.size());
+        sub_result.resize(subdomain.size());
+
+        int i_counter = 0;
+        for (auto &i : subdomain)
+        {
+            sub_rhs(i_counter) = r(i) - eigen_A.row(i).dot(z);
+            ++i_counter;
+        }
+
+        sub_result = D_solver.solve(sub_rhs);
+        i_counter = 0;
+        next_z = z;
+        for (auto &i : subdomain)
+        {
+            next_z(i) += sub_result(i_counter);
+            ++i_counter;
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////

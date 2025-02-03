@@ -69,6 +69,7 @@ namespace polysolve::linear
         bool nodal_coarsening = false;
         bool interp_rbms = false;
         bool do_mixed_precond = false;
+        bool dss_in_middle = true;
         bool print_conditioning = false;
         bool use_incomplete_cholesky_precond = false;
 
@@ -95,6 +96,7 @@ namespace polysolve::linear
 
         void custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z);
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
+        void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
     };
 
 } // namespace polysolve::linear

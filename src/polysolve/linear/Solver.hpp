@@ -38,6 +38,7 @@ namespace polysolve::linear
         // Shortcut alias
         typedef Eigen::VectorXd VectorXd;
         typedef Eigen::MatrixXd MatrixXd;
+        typedef Eigen::MatrixXi MatrixXi;
         template <typename T>
         using Ref = Eigen::Ref<T>;
 
@@ -126,6 +127,7 @@ namespace polysolve::linear
         virtual void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) = 0;
 
         void set_positions(const Ref<const MatrixXd> positions) {positions_ = positions;}
+        void set_elements(const Ref<const MatrixXi> elements) {elements_ = elements;}
         void set_dof_to_function(const Ref<const VectorXd> dof_to_function) {dof_to_function_ = dof_to_function;}
 
         void set_problematic_dofs(std::vector<std::set<int>> &bad_indices) {bad_indices_ = bad_indices;}
@@ -134,6 +136,7 @@ namespace polysolve::linear
         virtual std::string name() const { return ""; }
 
         MatrixXd positions_;
+        MatrixXi elements_;
         VectorXd dof_to_function_;
         std::vector<std::set<int>> bad_indices_;
 

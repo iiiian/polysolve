@@ -14,6 +14,7 @@
 
 #if POLYSOLVE_WITH_ICHOL
 #include "cholesky.h"
+#include <boost/property_tree/ptree.hpp>
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -84,7 +85,7 @@ namespace polysolve::linear
         Eigen::LDLT<Eigen::MatrixXd> D_solver;
 
         #if POLYSOLVE_WITH_ICHOL
-        mschol::ichol_precond *inc_chol_precond; // just to show it compiles
+        std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
         #endif
 
         HYPRE_IJMatrix A;

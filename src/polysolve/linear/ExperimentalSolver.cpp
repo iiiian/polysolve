@@ -87,7 +87,7 @@ namespace polysolve::linear
             {
                 use_incomplete_cholesky_precond = params["Experimental"]["use_incomplete_cholesky_precond"];
             }
-            #endif
+#endif
         }
     }
 
@@ -154,11 +154,31 @@ namespace polysolve::linear
         assert(bad_indices_.size() == 1);
         auto &subdomain = bad_indices_[0];
 
+#if POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            boost::property_tree::ptree pt;
+            pt.put<double>("nei_num.value", 3.2);
+            pt.put<std::ptrdiff_t>("max_su_size.value", 64);
+            pt.put<int>("num_threads.value", 1);
+            pt.put<int>("subst_num_threads.value", 1);
+            
+            mschol::chol_hierarchy builder(elements_, positions_, "tets");
+            
+            std::vector<shared_ptr<mschol::chol_level>> levels;
+            builder.build(levels, 125, dimension_);
+            inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
+            inc_chol_precond->analyze_pattern(eigen_A);
+            inc_chol_precond->factorize(eigen_A);
+        }
+#endif
+
         // Save submatrix for direct step. TODO: refactor for multiple subdomains
         if (!do_mixed_precond || subdomain.size() == 0)
         {
             return;
         }
+
 
         // Save submatrix for direct step. TODO: refactor for multiple subdomains
         Eigen::MatrixXd D;
@@ -447,6 +467,12 @@ namespace polysolve::linear
             {
                 amg_precond_iter(precond, r, z);
             }
+#if POLYSOLVE_WITH_ICHOL
+            else if (use_incomplete_cholesky_precond)
+            {
+                z = ichol_precond->solve(r);
+            }
+#endif
             else
             {
                 custom_mixed_precond_iter(precond, r, z);

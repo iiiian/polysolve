@@ -91,6 +91,11 @@ namespace polysolve::nonlinear
             positions = positions_;
         }
 
+        void set_elements(const Eigen::MatrixXi &elements_)
+        {
+            elements = elements_;
+        }
+
         void set_problematic_indices(const std::vector<std::set<int>> &problematic_indices_)
         {
             problematic_indices = problematic_indices_;
@@ -110,6 +115,7 @@ namespace polysolve::nonlinear
             TVector &direction)
         {
             m_strategies[m_descent_strategy]->set_positions(positions);
+            m_strategies[m_descent_strategy]->set_elements(elements);
             m_strategies[m_descent_strategy]->set_problematic_indices(problematic_indices);
             return m_strategies[m_descent_strategy]->compute_update_direction(objFunc, x, grad, direction);
         }
@@ -188,6 +194,7 @@ namespace polysolve::nonlinear
         double constraint_set_update_time;
 
         Eigen::MatrixXd positions;
+        Eigen::MatrixXi elements;
         std::vector<std::set<int>> problematic_indices;
 
         // ====================================================================

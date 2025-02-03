@@ -178,6 +178,7 @@ namespace polysolve::nonlinear
         {
             POLYSOLVE_SCOPED_STOPWATCH("bad dof time", this->bad_dof_time, m_logger);
             linear_solver->set_positions(positions);
+            linear_solver->set_elements(elements);
             linear_solver->set_problematic_dofs(problematic_indices);
         }
 
@@ -228,6 +229,7 @@ namespace polysolve::nonlinear
             try
             {
                 linear_solver->set_positions(positions);
+                linear_solver->set_elements(elements);
                 linear_solver->set_problematic_dofs(problematic_indices);
                 linear_solver->analyze_pattern_dense(hessian, hessian.rows());
                 linear_solver->factorize_dense(hessian);   

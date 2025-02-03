@@ -87,6 +87,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
+option(POlYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   OFF)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)
@@ -231,6 +232,11 @@ if(POLYSOLVE_WITH_HYPRE)
     if(HYPRE_WITH_MPI)
         target_compile_definitions(polysolve_linear PUBLIC HYPRE_WITH_MPI)
     endif()
+endif()
+
+if(POlYSOLVE_WITH_ICHOL)
+    include(mschol)
+    target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
 endif()
 
 # CHOLMOD solver

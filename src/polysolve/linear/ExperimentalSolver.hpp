@@ -12,6 +12,10 @@
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 
+#if POLYSOLVE_WITH_ICHOL
+#include "cholesky.h"
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // https://computation.llnl.gov/sites/default/files/public/hypre-2.11.2_usr_manual.pdf
@@ -77,6 +81,10 @@ namespace polysolve::linear
 
         Eigen::MatrixXd eigen_A;
         Eigen::LDLT<Eigen::MatrixXd> D_solver;
+
+        #if POLYSOLVE_WITH_ICHOL
+        mschol::ichol_precond *inc_chol_precond; // just to show it compiles
+        #endif
 
         HYPRE_IJMatrix A;
         HYPRE_ParCSRMatrix parcsr_A;

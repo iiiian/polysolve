@@ -105,6 +105,7 @@ namespace polysolve::nonlinear
         virtual bool stop(const TVector &x) { return false; }
 
         virtual void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
+        virtual void get_dof_to_func_mapping(std::vector<int> &dof_to_func_mapping_out) {};
 
         /// --- Misc ----------------------------------------------------------
 

@@ -6,6 +6,12 @@
 
 #include <HYPRE_krylov.h>
 #include <HYPRE_utilities.h>
+
+#ifdef POLYSOLVE_WITH_ICHOL
+#include "cholesky.h"
+#include "chol_hierarchy.h"
+#include <boost/property_tree/ptree.hpp>
+#endif
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
@@ -164,13 +170,16 @@ namespace polysolve::linear
             pt.put<int>("num_threads.value", 1);
             pt.put<int>("subst_num_threads.value", 1);
             
-            mschol::chol_hierarchy builder(elements_, positions_, "tets");
+            Eigen::Matrix<size_t, -1, -1> test_elements = elements_.cast<size_t>();
+            mschol::chol_hierarchy builder(test_elements, positions_, "tets");
             
-            std::vector<shared_ptr<mschol::chol_level>> levels;
+            std::vector<std::shared_ptr<mschol::chol_level>> levels;
             builder.build(levels, 125, dimension_);
             inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
-            inc_chol_precond->analyze_pattern(eigen_A);
-            inc_chol_precond->factorize(eigen_A);
+            Eigen::SparseMatrix<double> sparse_A;
+            sparse_A = eigen_A.sparseView();
+            inc_chol_precond->analyse_pattern(sparse_A);
+            inc_chol_precond->factorize(sparse_A);
         }
 #endif
 
@@ -470,7 +479,7 @@ namespace polysolve::linear
 #ifdef POLYSOLVE_WITH_ICHOL
             if (use_incomplete_cholesky_precond)
             {
-                z = ichol_precond->solve(r);
+                z = inc_chol_precond->solve(r);
             } else
 #endif
             if (!do_mixed_precond || bad_indices_.size() == 0)

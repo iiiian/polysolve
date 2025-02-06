@@ -12,16 +12,10 @@
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 
-#if POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
 #include "cholesky.h"
 #include <boost/property_tree/ptree.hpp>
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-//
-// https://computation.llnl.gov/sites/default/files/public/hypre-2.11.2_usr_manual.pdf
-// https://github.com/LLNL/hypre/blob/v2.14.0/docs/HYPRE_usr_manual.pdf
-//
 
 namespace polysolve::linear
 {

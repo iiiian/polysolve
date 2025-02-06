@@ -62,7 +62,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0135 NEW) # Set the timestamps of all extracted cont
 
 project(PolySolve
         DESCRIPTION "Easy-to-use wrapper for linear solver"
-        LANGUAGES CXX)
+        LANGUAGES CXX C)
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND APPLE)
     set(POLYSOLVE_NOT_ON_APPLE_SILICON OFF)
@@ -87,7 +87,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
-option(POlYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   OFF)
+option(POlYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   ON)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)
@@ -234,11 +234,6 @@ if(POLYSOLVE_WITH_HYPRE)
     endif()
 endif()
 
-if(POlYSOLVE_WITH_ICHOL)
-    include(mschol)
-    target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
-endif()
-
 # CHOLMOD solver
 if(POLYSOLVE_WITH_CHOLMOD)
     include(suitesparse)
@@ -298,6 +293,11 @@ if(POLYSOLVE_WITH_AMGCL)
     include(amgcl)
     target_link_libraries(polysolve_linear PUBLIC amgcl::amgcl)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_AMGCL)
+endif()
+
+if(POlYSOLVE_WITH_ICHOL)
+    include(mschol)
+    target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
 endif()
 
 # Spectra (MPL 2.0)

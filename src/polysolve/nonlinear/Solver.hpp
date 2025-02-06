@@ -101,6 +101,11 @@ namespace polysolve::nonlinear
             problematic_indices = problematic_indices_;
         }
 
+        void set_dof_to_func_mapping(const std::vector<int> &dof_to_function_in)
+        {
+            dof_to_function = dof_to_function_in;
+        }
+
     protected:
         /// @brief Compute direction in which the argument should be updated 
         /// @param objFunc Problem to be minimized
@@ -117,6 +122,7 @@ namespace polysolve::nonlinear
             m_strategies[m_descent_strategy]->set_positions(positions);
             m_strategies[m_descent_strategy]->set_elements(elements);
             m_strategies[m_descent_strategy]->set_problematic_indices(problematic_indices);
+            m_strategies[m_descent_strategy]->set_dof_to_func_mapping(dof_to_function);
             return m_strategies[m_descent_strategy]->compute_update_direction(objFunc, x, grad, direction);
         }
 
@@ -195,6 +201,7 @@ namespace polysolve::nonlinear
 
         Eigen::MatrixXd positions;
         Eigen::MatrixXi elements;
+        std::vector<int> dof_to_function;
         std::vector<std::set<int>> problematic_indices;
 
         // ====================================================================

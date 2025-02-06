@@ -128,7 +128,7 @@ namespace polysolve::linear
 
         void set_positions(const Ref<const MatrixXd> positions) {positions_ = positions;}
         void set_elements(const Ref<const MatrixXi> elements) {elements_ = elements;}
-        void set_dof_to_function(const Ref<const VectorXd> dof_to_function) {dof_to_function_ = dof_to_function;}
+        void set_dof_to_function(const std::vector<int> &dof_to_function) {dof_to_function_ = dof_to_function;}
 
         void set_problematic_dofs(std::vector<std::set<int>> &bad_indices) {bad_indices_ = bad_indices;}
 
@@ -137,7 +137,7 @@ namespace polysolve::linear
 
         MatrixXd positions_;
         MatrixXi elements_;
-        VectorXd dof_to_function_;
+        std::vector<int> dof_to_function_;
         std::vector<std::set<int>> bad_indices_;
 
         spdlog::logger *logger = nullptr;

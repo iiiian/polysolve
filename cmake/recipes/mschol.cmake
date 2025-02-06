@@ -7,9 +7,9 @@ message(STATUS "Third-party: creating target 'mschol::mschol'")
 include(CPM)
 CPMAddPackage(
     NAME mschol
-    GIT_REPOSITORY https://gitlab.inria.fr/geomerix/ichol
-    GIT_TAG 580f7555a3b10e4d9cb5cd79bd8de05adbe56527
+    GIT_REPOSITORY https://github.com/maxpaik16/mschol
+    GIT_TAG 30ed45cf685379d0cdb063549bf2b4f5a8916646
 )
 
-add_library(mschol::mschol ALIAS mschol)
+#add_library(mschol::mschol ALIAS mschol)
 target_include_directories(mschol SYSTEM PUBLIC ${mschol_SOURCE_DIR}/src)

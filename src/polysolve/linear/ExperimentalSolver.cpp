@@ -304,10 +304,12 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetTol(amg_precond, 0.0);
         }
 
-        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms, const Eigen::MatrixXd &positions, std::vector<HYPRE_IJVector> &rbms, std::vector<HYPRE_ParVector> &par_rbms)
+        void HypreBoomerAMG_SetElasticityOptions(HYPRE_Solver &amg_precond, int dim, double theta, bool nodal_coarsening, bool interp_rbms, const Eigen::MatrixXd &positions, std::vector<int> &dof_to_function, std::vector<HYPRE_IJVector> &rbms, std::vector<HYPRE_ParVector> &par_rbms)
         {
             // Make sure the systems AMG options are set
             HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
+
+            HYPRE_BoomerAMGSetDofFunc(amg_precond, (HYPRE_Int*) dof_to_function.data());
 
             // More robust options with respect to convergence
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);
@@ -419,7 +421,8 @@ namespace polysolve::linear
                     theta, 
                     nodal_coarsening, 
                     interp_rbms, 
-                    positions_, 
+                    positions_,
+                    dof_to_function_, 
                     rbms, 
                     par_rbms
                 );

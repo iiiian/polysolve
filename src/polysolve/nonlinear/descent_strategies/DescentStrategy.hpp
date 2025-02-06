@@ -56,11 +56,16 @@ namespace polysolve::nonlinear
         {
             problematic_indices = problematic_indices_;
         }
+        void set_dof_to_func_mapping(std::vector<int> &dof_to_function_) 
+        {
+            dof_to_function = dof_to_function_;
+        }
 
     protected:
         spdlog::logger &m_logger;
         Eigen::MatrixXd positions;
         Eigen::MatrixXi elements;
         std::vector<std::set<int>> problematic_indices;
+        std::vector<int> dof_to_function;
     };
 } // namespace polysolve::nonlinear

@@ -31,7 +31,7 @@ function(amgcl_import_target)
 
     include(boost)
 
-    ignore_package(Boost 1.83.0)
+    ignore_package(Boost 1.71.0)
     set(Boost_ROOT "")
     set(Boost_INCLUDE_DIRS "")
     set(Boost_LIBRARIES "")

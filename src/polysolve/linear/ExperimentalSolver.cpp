@@ -82,7 +82,7 @@ namespace polysolve::linear
             {
                 dss_in_middle = params["Experimental"]["dss_in_middle"];
             }
-#if POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
             {
                 use_incomplete_cholesky_precond = params["Experimental"]["use_incomplete_cholesky_precond"];
@@ -154,7 +154,7 @@ namespace polysolve::linear
         assert(bad_indices_.size() == 1);
         auto &subdomain = bad_indices_[0];
 
-#if POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
         {
             logger->trace("Factorizing for ichol");
@@ -467,7 +467,7 @@ namespace polysolve::linear
 
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
-#if POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
             if (use_incomplete_cholesky_precond)
             {
                 z = ichol_precond->solve(r);

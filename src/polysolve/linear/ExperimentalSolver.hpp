@@ -78,7 +78,7 @@ namespace polysolve::linear
         Eigen::MatrixXd eigen_A;
         Eigen::LDLT<Eigen::MatrixXd> D_solver;
 
-        #if POLYSOLVE_WITH_ICHOL
+        #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
         #endif
 

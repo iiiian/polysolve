@@ -87,7 +87,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
-option(POLYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   OFF)
+option(POLYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   ON)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)
@@ -298,6 +298,7 @@ endif()
 if(POlYSOLVE_WITH_ICHOL)
     include(mschol)
     target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_ICHOL)
 endif()
 
 # Spectra (MPL 2.0)

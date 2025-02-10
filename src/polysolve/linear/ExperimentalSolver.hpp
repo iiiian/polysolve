@@ -81,6 +81,7 @@ namespace polysolve::linear
 
         #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
+        boost::property_tree::ptree pt;
         #endif
 
         HYPRE_IJMatrix A;

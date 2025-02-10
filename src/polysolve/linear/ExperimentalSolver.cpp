@@ -164,6 +164,7 @@ namespace polysolve::linear
             logger->trace("Factorizing for ichol");
             boost::property_tree::ptree pt;
             pt.put<double>("nei_num.value", 3.2);
+            pt.put<double>("alpha.value", 1e-4);
             pt.put<std::ptrdiff_t>("max_su_size.value", 64);
             pt.put<int>("num_threads.value", 1);
             pt.put<int>("subst_num_threads.value", 1);

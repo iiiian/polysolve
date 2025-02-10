@@ -8,7 +8,6 @@
 #ifdef POLYSOLVE_WITH_ICHOL
 #include "cholesky.h"
 #include "chol_hierarchy.h"
-#include <boost/property_tree/ptree.hpp>
 #endif
 ////////////////////////////////////////////////////////////////////////////////
 

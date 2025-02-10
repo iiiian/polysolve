@@ -13,6 +13,7 @@
 #include <HYPRE_parcsr_mv.h>
 
 #ifdef POLYSOLVE_WITH_ICHOL
+#include <boost/property_tree/ptree.hpp>
 namespace mschol {
     class ichol_precond;
 }

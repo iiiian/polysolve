@@ -12,6 +12,8 @@
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 
+#define POLYSOLVE_WITH_ICHOL
+
 #ifdef POLYSOLVE_WITH_ICHOL
 namespace mschol {
     class ichol_precond;

@@ -97,7 +97,7 @@ option(POLYSOLVE_SANITIZE_UNDEFINED "Sanitize Undefined"                        
 
 # Misc.
 option(POLYSOLVE_LARGE_INDEX        "Build for large indices"                           OFF)
-option(POLYSOLVE_WITH_TESTS         "Build unit-tests"        ${POLYSOLVE_TOPLEVEL_PROJECT})
+option(POLYSOLVE_WITH_TESTS         "Build unit-tests"        OFF)
 
 include(CMakeDependentOption)
 cmake_dependent_option(EIGEN_WITH_MKL "Use Eigen with MKL" ON "POLYSOLVE_WITH_MKL" OFF)
@@ -295,7 +295,7 @@ if(POLYSOLVE_WITH_AMGCL)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_AMGCL)
 endif()
 
-if(POlYSOLVE_WITH_ICHOL)
+if(POLYSOLVE_WITH_ICHOL)
     include(mschol)
     target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_ICHOL)

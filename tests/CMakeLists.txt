@@ -9,6 +9,7 @@ set(test_sources
 	test_json.cpp
 )
 add_executable(unit_tests ${test_sources})
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -no-pie")
 
 ################################################################################
 # Required Libraries

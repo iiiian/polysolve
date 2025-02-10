@@ -1,5 +1,3 @@
-#define POLYSOLVE_WITH_HYPRE
-#ifdef POLYSOLVE_WITH_HYPRE
 
 ////////////////////////////////////////////////////////////////////////////////
 #include "ExperimentalSolver.hpp"
@@ -669,4 +667,3 @@ namespace polysolve::linear
 
 } // namespace polysolve::linear
 
-#endif

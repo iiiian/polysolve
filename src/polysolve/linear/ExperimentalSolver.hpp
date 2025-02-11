@@ -69,6 +69,7 @@ namespace polysolve::linear
         bool dss_in_middle = true;
         bool print_conditioning = false;
         bool use_incomplete_cholesky_precond = false;
+        bool use_absolute_tol = false;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

@@ -85,6 +85,10 @@ namespace polysolve::linear
             {
                 dss_in_middle = params["Experimental"]["dss_in_middle"];
             }
+            if (params["Experimental"].contains("use_absolute_tol"))
+            {
+                use_absolute_tol = params["Experimental"]["use_absolute_tol"];
+            }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
             {
@@ -521,7 +525,11 @@ namespace polysolve::linear
                 result += alpha * p;
                 r -= alpha * eigen_A * p;
                 //r = rhs - (eigen_A * result);
-                double drob2 = alpha * alpha * p.dot(p) / bi_prod;
+                double drob2 = alpha * alpha * p.dot(p);
+                if (!use_absolute_tol) 
+                {
+                    drob2 /= bi_prod;
+                }
 
                 if (drob2 < conv_tol_ * conv_tol_)
                 {
@@ -531,7 +539,12 @@ namespace polysolve::linear
 
                 double i_prod = r.dot(r);
                 logger->trace("Experimental solver i prod: {}", i_prod);
-                if (i_prod / bi_prod < eps)
+                if (!use_absolute_tol) 
+                {
+                    i_prod /= bi_prod;
+                }
+
+                if (i_prod < eps)
                 {
                     logger->debug("Experimental solver converged: residual too small");
                     break;
@@ -578,8 +591,6 @@ namespace polysolve::linear
         z1.setZero();
         z2.setZero();
         z3.setZero();
-
-        
 
         amg_precond_iter(precond, r, z1);
 

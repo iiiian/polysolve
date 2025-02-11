@@ -70,6 +70,7 @@ namespace polysolve::linear
         bool print_conditioning = false;
         bool use_incomplete_cholesky_precond = false;
         bool use_absolute_tol = false;
+        bool select_bad_dofs_from_rhs;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

@@ -89,6 +89,10 @@ namespace polysolve::linear
             {
                 use_absolute_tol = params["Experimental"]["use_absolute_tol"];
             }
+            if (params["Experimental"].contains("select_bad_dofs_from_rhs"))
+            {
+                select_bad_dofs_from_rhs = params["Experimental"]["select_bad_dofs_from_rhs"];
+            }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
             {
@@ -319,7 +323,7 @@ namespace polysolve::linear
             // Make sure the systems AMG options are set
             HYPRE_BoomerAMGSetNumFunctions(amg_precond, dim);
 
-            HYPRE_BoomerAMGSetDofFunc(amg_precond, (HYPRE_Int*) dof_to_function.data());
+            //HYPRE_BoomerAMGSetDofFunc(amg_precond, (HYPRE_Int*) dof_to_function.data());
 
             // More robust options with respect to convergence
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, 0);

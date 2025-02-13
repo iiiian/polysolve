@@ -82,12 +82,12 @@ namespace polysolve::linear
         Eigen::MatrixXd eigen_A;
         Eigen::LDLT<Eigen::MatrixXd> D_solver;
 
-        #ifdef POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
         boost::property_tree::ptree pt;
         Eigen::VectorXi ichol_dof_remapping;
         double rho = 1.01;
-        #endif
+#endif
 
         HYPRE_IJMatrix A;
         HYPRE_ParCSRMatrix parcsr_A;
@@ -99,6 +99,8 @@ namespace polysolve::linear
         void custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z);
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
+
+        int remap_dof(const int index);
     };
 
 } // namespace polysolve::linear

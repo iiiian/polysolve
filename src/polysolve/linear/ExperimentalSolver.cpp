@@ -141,13 +141,9 @@ namespace polysolve::linear
 
             for (int i = 0; i < eigen_A.rows(); ++i)
             {
-                int nod_i = i / dimension_;
-                int i_func_offset = i % dimension_;
                 for (int j = 0; j < eigen_A.cols(); ++j)
                 {
-                    int nod_j = j / dimension_;
-                    int j_func_offset = j % dimension_;
-                    eigen_A(i, j) = Atemp(dimension_ * ichol_dof_remapping(nod_i)+i_func_offset, dimension_ * ichol_dof_remapping(nod_j)+j_func_offset);
+                    eigen_A(i, j) = Atemp(remap_dof(i), remap_dof(j));
                 }
             }
 
@@ -177,16 +173,11 @@ namespace polysolve::linear
         has_matrix_ = true;
         const HYPRE_Int rows = eigen_A.rows();
         const HYPRE_Int cols = eigen_A.cols();
-#ifdef HYPRE_WITH_MPI
-        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, rows - 1, 0, cols - 1, &A);
-#else
+
         HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
-#endif
         // HYPRE_IJMatrixSetPrintLevel(A, 2);
         HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
         HYPRE_IJMatrixInitialize(A);
-
-        // HYPRE_IJMatrixSetValues(A, 1, &nnz, &i, cols, values);
 
         // TODO: More efficient initialization of the Hypre matrix?
         for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
@@ -214,7 +205,6 @@ namespace polysolve::linear
             return;
         }
 
-        // Save submatrix for direct step. TODO: refactor for multiple subdomains
         Eigen::MatrixXd D;
         D.resize(subdomain.size(), subdomain.size());
 
@@ -414,10 +404,8 @@ namespace polysolve::linear
         {
             for (int i = 0; i < rhs.size(); ++i)
             {
-                int nod_i = i / dimension_;
-                int i_func_offset = i % dimension_;
-                remapped_rhs(i) = rhs(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset);
-                remapped_result(i) = result(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset);
+                remapped_rhs(i) = rhs(remap_dof(i));
+                remapped_result(i) = result(remap_dof(i));
             }
         }
 #endif
@@ -433,23 +421,8 @@ namespace polysolve::linear
             eigen_to_hypre_par_vec(par_x, x, remapped_result);
         }
 
-        /* PCG with AMG preconditioner */
-
-        /* Create solver */
-        //HYPRE_Solver solver, precond;
+        /* AMG preconditioner */
         HYPRE_Solver precond;
-#ifdef HYPRE_WITH_MPI
-        HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &solver);
-#else
-        //HYPRE_ParCSRPCGCreate(0, &solver);
-#endif
-
-        /* Set some parameters (See Reference Manual for more parameters) */
-        //HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
-        //HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
-        //HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
-        // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
-        //HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
 
         /* Now set up the AMG preconditioner and specify any parameters */
         HYPRE_BoomerAMGCreate(&precond);
@@ -477,9 +450,10 @@ namespace polysolve::linear
             }
         }
 
-        /* Set the PCG preconditioner */
-        //HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
-        //HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
+        if (select_bad_dofs_from_rhs)
+        {
+            double threshold = 0.1;
+        }
 
         /* Now setup and solve! */
         {
@@ -625,16 +599,13 @@ namespace polysolve::linear
         {
             for (int i = 0; i < result.size(); ++i)
             {
-                int nod_i = i / dimension_;
-                int i_func_offset = i % dimension_;
-                result(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset) = remapped_result(i);
+                result(remap_dof(i)) = remapped_result(i);
             }
         }
 #endif
 
-        /* Destroy solver and preconditioner */
+        /* Destroy preconditioner */
         HYPRE_BoomerAMGDestroy(precond);
-        //HYPRE_ParCSRPCGDestroy(solver);
 
         HYPRE_IJVectorDestroy(x);
         HYPRE_IJVectorDestroy(b);
@@ -720,6 +691,13 @@ namespace polysolve::linear
             next_z(i) += sub_result(i_counter);
             ++i_counter;
         }
+    }
+
+    int ExperimentalSolver::remap_dof(const int index)
+    {
+        int nod_index = index / dimension_;
+        int func_offset = index % dimension_;
+        return dimension_ * ichol_dof_remapping(nod_index) + func_offset;
     }
 
     ////////////////////////////////////////////////////////////////////////////////

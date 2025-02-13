@@ -88,6 +88,7 @@ namespace polysolve::linear
         boost::property_tree::ptree pt;
         Eigen::VectorXi ichol_dof_remapping;
         double rho = 1.01;
+        int remap_dof(const int index);
 #endif
 
         HYPRE_IJMatrix A;
@@ -101,7 +102,6 @@ namespace polysolve::linear
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
 
-        int remap_dof(const int index);
         void factorize_submatrix(const std::set<int> subdomain);
     };
 

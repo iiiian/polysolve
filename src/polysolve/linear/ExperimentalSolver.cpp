@@ -703,12 +703,14 @@ namespace polysolve::linear
         }
     }
 
+#ifdef POLYSOLVE_WITH_ICHOL
     int ExperimentalSolver::remap_dof(const int index)
     {
         int nod_index = index / dimension_;
         int func_offset = index % dimension_;
         return dimension_ * ichol_dof_remapping(nod_index) + func_offset;
     }
+#endif
 
     void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
     {

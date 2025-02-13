@@ -116,9 +116,44 @@ namespace polysolve::linear
 
         eigen_A = Ain;
 
+        #ifdef POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            logger->trace("Factorizing for ichol");
+            pt.put<double>("nei_num.value", 3.2);
+            pt.put<double>("alpha.value", 1e-4);
+            pt.put<std::ptrdiff_t>("max_su_size.value", 64);
+            pt.put<int>("num_threads.value", 1);
+            pt.put<int>("subst_num_threads.value", 1);
+            
+            Eigen::Matrix<size_t, -1, -1> test_elements = elements_.cast<size_t>();
+            mschol::chol_hierarchy builder(test_elements, positions_, "tets");
+            
+            std::vector<std::shared_ptr<mschol::chol_level>> levels;
+            builder.build(levels, 125, dimension_);
+            builder.get_dof_remapping(ichol_dof_remapping);
+
+            Eigen::MatrixXd Atemp = Ain; 
+
+            for (int i = 0; i < eigen_A.rows(); ++i)
+            {
+                for (int j = 0; j < eigen_A.cols(); ++j)
+                {
+                    eigen_A(i, j) = Atemp(ichol_dof_remapping(i), ichol_dof_remapping(j));
+                }
+            }
+
+            inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
+            Eigen::SparseMatrix<double> sparse_A;
+            sparse_A = eigen_A.sparseView();
+            inc_chol_precond->analyse_pattern(sparse_A);
+            inc_chol_precond->factorize(sparse_A);
+        }
+#endif
+
         if (print_conditioning)
         {
-            Eigen::BDCSVD<Eigen::MatrixXd> svd(Ain);
+            Eigen::BDCSVD<Eigen::MatrixXd> svd(eigen_A);
             double cond = svd.singularValues()(0) 
             / svd.singularValues()(svd.singularValues().size()-1);
 
@@ -132,8 +167,8 @@ namespace polysolve::linear
         }
 
         has_matrix_ = true;
-        const HYPRE_Int rows = Ain.rows();
-        const HYPRE_Int cols = Ain.cols();
+        const HYPRE_Int rows = eigen_A.rows();
+        const HYPRE_Int cols = eigen_A.cols();
 #ifdef HYPRE_WITH_MPI
         HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, rows - 1, 0, cols - 1, &A);
 #else
@@ -150,8 +185,18 @@ namespace polysolve::linear
         {
             for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
             {
-                const HYPRE_Int i[1] = {it.row()};
-                const HYPRE_Int j[1] = {it.col()};
+                int r = it.row();
+                int c = it.col();
+
+                #ifdef POLYSOLVE_WITH_ICHOL
+                if (use_incomplete_cholesky_precond)
+                {
+                    r = ichol_dof_remapping(r);
+                    c = ichol_dof_remapping(c);
+                }
+                #endif
+                const HYPRE_Int i[1] = {r};
+                const HYPRE_Int j[1] = {c};
                 const HYPRE_Complex v[1] = {it.value()};
                 HYPRE_Int n_cols[1] = {1};
 
@@ -165,35 +210,11 @@ namespace polysolve::linear
         assert(bad_indices_.size() == 1);
         auto &subdomain = bad_indices_[0];
 
-#ifdef POLYSOLVE_WITH_ICHOL
-        if (use_incomplete_cholesky_precond)
-        {
-            logger->trace("Factorizing for ichol");
-            pt.put<double>("nei_num.value", 1.01);
-            pt.put<double>("alpha.value", 1e-4);
-            pt.put<std::ptrdiff_t>("max_su_size.value", 64);
-            pt.put<int>("num_threads.value", 1);
-            pt.put<int>("subst_num_threads.value", 1);
-            
-            Eigen::Matrix<size_t, -1, -1> test_elements = elements_.cast<size_t>();
-            mschol::chol_hierarchy builder(test_elements, positions_, "tets");
-            
-            std::vector<std::shared_ptr<mschol::chol_level>> levels;
-            builder.build(levels, 125, dimension_);
-            inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
-            Eigen::SparseMatrix<double> sparse_A;
-            sparse_A = eigen_A.sparseView();
-            inc_chol_precond->analyse_pattern(sparse_A);
-            inc_chol_precond->factorize(sparse_A);
-        }
-#endif
-
         // Save submatrix for direct step. TODO: refactor for multiple subdomains
         if (!do_mixed_precond || subdomain.size() == 0)
         {
             return;
         }
-
 
         // Save submatrix for direct step. TODO: refactor for multiple subdomains
         Eigen::MatrixXd D;
@@ -387,6 +408,19 @@ namespace polysolve::linear
     {
         
         assert(result.size() == rhs.size());
+        Eigen::VectorXd remapped_rhs = rhs;
+        Eigen::VectorXd remapped_result = result;
+
+#ifdef POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            for (int i = 0; i < rhs.size(); ++i)
+            {
+                remapped_rhs(i) = rhs(ichol_dof_remapping(i));
+                remapped_result(i) = result(ichol_dof_remapping(i));
+            }
+        }
+#endif
 
         HYPRE_ParVector par_b;
         HYPRE_ParVector par_x;
@@ -395,8 +429,8 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy x and b", copy_b_and_x_time, *logger);
-            eigen_to_hypre_par_vec(par_b, b, rhs);
-            eigen_to_hypre_par_vec(par_x, x, result);
+            eigen_to_hypre_par_vec(par_b, b, remapped_rhs);
+            eigen_to_hypre_par_vec(par_x, x, remapped_result);
         }
 
         /* PCG with AMG preconditioner */
@@ -453,7 +487,7 @@ namespace polysolve::linear
 
             /* Custom PCG */
 
-            double bi_prod = rhs.dot(rhs);
+            double bi_prod = remapped_rhs.dot(remapped_rhs);
             logger->trace("Experimental solver bi prod: {}", bi_prod);
 
             double eps;
@@ -472,7 +506,7 @@ namespace polysolve::linear
                 return;
             }
 
-            Eigen::VectorXd r = rhs - (eigen_A * result);
+            Eigen::VectorXd r = remapped_rhs - (eigen_A * remapped_result);
 
             Eigen::VectorXd p(r.size());
             Eigen::VectorXd z(r.size());
@@ -526,7 +560,7 @@ namespace polysolve::linear
                     break;
                 }
 
-                result += alpha * p;
+                remapped_result += alpha * p;
                 r -= alpha * eigen_A * p;
                 //r = rhs - (eigen_A * result);
                 double drob2 = alpha * alpha * p.dot(p);
@@ -572,11 +606,23 @@ namespace polysolve::linear
                 p = z + beta*p;
             }
 
-            final_res_norm = (rhs - (eigen_A * result)).norm();
+            final_res_norm = (remapped_rhs - (eigen_A * result)).norm();
         }
 
         logger->debug("Experimental solver Iterations: {}", num_iterations);
         logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
+
+        result = remapped_result;
+
+#ifdef POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            for (int i = 0; i < result.size(); ++i)
+            {
+                result(ichol_dof_remapping(i)) = remapped_result(i);
+            }
+        }
+#endif
 
         /* Destroy solver and preconditioner */
         HYPRE_BoomerAMGDestroy(precond);

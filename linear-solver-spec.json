@@ -469,7 +469,8 @@
             "print_conditioning",
             "use_incomplete_cholesky_precond",
             "use_absolute_tol",
-            "rho"
+            "rho",
+            "bad_dof_grad_threshold"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -550,5 +551,12 @@
         "default": 1.01,
         "type": "float",
         "doc": "If using incomplete cholesky preconditioner, threshold used in setting sparsity pattern."
+    },
+    {
+        "pointer": "/Experimental/bad_dof_grad_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "What percentile gradient magnitude to use as a cutoff for marking a node as problematic (between 0 and 1)."
     }
+        
 ]

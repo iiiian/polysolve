@@ -21,23 +21,6 @@ namespace polysolve::linear
     ExperimentalSolver::ExperimentalSolver()
     {
         precond_num_ = 0;
-#ifdef HYPRE_WITH_MPI
-        int done_already;
-
-        MPI_Initialized(&done_already);
-        if (!done_already)
-        {
-            /* Initialize MPI */
-            int argc = 1;
-            char name[] = "";
-            char *argv[] = {name};
-            char **argvv = &argv[0];
-            int myid, num_procs;
-            MPI_Init(&argc, &argvv);
-            MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-            MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-        }
-#endif
     }
 
     // Set solver parameters
@@ -92,6 +75,10 @@ namespace polysolve::linear
             if (params["Experimental"].contains("select_bad_dofs_from_rhs"))
             {
                 select_bad_dofs_from_rhs = params["Experimental"]["select_bad_dofs_from_rhs"];
+            }
+            if (params["Experimental"].contains("bad_dof_grad_threshold"))
+            {
+                bad_dof_grad_threshold = params["Experimental"]["bad_dof_grad_threshold"];
             }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
@@ -200,29 +187,12 @@ namespace polysolve::linear
         auto &subdomain = bad_indices_[0];
 
         // Save submatrix for direct step. TODO: refactor for multiple subdomains
-        if (!do_mixed_precond || subdomain.size() == 0)
+        if (!do_mixed_precond || subdomain.size() == 0 || select_bad_dofs_from_rhs)
         {
             return;
         }
 
-        Eigen::MatrixXd D;
-        D.resize(subdomain.size(), subdomain.size());
-
-        logger->debug("Subdomain size: {}", subdomain.size());
-
-        int i_counter = 0;
-        for (auto i : subdomain)
-        {
-            int j_counter = 0;
-            for (auto j : subdomain)
-            {
-                D(i_counter, j_counter) = eigen_A(i, j);
-                ++j_counter;
-            }
-            ++i_counter;
-        }
-
-        D_solver.compute(D);
+        factorize_submatrix(subdomain);
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -453,6 +423,41 @@ namespace polysolve::linear
         if (select_bad_dofs_from_rhs)
         {
             double threshold = 0.1;
+            bad_indices_.clear();
+            bad_indices_.resize(1);
+            auto &subdomain = bad_indices_[0];
+
+            assert(rhs.size() % dimension_ == 0);
+            Eigen::VectorXd sq_mags(rhs.size() / dimension_);
+            for (int i = 0; i < rhs.size() / dimension_; ++i)
+            {
+                double sq_mag = rhs(dimension_ * i) * rhs(dimension_ * i);
+                for (int j = 1; j < dimension_; ++j)
+                {
+                    sq_mag += rhs(dimension_ * i + j) * rhs(dimension_ * i + j);
+                } 
+                sq_mags(i) = sq_mag;
+            }
+            Eigen::VectorXd sq_mags_copy = sq_mags;
+            std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
+            const int cutoff_index = sq_mags_copy.size() * (1 - threshold);
+            const double cutoff = sq_mags_copy(cutoff_index);
+
+            if (cutoff > 0)
+            {
+                for (int i = 0; i < rhs.size() / dimension_; ++i)
+                {
+                    if (sq_mags(i) >= cutoff)
+                    {
+                        for (int j = 0; j < dimension_; ++j)
+                        {
+                            subdomain.insert(dimension_ * i + j);
+                        }
+                    }
+                }
+            }
+
+            factorize_submatrix(subdomain);
         }
 
         /* Now setup and solve! */
@@ -610,6 +615,11 @@ namespace polysolve::linear
         HYPRE_IJVectorDestroy(x);
         HYPRE_IJVectorDestroy(b);
 
+        if (select_bad_dofs_from_rhs)
+        {
+            bad_indices_.clear();
+        }
+
     }
 
     void ExperimentalSolver::custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z)
@@ -698,6 +708,28 @@ namespace polysolve::linear
         int nod_index = index / dimension_;
         int func_offset = index % dimension_;
         return dimension_ * ichol_dof_remapping(nod_index) + func_offset;
+    }
+
+    void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
+    {
+        Eigen::MatrixXd D;
+        D.resize(subdomain.size(), subdomain.size());
+
+        logger->debug("Subdomain size: {}", subdomain.size());
+
+        int i_counter = 0;
+        for (auto i : subdomain)
+        {
+            int j_counter = 0;
+            for (auto j : subdomain)
+            {
+                D(i_counter, j_counter) = eigen_A(i, j);
+                ++j_counter;
+            }
+            ++i_counter;
+        }
+
+        D_solver.compute(D);
     }
 
     ////////////////////////////////////////////////////////////////////////////////

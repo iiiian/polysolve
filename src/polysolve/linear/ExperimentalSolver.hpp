@@ -71,6 +71,7 @@ namespace polysolve::linear
         bool use_incomplete_cholesky_precond = false;
         bool use_absolute_tol = false;
         bool select_bad_dofs_from_rhs;
+        double bad_dof_grad_threshold;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;
@@ -101,6 +102,7 @@ namespace polysolve::linear
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
 
         int remap_dof(const int index);
+        void factorize_submatrix(const std::set<int> subdomain);
     };
 
 } // namespace polysolve::linear

@@ -86,6 +86,7 @@ namespace polysolve::linear
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
         boost::property_tree::ptree pt;
         Eigen::VectorXi ichol_dof_remapping;
+        double rho = 1.01;
         #endif
 
         HYPRE_IJMatrix A;

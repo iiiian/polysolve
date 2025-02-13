@@ -98,6 +98,10 @@ namespace polysolve::linear
             {
                 use_incomplete_cholesky_precond = params["Experimental"]["use_incomplete_cholesky_precond"];
             }
+            if (params["Experimental"].contains("rho"))
+            {
+                rho = params["Experimental"]["rho"];
+            }
 #endif
         }
     }
@@ -120,7 +124,7 @@ namespace polysolve::linear
         if (use_incomplete_cholesky_precond)
         {
             logger->trace("Factorizing for ichol");
-            pt.put<double>("nei_num.value", 3.2);
+            pt.put<double>("nei_num.value", rho);
             pt.put<double>("alpha.value", 1e-4);
             pt.put<std::ptrdiff_t>("max_su_size.value", 64);
             pt.put<int>("num_threads.value", 1);
@@ -189,22 +193,8 @@ namespace polysolve::linear
         {
             for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
             {
-                int r = it.row();
-                int c = it.col();
-
-                #ifdef POLYSOLVE_WITH_ICHOL
-                if (use_incomplete_cholesky_precond)
-                {
-                    int nod_r = r / dimension_;
-                    int r_func_offset = r % dimension_;
-                    r = dimension_ * ichol_dof_remapping(nod_r) + r_func_offset;
-                    int nod_c = c / dimension_;
-                    int c_func_offset = c % dimension_;
-                    c = dimension_ * ichol_dof_remapping(nod_c) + c_func_offset;
-                }
-                #endif
-                const HYPRE_Int i[1] = {r};
-                const HYPRE_Int j[1] = {c};
+                const HYPRE_Int i[1] = {it.row()};
+                const HYPRE_Int j[1] = {it.col()};
                 const HYPRE_Complex v[1] = {it.value()};
                 HYPRE_Int n_cols[1] = {1};
 
@@ -599,7 +589,13 @@ namespace polysolve::linear
                 }
 
                 z.setZero(); 
-                
+
+#ifdef POLYSOLVE_WITH_ICHOL
+                if (use_incomplete_cholesky_precond)
+                {
+                    z = inc_chol_precond->solve(r);
+                } else
+#endif
                 if (!do_mixed_precond || bad_indices_.size() == 0)
                 {
                     amg_precond_iter(precond, r, z);
@@ -616,7 +612,7 @@ namespace polysolve::linear
                 p = z + beta*p;
             }
 
-            final_res_norm = (remapped_rhs - (eigen_A * result)).norm();
+            final_res_norm = (remapped_rhs - (eigen_A * remapped_result)).norm();
         }
 
         logger->debug("Experimental solver Iterations: {}", num_iterations);

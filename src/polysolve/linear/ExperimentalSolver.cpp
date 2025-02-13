@@ -137,9 +137,13 @@ namespace polysolve::linear
 
             for (int i = 0; i < eigen_A.rows(); ++i)
             {
+                int nod_i = i / dimension_;
+                int i_func_offset = i % dimension_;
                 for (int j = 0; j < eigen_A.cols(); ++j)
                 {
-                    eigen_A(i, j) = Atemp(ichol_dof_remapping(i), ichol_dof_remapping(j));
+                    int nod_j = j / dimension_;
+                    int j_func_offset = j % dimension_;
+                    eigen_A(i, j) = Atemp(dimension_ * ichol_dof_remapping(nod_i)+i_func_offset, dimension_ * ichol_dof_remapping(nod_j)+j_func_offset);
                 }
             }
 
@@ -191,8 +195,12 @@ namespace polysolve::linear
                 #ifdef POLYSOLVE_WITH_ICHOL
                 if (use_incomplete_cholesky_precond)
                 {
-                    r = ichol_dof_remapping(r);
-                    c = ichol_dof_remapping(c);
+                    int nod_r = r / dimension_;
+                    int r_func_offset = r % dimension_;
+                    r = dimension_ * ichol_dof_remapping(nod_r) + r_func_offset;
+                    int nod_c = c / dimension_;
+                    int c_func_offset = c % dimension_;
+                    c = dimension_ * ichol_dof_remapping(nod_c) + c_func_offset;
                 }
                 #endif
                 const HYPRE_Int i[1] = {r};
@@ -416,8 +424,10 @@ namespace polysolve::linear
         {
             for (int i = 0; i < rhs.size(); ++i)
             {
-                remapped_rhs(i) = rhs(ichol_dof_remapping(i));
-                remapped_result(i) = result(ichol_dof_remapping(i));
+                int nod_i = i / dimension_;
+                int i_func_offset = i % dimension_;
+                remapped_rhs(i) = rhs(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset);
+                remapped_result(i) = result(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset);
             }
         }
 #endif
@@ -619,7 +629,9 @@ namespace polysolve::linear
         {
             for (int i = 0; i < result.size(); ++i)
             {
-                result(ichol_dof_remapping(i)) = remapped_result(i);
+                int nod_i = i / dimension_;
+                int i_func_offset = i % dimension_;
+                result(dimension_ * ichol_dof_remapping(nod_i) + i_func_offset) = remapped_result(i);
             }
         }
 #endif

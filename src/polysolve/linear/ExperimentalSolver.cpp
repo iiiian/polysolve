@@ -422,7 +422,7 @@ namespace polysolve::linear
 
         if (select_bad_dofs_from_rhs)
         {
-            double threshold = 0.1;
+
             bad_indices_.clear();
             bad_indices_.resize(1);
             auto &subdomain = bad_indices_[0];
@@ -440,7 +440,7 @@ namespace polysolve::linear
             }
             Eigen::VectorXd sq_mags_copy = sq_mags;
             std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
-            const int cutoff_index = sq_mags_copy.size() * (1 - threshold);
+            const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
             const double cutoff = sq_mags_copy(cutoff_index);
 
             if (cutoff > 0)

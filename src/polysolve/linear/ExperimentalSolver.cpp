@@ -443,11 +443,11 @@ namespace polysolve::linear
             const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
             const double cutoff = sq_mags_copy(cutoff_index);
 
-            if (true || cutoff > 0)
+            if (cutoff > 0)
             {
                 for (int i = 0; i < rhs.size() / dimension_; ++i)
                 {
-                    if (sq_mags(i) < cutoff)
+                    if (sq_mags(i) >= cutoff)
                     {
                         for (int j = 0; j < dimension_; ++j)
                         {

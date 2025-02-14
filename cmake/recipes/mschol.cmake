@@ -8,7 +8,7 @@ include(CPM)
 CPMAddPackage(
     NAME mschol
     GIT_REPOSITORY https://github.com/maxpaik16/mschol
-    GIT_TAG f714f2909546678a40b0ccb467986db38c4a66dc
+    GIT_TAG c8a713120692666c530c15298f7b1e6b3bf57e2f
 )
 
 #add_library(mschol::mschol ALIAS mschol)

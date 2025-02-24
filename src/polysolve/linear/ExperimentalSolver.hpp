@@ -81,6 +81,7 @@ namespace polysolve::linear
         int precond_num_;
 
         Eigen::MatrixXd eigen_A;
+        Eigen::SparseMatrix<double> sparse_A;
         Eigen::LDLT<Eigen::MatrixXd> D_solver;
 
 #ifdef POLYSOLVE_WITH_ICHOL

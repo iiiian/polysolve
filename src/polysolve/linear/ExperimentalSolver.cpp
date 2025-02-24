@@ -106,6 +106,7 @@ namespace polysolve::linear
         assert(precond_num_ > 0);
 
         eigen_A = Ain;
+        sparse_A = eigen_A.sparseView();
 
         #ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
@@ -135,7 +136,6 @@ namespace polysolve::linear
             }
 
             inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
-            Eigen::SparseMatrix<double> sparse_A;
             sparse_A = eigen_A.sparseView();
             inc_chol_precond->analyse_pattern(sparse_A);
             inc_chol_precond->factorize(sparse_A);
@@ -485,7 +485,7 @@ namespace polysolve::linear
                 return;
             }
 
-            Eigen::VectorXd r = remapped_rhs - (eigen_A * remapped_result);
+            Eigen::VectorXd r = remapped_rhs - (sparse_A * remapped_result);
 
             Eigen::VectorXd p(r.size());
             Eigen::VectorXd z(r.size());
@@ -518,7 +518,7 @@ namespace polysolve::linear
             {
                 num_iterations = k + 1;
 
-                double sdotp = p.dot(eigen_A * p);
+                double sdotp = p.dot(sparse_A * p);
 
                 if (sdotp == 0.0)
                 {
@@ -540,7 +540,7 @@ namespace polysolve::linear
                 }
 
                 remapped_result += alpha * p;
-                r -= alpha * eigen_A * p;
+                r -= alpha * sparse_A * p;
                 //r = rhs - (eigen_A * result);
                 double drob2 = alpha * alpha * p.dot(p);
                 if (!use_absolute_tol) 
@@ -591,7 +591,7 @@ namespace polysolve::linear
                 p = z + beta*p;
             }
 
-            final_res_norm = (remapped_rhs - (eigen_A * remapped_result)).norm();
+            final_res_norm = (remapped_rhs - (sparse_A * remapped_result)).norm();
         }
 
         logger->debug("Experimental solver Iterations: {}", num_iterations);
@@ -645,7 +645,7 @@ namespace polysolve::linear
         {
             amg_precond_iter(precond, r, z1);
             dss_precond_iter(z1, r, z2);
-            amg_precond_iter(precond, r - eigen_A * z2, z3);
+            amg_precond_iter(precond, r - sparse_A * z2, z3);
             z = z2 + z3;
         }
         else
@@ -653,7 +653,7 @@ namespace polysolve::linear
             Eigen::VectorXd z0(r.size());
             z0.setZero();
             dss_precond_iter(z0, r, z1);
-            amg_precond_iter(precond, r - eigen_A * z1, z2);
+            amg_precond_iter(precond, r - sparse_A * z1, z2);
             z2 += z1;
             dss_precond_iter(z2, r, z);
         }

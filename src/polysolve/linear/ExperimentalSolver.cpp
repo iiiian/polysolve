@@ -731,7 +731,7 @@ namespace polysolve::linear
             ++i_counter;
         }
 
-        D_solver.compute(D);
+        D_solver.compute(D.sparseView());
     }
 
     ////////////////////////////////////////////////////////////////////////////////

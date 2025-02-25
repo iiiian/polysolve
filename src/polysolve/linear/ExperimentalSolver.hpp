@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 #include <Eigen/Sparse>
 #include <vector>
+#include <Eigen/SparseCholesky>
 
 #include <HYPRE_utilities.h>
 #include <HYPRE.h>
@@ -82,7 +83,7 @@ namespace polysolve::linear
 
         Eigen::MatrixXd eigen_A;
         Eigen::SparseMatrix<double> sparse_A;
-        Eigen::LDLT<Eigen::MatrixXd> D_solver;
+        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> D_solver;
 
 #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles

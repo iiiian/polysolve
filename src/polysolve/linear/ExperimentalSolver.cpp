@@ -689,7 +689,7 @@ namespace polysolve::linear
         int i_counter = 0;
         for (auto &i : subdomain)
         {
-            sub_rhs(i_counter) = r(i) - eigen_A.row(i).dot(z);
+            sub_rhs(i_counter) = r(i) - sparse_A.row(i).dot(z);
             ++i_counter;
         }
 

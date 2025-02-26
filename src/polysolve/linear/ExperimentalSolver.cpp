@@ -29,7 +29,6 @@ namespace polysolve::linear
             num_threads = std::stoi(num_threads_val);
         }
         Eigen::setNbThreads(num_threads);
-        logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
     }
 
     // Set solver parameters
@@ -113,6 +112,8 @@ namespace polysolve::linear
     void ExperimentalSolver::factorize(const StiffnessMatrix &Ain)
     {
         assert(precond_num_ > 0);
+        logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
+        logger->trace("Eigen num threads: {}", Eigen::NbThreads());
 
         sparse_A = Ain;
 
@@ -139,11 +140,25 @@ namespace polysolve::linear
             std::vector<Eigen::Triplet<double>> triplets;
             triplets.reserve(Ain.nonZeros());
 
+            Eigen::VectorXi old_to_new(ichol_dof_remapping.size());
+            for (int i = 0; i < ichol_dof_remapping.size(); ++i)
+            {
+                old_to_new(ichol_dof_remapping[i]) = i; 
+            }
+
             for (int k = 0; k < Ain.outerSize(); ++k)
             {
                 for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
-                {
-                    triplets.push_back(Eigen::Triplet<double>(remap_dof(it.row()), remap_dof(it.col()), it.value()));
+                {   
+                    int nod_index_i = it.row() / dimension_;
+                    int func_offset_i = it.row() % dimension_;
+                    int new_i = dimension_ * old_to_new(nod_index_i) + func_offset_i;
+
+                    int nod_index_j = it.col() / dimension_;
+                    int func_offset_j = it.col() % dimension_;
+                    int new_j = dimension_ * old_to_new(nod_index_j) + func_offset_j;
+                    
+                    triplets.push_back(Eigen::Triplet<double>(new_i, new_j, it.value()));
                 }
             }
 

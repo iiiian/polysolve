@@ -81,7 +81,6 @@ namespace polysolve::linear
         bool has_matrix_ = false;
         int precond_num_;
 
-        Eigen::MatrixXd eigen_A;
         Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> D_solver;
 

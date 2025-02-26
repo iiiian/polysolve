@@ -105,8 +105,7 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
 
-        eigen_A = Ain;
-        sparse_A = eigen_A.sparseView();
+        sparse_A = Ain;
 
         #ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
@@ -125,18 +124,22 @@ namespace polysolve::linear
             builder.build(levels, 125, dimension_);
             builder.get_dof_remapping(ichol_dof_remapping);
 
-            Eigen::MatrixXd Atemp = Ain; 
+            sparse_A.setZero();
 
-            for (int i = 0; i < eigen_A.rows(); ++i)
+            std::vector<Eigen::Triplet<double>> triplets;
+            triplets.reserve(Ain.nonZeros());
+
+            for (int k = 0; k < Ain.outerSize(); ++k)
             {
-                for (int j = 0; j < eigen_A.cols(); ++j)
+                for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
                 {
-                    eigen_A(i, j) = Atemp(remap_dof(i), remap_dof(j));
+                    triplets.push_back(Eigen::Triplet<double>(remap_dof(it.row()), remap_dof(it.col()), it.value()));
                 }
             }
 
+            sparse_A.setFromTriplets(triplets.begin(), triplets.end());
+
             inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
-            sparse_A = eigen_A.sparseView();
             inc_chol_precond->analyse_pattern(sparse_A);
             inc_chol_precond->factorize(sparse_A);
         }
@@ -144,7 +147,7 @@ namespace polysolve::linear
 
         if (print_conditioning)
         {
-            Eigen::BDCSVD<Eigen::MatrixXd> svd(eigen_A);
+            Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
             double cond = svd.singularValues()(0) 
             / svd.singularValues()(svd.singularValues().size()-1);
 
@@ -158,8 +161,8 @@ namespace polysolve::linear
         }
 
         has_matrix_ = true;
-        const HYPRE_Int rows = eigen_A.rows();
-        const HYPRE_Int cols = eigen_A.cols();
+        const HYPRE_Int rows = sparse_A.rows();
+        const HYPRE_Int cols = sparse_A.cols();
 
         HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
         // HYPRE_IJMatrixSetPrintLevel(A, 2);
@@ -543,7 +546,7 @@ namespace polysolve::linear
 
                 remapped_result += alpha * p;
                 r -= alpha * sparse_A * p;
-                //r = rhs - (eigen_A * result);
+                //r = rhs - (sparse_A * result);
                 double drob2 = alpha * alpha * p.dot(p);
                 if (!use_absolute_tol) 
                 {
@@ -729,7 +732,7 @@ namespace polysolve::linear
                 int j_counter = 0;
                 for (auto j : subdomain)
                 {
-                    D(i_counter, j_counter) = eigen_A(i, j);
+                    D(i_counter, j_counter) = sparse_A.coeff(i, j);
                     ++j_counter;
                 }
                 ++i_counter;

@@ -77,6 +77,8 @@ namespace polysolve::linear
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;
 
+        int num_threads = 1; 
+
     private:
         bool has_matrix_ = false;
         int precond_num_;

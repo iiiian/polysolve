@@ -12,6 +12,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
+#include <cstdlib>
 
 namespace polysolve::linear
 {
@@ -21,6 +22,12 @@ namespace polysolve::linear
     ExperimentalSolver::ExperimentalSolver()
     {
         precond_num_ = 0;
+        const char* num_threads_val = std::getenv("OMP_NUM_THREADS");
+        if (num_threads_val)
+        {
+            num_threads = std::stoi(num_threads_val);
+        }
+        Eigen::setNbThreads(num_threads);
     }
 
     // Set solver parameters
@@ -114,8 +121,8 @@ namespace polysolve::linear
             pt.put<double>("nei_num.value", rho);
             pt.put<double>("alpha.value", 1e-4);
             pt.put<std::ptrdiff_t>("max_su_size.value", 64);
-            pt.put<int>("num_threads.value", 1);
-            pt.put<int>("subst_num_threads.value", 1);
+            pt.put<int>("num_threads.value", num_threads);
+            pt.put<int>("subst_num_threads.value", num_threads);
             
             Eigen::Matrix<size_t, -1, -1> test_elements = elements_.cast<size_t>();
             mschol::chol_hierarchy builder(test_elements, positions_, "tets");

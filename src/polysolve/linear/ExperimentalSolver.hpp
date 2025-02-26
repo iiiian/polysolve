@@ -82,7 +82,7 @@ namespace polysolve::linear
         int precond_num_;
 
         Eigen::MatrixXd eigen_A;
-        Eigen::SparseMatrix<double> sparse_A;
+        Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
         Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> D_solver;
 
 #ifdef POLYSOLVE_WITH_ICHOL
@@ -99,6 +99,10 @@ namespace polysolve::linear
         double copy_b_and_x_time;
         double set_options_time;
         double actual_solve_time;
+        double factorization_time;
+        double bad_dof_selection_time;
+        double dss_factorization_time;
+        double dss_assembly_time;
 
         void custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z);
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);

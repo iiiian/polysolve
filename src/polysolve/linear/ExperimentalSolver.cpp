@@ -422,36 +422,38 @@ namespace polysolve::linear
 
         if (select_bad_dofs_from_rhs)
         {
-
             bad_indices_.clear();
             bad_indices_.resize(1);
             auto &subdomain = bad_indices_[0];
-
-            assert(rhs.size() % dimension_ == 0);
-            Eigen::VectorXd sq_mags(rhs.size() / dimension_);
-            for (int i = 0; i < rhs.size() / dimension_; ++i)
             {
-                double sq_mag = rhs(dimension_ * i) * rhs(dimension_ * i);
-                for (int j = 1; j < dimension_; ++j)
-                {
-                    sq_mag += rhs(dimension_ * i + j) * rhs(dimension_ * i + j);
-                } 
-                sq_mags(i) = sq_mag;
-            }
-            Eigen::VectorXd sq_mags_copy = sq_mags;
-            std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
-            const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
-            const double cutoff = sq_mags_copy(cutoff_index);
+                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
 
-            if (cutoff > 0)
-            {
+                assert(rhs.size() % dimension_ == 0);
+                Eigen::VectorXd sq_mags(rhs.size() / dimension_);
                 for (int i = 0; i < rhs.size() / dimension_; ++i)
                 {
-                    if (sq_mags(i) >= cutoff)
+                    double sq_mag = rhs(dimension_ * i) * rhs(dimension_ * i);
+                    for (int j = 1; j < dimension_; ++j)
                     {
-                        for (int j = 0; j < dimension_; ++j)
+                        sq_mag += rhs(dimension_ * i + j) * rhs(dimension_ * i + j);
+                    } 
+                    sq_mags(i) = sq_mag;
+                }
+                Eigen::VectorXd sq_mags_copy = sq_mags;
+                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
+                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
+                const double cutoff = sq_mags_copy(cutoff_index);
+
+                if (cutoff > 0)
+                {
+                    for (int i = 0; i < rhs.size() / dimension_; ++i)
+                    {
+                        if (sq_mags(i) >= cutoff)
                         {
-                            subdomain.insert(dimension_ * i + j);
+                            for (int j = 0; j < dimension_; ++j)
+                            {
+                                subdomain.insert(dimension_ * i + j);
+                            }
                         }
                     }
                 }
@@ -631,7 +633,7 @@ namespace polysolve::linear
         z2.setZero();
         z3.setZero();
 
-        amg_precond_iter(precond, r, z1);
+        //amg_precond_iter(precond, r, z1);
 
         assert(bad_indices_.size() == 1);
         if (bad_indices_[0].size() == 0)
@@ -719,19 +721,25 @@ namespace polysolve::linear
 
         logger->debug("Subdomain size: {}", subdomain.size());
 
-        int i_counter = 0;
-        for (auto i : subdomain)
         {
-            int j_counter = 0;
-            for (auto j : subdomain)
+            POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
+            int i_counter = 0;
+            for (auto i : subdomain)
             {
-                D(i_counter, j_counter) = eigen_A(i, j);
-                ++j_counter;
+                int j_counter = 0;
+                for (auto j : subdomain)
+                {
+                    D(i_counter, j_counter) = eigen_A(i, j);
+                    ++j_counter;
+                }
+                ++i_counter;
             }
-            ++i_counter;
         }
 
-        D_solver.compute(D.sparseView());
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("factorize D", dss_factorization_time, *logger);
+            D_solver.compute(D.sparseView());
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////

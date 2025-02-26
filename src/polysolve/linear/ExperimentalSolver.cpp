@@ -12,6 +12,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 
 namespace polysolve::linear
@@ -28,6 +29,7 @@ namespace polysolve::linear
             num_threads = std::stoi(num_threads_val);
         }
         Eigen::setNbThreads(num_threads);
+        logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
     }
 
     // Set solver parameters
@@ -131,7 +133,8 @@ namespace polysolve::linear
             builder.build(levels, 125, dimension_);
             builder.get_dof_remapping(ichol_dof_remapping);
 
-            sparse_A.setZero();
+            sparse_A.resize(Ain.rows(), Ain.cols());
+            sparse_A.data().squeeze();
 
             std::vector<Eigen::Triplet<double>> triplets;
             triplets.reserve(Ain.nonZeros());
@@ -145,6 +148,10 @@ namespace polysolve::linear
             }
 
             sparse_A.setFromTriplets(triplets.begin(), triplets.end());
+
+            std::ofstream file("A.mat");
+            file << sparse_A;
+            file.close();
 
             inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
             inc_chol_precond->analyse_pattern(sparse_A);

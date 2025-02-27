@@ -238,6 +238,7 @@ namespace polysolve::linear
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
             HYPRE_IJVectorInitialize(ij_x);
 
+            #pragma omp parallel for
             for (HYPRE_Int i = 0; i < x.size(); ++i)
             {
                 const HYPRE_Int index[1] = {i};
@@ -251,6 +252,7 @@ namespace polysolve::linear
 
         void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
         {
+            #pragma omp parallel for
             for (HYPRE_Int i = 0; i < x.size(); ++i)
             {
                 const HYPRE_Int index[1] = {i};
@@ -544,8 +546,11 @@ namespace polysolve::linear
             double gamma = r.dot(z);
             double old_gamma = gamma;
 
+            double loop_time;
             for (int k = 0; k < max_iter_; ++k)
             {
+                
+                POLYSOLVE_SCOPED_STOPWATCH("main loop time: ", loop_time, *logger);
                 num_iterations = k + 1;
 
                 double sdotp = p.dot(sparse_A * p);
@@ -696,13 +701,26 @@ namespace polysolve::linear
         HYPRE_IJVector x;
         HYPRE_ParVector par_b;
         HYPRE_IJVector b;
+        double solve_time;
+        double copy_to_time;
+        double copy_from_time;
 
-        eigen_to_hypre_par_vec(par_x, x, eigen_x);
-        eigen_to_hypre_par_vec(par_b, b, eigen_b);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("copy to hypre time: ", copy_to_time, *logger);
+            eigen_to_hypre_par_vec(par_x, x, eigen_x);
+            eigen_to_hypre_par_vec(par_b, b, eigen_b);
+        }
 
-        HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("boomeramg solve time: ", solve_time, *logger);
+            HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
+        }
 
-        hypre_vec_to_eigen(x, eigen_x);
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("copy from hypre time: ", copy_from_time, *logger);
+            hypre_vec_to_eigen(x, eigen_x);
+        }
+        
     }
 
     void ExperimentalSolver::dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z)

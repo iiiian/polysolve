@@ -113,7 +113,7 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
         logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
-        logger->trace("Eigen num threads: {}", Eigen::NbThreads());
+        logger->trace("Eigen num threads: {}", Eigen::nbThreads());
 
         sparse_A = Ain;
 
@@ -163,10 +163,6 @@ namespace polysolve::linear
             }
 
             sparse_A.setFromTriplets(triplets.begin(), triplets.end());
-
-            std::ofstream file("A.mat");
-            file << sparse_A;
-            file.close();
 
             inc_chol_precond = std::make_shared<mschol::ichol_precond>(levels, pt);
             inc_chol_precond->analyse_pattern(sparse_A);

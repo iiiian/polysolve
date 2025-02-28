@@ -79,6 +79,9 @@ namespace polysolve::linear
 
         int num_threads = 1; 
 
+        std::vector<double> vec_buffer;
+        Eigen::MatrixXi indices;
+
     private:
         bool has_matrix_ = false;
         int precond_num_;

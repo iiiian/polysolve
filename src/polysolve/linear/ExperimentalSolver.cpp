@@ -115,7 +115,14 @@ namespace polysolve::linear
         logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
         logger->trace("Eigen num threads: {}", Eigen::nbThreads());
 
-        sparse_A = Ain;
+        vec_buffer.resize(Ain.rows());
+        indices = Eigen::VectorXi::LinSpaced(1, 0, Ain.rows() - 1);
+
+        double eigen_copy_time;
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("eigen matrix copy time", eigen_copy_time, *logger);
+            sparse_A = Ain;
+        }
 
         #ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
@@ -195,16 +202,20 @@ namespace polysolve::linear
         HYPRE_IJMatrixInitialize(A);
 
         // TODO: More efficient initialization of the Hypre matrix?
-        for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
+        double matrix_copy_time;
         {
-            for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
+            POLYSOLVE_SCOPED_STOPWATCH("copy matrix time", matrix_copy_time, *logger);
+            for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
             {
-                const HYPRE_Int i[1] = {it.row()};
-                const HYPRE_Int j[1] = {it.col()};
-                const HYPRE_Complex v[1] = {it.value()};
-                HYPRE_Int n_cols[1] = {1};
+                for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
+                {
+                    const HYPRE_Int i[1] = {it.row()};
+                    const HYPRE_Int j[1] = {it.col()};
+                    const HYPRE_Complex v[1] = {it.value()};
+                    HYPRE_Int n_cols[1] = {1};
 
-                HYPRE_IJMatrixSetValues(A, 1, n_cols, i, j, v);
+                    HYPRE_IJMatrixSetValues(A, 1, n_cols, i, j, v);
+                }
             }
         }
 
@@ -250,9 +261,9 @@ namespace polysolve::linear
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
-        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
+        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x, const Eigen::VectorXi &indices)
         {
-            #pragma omp parallel for
+            /*#pragma omp parallel for
             for (HYPRE_Int i = 0; i < x.size(); ++i)
             {
                 const HYPRE_Int index[1] = {i};
@@ -261,6 +272,8 @@ namespace polysolve::linear
 
                 x(i) = v[0];
             }
+            */
+            HYPRE_IJVectorGetValues(ij_x, x.size(), (HYPRE_BigInt*) indices.data(), x.data());
         }
 
         void calculate_rbms(Eigen::VectorXd &rbm_xy, Eigen::VectorXd &rbm_zx, Eigen::VectorXd &rbm_yz, const Eigen::MatrixXd &positions, const int dim)
@@ -718,7 +731,7 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy from hypre time: ", copy_from_time, *logger);
-            hypre_vec_to_eigen(x, eigen_x);
+            hypre_vec_to_eigen(x, eigen_x, indices);
         }
         
     }
@@ -762,6 +775,7 @@ namespace polysolve::linear
 
     void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
     {
+        //Eigen::SparseMatrix<double, Eigen::RowMajor> D;
         Eigen::MatrixXd D;
         D.resize(subdomain.size(), subdomain.size());
 

@@ -204,18 +204,30 @@ namespace polysolve::linear
         double matrix_copy_time;
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy matrix time", matrix_copy_time, *logger);
+            Eigen::VectorXi row_indices(Ain.nonZeros());
+            Eigen::VectorXi column_indices(Ain.nonZeros());
+            Eigen::VectorXi n_cols(Ain.nonZeros());
+            Eigen::VectorXd values(Ain.nonZeros());
+            int counter = 0;
             for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
             {
                 for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
                 {
-                    const HYPRE_Int i[1] = {it.row()};
-                    const HYPRE_Int j[1] = {it.col()};
-                    const HYPRE_Complex v[1] = {it.value()};
-                    HYPRE_Int n_cols[1] = {1};
-
-                    HYPRE_IJMatrixSetValues(A, 1, n_cols, i, j, v);
+                    row_indices(counter) = it.row();
+                    column_indices(counter) = it.col();
+                    values(counter) = it.value();
+                    +n_cols(k);
+                    ++counter;
                 }
             }
+            HYPRE_IJMatrixSetValues(
+                A, 
+                Ain.outerSize(), 
+                (HYPRE_Int *) n_cols.data(), 
+                (HYPRE_Int *) row_indices.data(), 
+                (HYPRE_Int *) column_indices.data(), 
+                values.data()
+            );
         }
 
         HYPRE_IJMatrixAssemble(A);
@@ -248,7 +260,7 @@ namespace polysolve::linear
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
             HYPRE_IJVectorInitialize(ij_x);
 
-            HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, (HYPRE_Complex*) x.data());
+            HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, x.data());
 
             HYPRE_IJVectorAssemble(ij_x);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
@@ -758,30 +770,34 @@ namespace polysolve::linear
 
     void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
     {
-        //Eigen::SparseMatrix<double, Eigen::RowMajor> D;
-        Eigen::MatrixXd D;
+        Eigen::SparseMatrix<double, Eigen::RowMajor> D;
         D.resize(subdomain.size(), subdomain.size());
 
         logger->debug("Subdomain size: {}", subdomain.size());
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
+            std::vector<Eigen::Triplet<double>> triplets;
             int i_counter = 0;
             for (auto i : subdomain)
             {
                 int j_counter = 0;
                 for (auto j : subdomain)
                 {
-                    D(i_counter, j_counter) = sparse_A.coeff(i, j);
+                    if (sparse_A.coeff(i, j) != 0)
+                    {
+                        triplets.push_back(Eigen::Triplet<double>(i_counter, j_counter, sparse_A.coeff(i, j)));
+                    }
                     ++j_counter;
                 }
                 ++i_counter;
             }
+            D.setFromTriplets(triplets.begin(), triplets.end());
         }
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("factorize D", dss_factorization_time, *logger);
-            D_solver.compute(D.sparseView());
+            D_solver.compute(D);
         }
     }
 

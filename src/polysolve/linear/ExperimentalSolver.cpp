@@ -116,7 +116,6 @@ namespace polysolve::linear
         logger->trace("Eigen num threads: {}", Eigen::nbThreads());
 
         vec_buffer.resize(Ain.rows());
-        indices = Eigen::VectorXi::LinSpaced(1, 0, Ain.rows() - 1);
 
         double eigen_copy_time;
         {
@@ -249,31 +248,15 @@ namespace polysolve::linear
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
             HYPRE_IJVectorInitialize(ij_x);
 
-            #pragma omp parallel for
-            for (HYPRE_Int i = 0; i < x.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                const HYPRE_Complex v[1] = {HYPRE_Complex(x(i))};
-                HYPRE_IJVectorSetValues(ij_x, 1, index, v);
-            }
+            HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, (HYPRE_Complex*) x.data());
 
             HYPRE_IJVectorAssemble(ij_x);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
-        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x, const Eigen::VectorXi &indices)
+        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
         {
-            /*#pragma omp parallel for
-            for (HYPRE_Int i = 0; i < x.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                HYPRE_Complex v[1];
-                HYPRE_IJVectorGetValues(ij_x, 1, index, v);
-
-                x(i) = v[0];
-            }
-            */
-            HYPRE_IJVectorGetValues(ij_x, x.size(), (HYPRE_BigInt*) indices.data(), x.data());
+            HYPRE_IJVectorGetValues(ij_x, x.size(), nullptr, x.data());
         }
 
         void calculate_rbms(Eigen::VectorXd &rbm_xy, Eigen::VectorXd &rbm_zx, Eigen::VectorXd &rbm_yz, const Eigen::MatrixXd &positions, const int dim)
@@ -731,7 +714,7 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy from hypre time: ", copy_from_time, *logger);
-            hypre_vec_to_eigen(x, eigen_x, indices);
+            hypre_vec_to_eigen(x, eigen_x);
         }
         
     }

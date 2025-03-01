@@ -204,30 +204,22 @@ namespace polysolve::linear
         double matrix_copy_time;
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy matrix time", matrix_copy_time, *logger);
-            Eigen::VectorXi row_indices(Ain.nonZeros());
-            Eigen::VectorXi column_indices(Ain.nonZeros());
-            Eigen::VectorXi n_cols(Ain.nonZeros());
-            Eigen::VectorXd values(Ain.nonZeros());
-            int counter = 0;
-            for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
+            for (HYPRE_Int k = 0; k < sparse_A.outerSize(); ++k)
             {
-                for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
+                HYPRE_Int row[1]; 
+                int counter = 0;
+                std::vector<HYPRE_Int> cols;
+                std::vector<double> vals;
+                for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
                 {
-                    row_indices(counter) = it.row();
-                    column_indices(counter) = it.col();
-                    values(counter) = it.value();
-                    +n_cols(k);
                     ++counter;
+                    row[0] = it.row();
+                    cols.push_back((HYPRE_Int)it.col());
+                    vals.push_back(it.value());
                 }
+                HYPRE_Int n_cols[1] = {counter};
+                HYPRE_IJMatrixSetValues(A, 1, n_cols, row, cols.data(), vals.data());
             }
-            HYPRE_IJMatrixSetValues(
-                A, 
-                Ain.outerSize(), 
-                (HYPRE_Int *) n_cols.data(), 
-                (HYPRE_Int *) row_indices.data(), 
-                (HYPRE_Int *) column_indices.data(), 
-                values.data()
-            );
         }
 
         HYPRE_IJMatrixAssemble(A);
@@ -771,13 +763,14 @@ namespace polysolve::linear
     void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
     {
         Eigen::SparseMatrix<double, Eigen::RowMajor> D;
+
         D.resize(subdomain.size(), subdomain.size());
 
         logger->debug("Subdomain size: {}", subdomain.size());
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
-            std::vector<Eigen::Triplet<double>> triplets;
+            std::vector<Eigen::Triplet<double>> triplet_vector;
             int i_counter = 0;
             for (auto i : subdomain)
             {
@@ -792,7 +785,11 @@ namespace polysolve::linear
                 }
                 ++i_counter;
             }
-            D.setFromTriplets(triplets.begin(), triplets.end());
+            double set_from_triplets_time;
+            {
+                POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
+                D.setFromTriplets(triplets.begin(), triplets.end());
+            }
         }
 
         {

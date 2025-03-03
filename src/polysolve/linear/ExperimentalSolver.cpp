@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
+#include <unordered_map>
 
 namespace polysolve::linear
 {
@@ -770,21 +771,33 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
-            std::vector<Eigen::Triplet<double>> triplet_vector;
+            std::vector<Eigen::Triplet<double>> triplets;
+            std::unordered_map<int, int> index_mapping;
+
             int i_counter = 0;
             for (auto i : subdomain)
             {
-                int j_counter = 0;
-                for (auto j : subdomain)
-                {
-                    if (sparse_A.coeff(i, j) != 0)
-                    {
-                        triplets.push_back(Eigen::Triplet<double>(i_counter, j_counter, sparse_A.coeff(i, j)));
-                    }
-                    ++j_counter;
-                }
+                index_mapping[i] = i_counter;
                 ++i_counter;
             }
+
+            for (int k = 0; k < sparse_A.outerSize(); ++k)
+            {
+                for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
+                {
+                    if (subdomain.count(it.row()) == 0 || it.col() > it.row())
+                    {
+                        break;
+                    }
+                    if (subdomain.count(it.col()) == 0)
+                    {
+                        continue;
+                    }
+                    triplets.push_back(Eigen::Triplet<double>(index_mapping[it.row()], index_mapping[it.col()], it.value()));
+                    triplets.push_back(Eigen::Triplet<double>(index_mapping[it.col()], index_mapping[it.row()], it.value()));
+                }
+            }
+
             double set_from_triplets_time;
             {
                 POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);

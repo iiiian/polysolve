@@ -73,20 +73,19 @@ namespace polysolve::linear
         bool use_absolute_tol = false;
         bool select_bad_dofs_from_rhs;
         double bad_dof_grad_threshold;
+        bool save_grad_norms;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;
 
         int num_threads = 1; 
 
-        std::vector<double> vec_buffer;
-
     private:
         bool has_matrix_ = false;
         int precond_num_;
 
         Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
-        Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> D_solver;
+        std::vector<Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>> D_solvers;
 
 #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
@@ -111,7 +110,7 @@ namespace polysolve::linear
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
 
-        void factorize_submatrix(const std::set<int> subdomain);
+        void factorize_submatrix();
     };
 
 } // namespace polysolve::linear

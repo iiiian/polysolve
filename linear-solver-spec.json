@@ -471,7 +471,8 @@
             "use_absolute_tol",
             "rho",
             "bad_dof_grad_threshold",
-            "select_bad_dofs_from_rhs"
+            "select_bad_dofs_from_rhs",
+            "save_grad_norms"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -564,6 +565,12 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to use magnitude of gradient at node to select problematic dofs."
+    },
+    {
+        "pointer": "/Experimental/save_grad_norms",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to save sorted magnitude of gradient to file."
     }
         
 ]

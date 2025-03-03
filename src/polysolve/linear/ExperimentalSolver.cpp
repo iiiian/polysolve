@@ -98,6 +98,10 @@ namespace polysolve::linear
             {
                 rho = params["Experimental"]["rho"];
             }
+            if (params["Experimental"].contains("save_grad_norms"))
+            {
+                save_grad_norms = params["Experimental"]["save_grad_norms"];
+            }
 #endif
         }
     }
@@ -115,8 +119,6 @@ namespace polysolve::linear
         assert(precond_num_ > 0);
         logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
         logger->trace("Eigen num threads: {}", Eigen::nbThreads());
-
-        vec_buffer.resize(Ain.rows());
 
         double eigen_copy_time;
         {
@@ -235,7 +237,7 @@ namespace polysolve::linear
             return;
         }
 
-        factorize_submatrix(subdomain);
+        factorize_submatrix();
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -455,7 +457,7 @@ namespace polysolve::linear
         {
             bad_indices_.clear();
             bad_indices_.resize(1);
-            auto &subdomain = bad_indices_[0];
+
             {
                 POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
 
@@ -472,6 +474,15 @@ namespace polysolve::linear
                 }
                 Eigen::VectorXd sq_mags_copy = sq_mags;
                 std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
+
+                if (save_grad_norms)
+                {
+                    std::ofstream file;
+                    file.open("grad_norms.txt", std::ios_base::app);
+                    file << sq_mags_copy;
+                    file.close();
+                }
+
                 const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
                 const double cutoff = sq_mags_copy(cutoff_index);
 
@@ -483,14 +494,43 @@ namespace polysolve::linear
                         {
                             for (int j = 0; j < dimension_; ++j)
                             {
-                                subdomain.insert(dimension_ * i + j);
+                                Eigen::VectorXd row = sparse_A.row(dimension_ * i + j);
+                                std::set<int> nonzero_indices;
+                                for (int index = 0; index < row.size(); ++index)
+                                {
+                                    if (row(index) != 0)
+                                    {
+                                        nonzero_indices.insert(index);
+                                    }
+                                }
+                                bool found_subdomain = false;
+                                for (auto &subdomain : bad_indices_)
+                                {
+                                    std::set<int> intersection;
+                                    std::set_intersection(
+                                        subdomain.begin(), subdomain.end(),
+                                        nonzero_indices.begin(), nonzero_indices.end(),
+                                        std::inserter(intersection, intersection.begin())
+                                    );
+                                    if (intersection.size() > 0)
+                                    {
+                                        subdomain.insert(dimension_ * i + j);
+                                        found_subdomain = true;
+                                        break;
+                                    }
+                                }
+                                if (!found_subdomain)
+                                {
+                                    bad_indices_.emplace_back();
+                                    bad_indices_.back().insert(dimension_ * i + j);
+                                }
                             }
                         }
                     }
                 }
             }
 
-            factorize_submatrix(subdomain);
+            factorize_submatrix();
         }
 
         /* Now setup and solve! */
@@ -726,29 +766,36 @@ namespace polysolve::linear
 
     void ExperimentalSolver::dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z)
     {
-        logger->trace("DSS Step");
-
-        auto &subdomain = bad_indices_[0];
-
-        Eigen::VectorXd sub_rhs;
-        Eigen::VectorXd sub_result;
-        sub_rhs.resize(subdomain.size());
-        sub_result.resize(subdomain.size());
-
-        int i_counter = 0;
-        for (auto &i : subdomain)
+        double dss_step_time;
         {
-            sub_rhs(i_counter) = r(i) - sparse_A.row(i).dot(z);
-            ++i_counter;
-        }
+            POLYSOLVE_SCOPED_STOPWATCH("dss step time: ", dss_step_time, *logger);
 
-        sub_result = D_solver.solve(sub_rhs);
-        i_counter = 0;
-        next_z = z;
-        for (auto &i : subdomain)
-        {
-            next_z(i) += sub_result(i_counter);
-            ++i_counter;
+            next_z = z;
+        
+            for (int index = 0; index < bad_indices_.size(); ++index)
+            {
+                auto &subdomain = bad_indices_[index];
+
+                Eigen::VectorXd sub_rhs;
+                Eigen::VectorXd sub_result;
+                sub_rhs.resize(subdomain.size());
+                sub_result.resize(subdomain.size());
+
+                int i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    sub_rhs(i_counter) = r(i) - sparse_A.row(i).dot(z);
+                    ++i_counter;
+                }
+
+                sub_result = D_solvers[index].solve(sub_rhs);
+                i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    next_z(i) += sub_result(i_counter);
+                    ++i_counter;
+                }
+            }
         }
     }
 
@@ -761,54 +808,59 @@ namespace polysolve::linear
     }
 #endif
 
-    void ExperimentalSolver::factorize_submatrix(const std::set<int> subdomain)
+    void ExperimentalSolver::factorize_submatrix()
     {
-        Eigen::SparseMatrix<double, Eigen::RowMajor> D;
-
-        D.resize(subdomain.size(), subdomain.size());
-
-        logger->debug("Subdomain size: {}", subdomain.size());
-
         {
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
-            std::vector<Eigen::Triplet<double>> triplets;
-            std::unordered_map<int, int> index_mapping;
-
-            int i_counter = 0;
-            for (auto i : subdomain)
+            for (int i = 0; i < bad_indices_.size(); ++i)
             {
-                index_mapping[i] = i_counter;
-                ++i_counter;
-            }
+                Eigen::SparseMatrix<double, Eigen::RowMajor> D;
+                D.resize(bad_indices_[i].size(), bad_indices_[i].size());
+                logger->debug("Subdomain size: {}", bad_indices_[i].size());
+                std::vector<Eigen::Triplet<double>> triplets;
+                std::unordered_map<int, int> index_mapping;
 
-            for (int k = 0; k < sparse_A.outerSize(); ++k)
-            {
-                for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
+                int j_counter = 0;
+                for (auto j : bad_indices_[i])
                 {
-                    if (subdomain.count(it.row()) == 0 || it.col() > it.row())
-                    {
-                        break;
-                    }
-                    if (subdomain.count(it.col()) == 0)
+                    index_mapping[j] = j_counter;
+                    ++j_counter;
+                }
+
+                for (int k = 0; k < sparse_A.outerSize(); ++k)
+                {
+                    if (bad_indices_[i].count(k) == 0)
                     {
                         continue;
                     }
-                    triplets.push_back(Eigen::Triplet<double>(index_mapping[it.row()], index_mapping[it.col()], it.value()));
-                    triplets.push_back(Eigen::Triplet<double>(index_mapping[it.col()], index_mapping[it.row()], it.value()));
+                    for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
+                    {
+                        if (it.col() > it.row())
+                        {
+                            break;
+                        }
+                        if (bad_indices_[i].count(it.col()) == 0)
+                        {
+                            continue;
+                        }
+                        triplets.push_back(Eigen::Triplet<double>(index_mapping[it.row()], index_mapping[it.col()], it.value()));
+                        triplets.push_back(Eigen::Triplet<double>(index_mapping[it.col()], index_mapping[it.row()], it.value()));
+                    }
+                }
+
+                double set_from_triplets_time;
+                {
+                    POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
+                    D.setFromTriplets(triplets.begin(), triplets.end());
+                }
+
+                {
+                    POLYSOLVE_SCOPED_STOPWATCH("factorize D", dss_factorization_time, *logger);
+                    D_solvers[i].compute(D);
                 }
             }
-
-            double set_from_triplets_time;
-            {
-                POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
-                D.setFromTriplets(triplets.begin(), triplets.end());
-            }
         }
 
-        {
-            POLYSOLVE_SCOPED_STOPWATCH("factorize D", dss_factorization_time, *logger);
-            D_solver.compute(D);
-        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////

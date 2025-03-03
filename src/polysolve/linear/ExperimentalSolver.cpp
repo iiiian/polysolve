@@ -812,6 +812,8 @@ namespace polysolve::linear
     {
         {
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
+            D_solvers.clear();
+            D_solvers.resize(bad_indices_.size());
             for (int i = 0; i < bad_indices_.size(); ++i)
             {
                 Eigen::SparseMatrix<double, Eigen::RowMajor> D;

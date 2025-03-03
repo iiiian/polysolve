@@ -707,10 +707,8 @@ namespace polysolve::linear
         z2.setZero();
         z3.setZero();
 
-        //amg_precond_iter(precond, r, z1);
-
         assert(bad_indices_.size() == 1);
-        if (bad_indices_[0].size() == 0)
+        if (bad_indices_.size() == 0)
         {
             amg_precond_iter(precond, r, z1);
             z = z1;
@@ -772,6 +770,7 @@ namespace polysolve::linear
 
             next_z = z;
         
+            #pragma omp parallel for
             for (int index = 0; index < bad_indices_.size(); ++index)
             {
                 auto &subdomain = bad_indices_[index];
@@ -814,6 +813,7 @@ namespace polysolve::linear
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
             D_solvers.clear();
             D_solvers.resize(bad_indices_.size());
+            #pragma omp parallel for
             for (int i = 0; i < bad_indices_.size(); ++i)
             {
                 Eigen::SparseMatrix<double, Eigen::RowMajor> D;

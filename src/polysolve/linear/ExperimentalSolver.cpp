@@ -479,7 +479,7 @@ namespace polysolve::linear
                 {
                     std::ofstream file;
                     file.open("grad_norms.txt", std::ios_base::app);
-                    file << sq_mags_copy;
+                    file << sq_mags_copy.transpose();
                     file.close();
                 }
 
@@ -512,7 +512,7 @@ namespace polysolve::linear
                                         nonzero_indices.begin(), nonzero_indices.end(),
                                         std::inserter(intersection, intersection.begin())
                                     );
-                                    if (intersection.size() > 0)
+                                    if (true || intersection.size() > 0)
                                     {
                                         subdomain.insert(dimension_ * i + j);
                                         found_subdomain = true;
@@ -818,7 +818,7 @@ namespace polysolve::linear
             {
                 Eigen::SparseMatrix<double, Eigen::RowMajor> D;
                 D.resize(bad_indices_[i].size(), bad_indices_[i].size());
-                logger->debug("Subdomain size: {}", bad_indices_[i].size());
+                logger->trace("Subdomain size: {}", bad_indices_[i].size());
                 std::vector<Eigen::Triplet<double>> triplets;
                 std::unordered_map<int, int> index_mapping;
 

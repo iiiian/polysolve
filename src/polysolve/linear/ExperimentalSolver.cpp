@@ -494,7 +494,8 @@ namespace polysolve::linear
                         {
                             for (int j = 0; j < dimension_; ++j)
                             {
-                                Eigen::VectorXd row = sparse_A.row(dimension_ * i + j);
+                                bad_indices_[0].insert(dimension_ * i + j);
+                                /*Eigen::VectorXd row = sparse_A.row(dimension_ * i + j);
                                 std::set<int> nonzero_indices;
                                 for (int index = 0; index < row.size(); ++index)
                                 {
@@ -523,7 +524,7 @@ namespace polysolve::linear
                                 {
                                     bad_indices_.emplace_back();
                                     bad_indices_.back().insert(dimension_ * i + j);
-                                }
+                                }*/
                             }
                         }
                     }
@@ -538,54 +539,59 @@ namespace polysolve::linear
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
 
             /* Custom PCG */
-
-            double bi_prod = remapped_rhs.dot(remapped_rhs);
-            logger->trace("Experimental solver bi prod: {}", bi_prod);
-
-            double eps;
-
-            if (bi_prod > 0.0)
+            double pre_loop_time;
+            double bi_prod, eps, gamma, old_gamma;
+            Eigen::VectorXd r, p, z;
             {
-                eps = conv_tol_ * conv_tol_;
-            }
-            else 
-            {
-                result.setZero();
-                num_iterations = 0;
-                final_res_norm = 0;
-                logger->debug("Experimental solver Iterations: {}", num_iterations);
-                logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
-                return;
-            }
-
-            Eigen::VectorXd r = remapped_rhs - (sparse_A * remapped_result);
-
-            Eigen::VectorXd p(r.size());
-            Eigen::VectorXd z(r.size());
-            p.setZero();
-            z.setZero();
-
-            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-
-#ifdef POLYSOLVE_WITH_ICHOL
-            if (use_incomplete_cholesky_precond)
-            {
-                z = inc_chol_precond->solve(r);
-            } else
-#endif
-            if (!do_mixed_precond || bad_indices_.size() == 0)
-            {
-                amg_precond_iter(precond, r, z);
-            }
-            else
-            {
-                custom_mixed_precond_iter(precond, r, z);
-            }
+                POLYSOLVE_SCOPED_STOPWATCH("pre loop time: ", pre_loop_time, *logger);
             
-            p = z;
+                bi_prod = remapped_rhs.dot(remapped_rhs);
+                logger->trace("Experimental solver bi prod: {}", bi_prod);
 
-            double gamma = r.dot(z);
-            double old_gamma = gamma;
+
+                if (bi_prod > 0.0)
+                {
+                    eps = conv_tol_ * conv_tol_;
+                }
+                else 
+                {
+                    result.setZero();
+                    num_iterations = 0;
+                    final_res_norm = 0;
+                    logger->debug("Experimental solver Iterations: {}", num_iterations);
+                    logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
+                    return;
+                }
+
+                r = remapped_rhs - (sparse_A * remapped_result);
+
+                p.resize(r.size());
+                z.resize(r.size());
+                p.setZero();
+                z.setZero();
+
+                HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+
+    #ifdef POLYSOLVE_WITH_ICHOL
+                if (use_incomplete_cholesky_precond)
+                {
+                    z = inc_chol_precond->solve(r);
+                } else
+    #endif
+                if (!do_mixed_precond || bad_indices_.size() == 0)
+                {
+                    amg_precond_iter(precond, r, z);
+                }
+                else
+                {
+                    custom_mixed_precond_iter(precond, r, z);
+                }
+                
+                p = z;
+
+                gamma = r.dot(z);
+                old_gamma = gamma;
+            }
 
             double loop_time;
             for (int k = 0; k < max_iter_; ++k)
@@ -686,10 +692,14 @@ namespace polysolve::linear
 #endif
 
         /* Destroy preconditioner */
-        HYPRE_BoomerAMGDestroy(precond);
+        double destroy_time;
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("destroy time", destroy_time, *logger);
+            HYPRE_BoomerAMGDestroy(precond);
 
-        HYPRE_IJVectorDestroy(x);
-        HYPRE_IJVectorDestroy(b);
+            HYPRE_IJVectorDestroy(x);
+            HYPRE_IJVectorDestroy(b);
+        }
 
         if (select_bad_dofs_from_rhs)
         {

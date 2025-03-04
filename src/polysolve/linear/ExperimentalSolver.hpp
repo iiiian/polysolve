@@ -89,7 +89,7 @@ namespace polysolve::linear
         std::deque<Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>> D_solvers;
 
 #ifdef POLYSOLVE_WITH_ICHOL
-        std::shared_ptr<mschol::ichol_precond> inc_chol_precond; // just to show it compiles
+        std::shared_ptr<mschol::ichol_precond> inc_chol_precond; 
         boost::property_tree::ptree pt;
         Eigen::VectorXi ichol_dof_remapping;
         double rho = 1.01;

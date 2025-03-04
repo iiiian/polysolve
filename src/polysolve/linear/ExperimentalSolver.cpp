@@ -479,7 +479,7 @@ namespace polysolve::linear
                 {
                     std::ofstream file;
                     file.open("grad_norms.txt", std::ios_base::app);
-                    file << sq_mags_copy.transpose();
+                    file << sq_mags_copy.transpose() << std::endl;
                     file.close();
                 }
 

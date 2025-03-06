@@ -45,6 +45,10 @@ namespace polysolve::linear
             MPI_Init(&argc, &argvv);
             MPI_Comm_rank(MPI_COMM_WORLD, &myid);
             MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+            if (myid == 0)
+            {
+                std::cout << "NUMPROCS: " << num_procs << std::endl;
+            }
         }
 #endif
     }

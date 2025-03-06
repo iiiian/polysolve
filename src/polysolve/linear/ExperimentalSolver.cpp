@@ -718,7 +718,7 @@ namespace polysolve::linear
         z3.setZero();
 
         assert(bad_indices_.size() == 1);
-        if (bad_indices_.size() == 0)
+        if (bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
         {
             amg_precond_iter(precond, r, z1);
             z = z1;

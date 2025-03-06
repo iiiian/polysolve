@@ -30,6 +30,9 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
     include(${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
 endif()
 
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lmpi_cxx")
+SET(CMAKE_CXX_COMPILER "/usr/bin/mpicxx")
+
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -87,7 +90,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
-option(POLYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   ON)
+option(POLYSOLVE_WITH_ICHOL         "Enable use of incomplete Cholesky preconditioner"   OFF)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)

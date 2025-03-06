@@ -30,6 +30,23 @@ namespace polysolve::linear
             num_threads = std::stoi(num_threads_val);
         }
         Eigen::setNbThreads(num_threads);
+#ifdef HYPRE_WITH_MPI
+        int done_already;
+
+        MPI_Initialized(&done_already);
+        if (!done_already)
+        {
+            /* Initialize MPI */
+            int argc = 1;
+            char name[] = "";
+            char *argv[] = {name};
+            char **argvv = &argv[0];
+            int myid, num_procs;
+            MPI_Init(&argc, &argvv);
+            MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+            MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        }
+#endif
     }
 
     // Set solver parameters
@@ -198,7 +215,11 @@ namespace polysolve::linear
         const HYPRE_Int rows = sparse_A.rows();
         const HYPRE_Int cols = sparse_A.cols();
 
+#ifdef HYPRE_WITH_MPI
+        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, rows - 1, 0, cols - 1, &A);
+#else
         HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
+#endif
         // HYPRE_IJMatrixSetPrintLevel(A, 2);
         HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
         HYPRE_IJMatrixInitialize(A);

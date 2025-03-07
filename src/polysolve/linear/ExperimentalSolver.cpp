@@ -909,6 +909,13 @@ namespace polysolve::linear
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
         }
+#ifdef HYPRE_WITH_MPI
+        int finalized;
+        MPI_Finalized(&finalized);
+        if (!finalized)
+            MPI_Finalize();
+#endif
+
     }
 
 } // namespace polysolve::linear

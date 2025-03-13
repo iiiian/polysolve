@@ -75,6 +75,7 @@ namespace polysolve::linear
         bool select_bad_dofs_from_rhs;
         double bad_dof_grad_threshold;
         bool save_grad_norms;
+        bool save_problem;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

@@ -472,7 +472,8 @@
             "rho",
             "bad_dof_grad_threshold",
             "select_bad_dofs_from_rhs",
-            "save_grad_norms"
+            "save_grad_norms",
+            "save_problem"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -571,6 +572,12 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to save sorted magnitude of gradient to file."
+    },
+    {
+        "pointer": "/Experimental/save_problem",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to save matrix and rhs to separate files."
     }
         
 ]

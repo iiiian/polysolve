@@ -123,6 +123,10 @@ namespace polysolve::linear
             {
                 save_grad_norms = params["Experimental"]["save_grad_norms"];
             }
+            if (params["Experimental"].contains("save_problem"))
+            {
+                save_problem = params["Experimental"]["save_problem"];
+            }
 #endif
         }
     }
@@ -215,6 +219,28 @@ namespace polysolve::linear
             has_matrix_ = false;
         }
 
+        if (save_problem)
+        {
+            std::vector<Eigen::Triplet<double>> triplets;
+            triplets.reserve(sparse_A.nonZeros());
+
+            for (int k = 0; k < Ain.outerSize(); ++k)
+            {
+                for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
+                {   
+                    triplets.push_back(Eigen::Triplet<double>(it.row(), it.col(), it.value()));
+                }
+            }
+
+            std::ofstream file("A.mat");
+            file << sparse_A.rows() << sparse_A.cols() << sparse_A.nonZeros() << std::endl;
+            for (auto & trip : triplets)
+            {
+                file << trip.row() << trip.col() << trip.value() << std::endl;
+            }
+            file.close();
+        }
+
         has_matrix_ = true;
         const HYPRE_Int rows = sparse_A.rows();
         const HYPRE_Int cols = sparse_A.cols();
@@ -256,7 +282,7 @@ namespace polysolve::linear
         assert(bad_indices_.size() == 1);
         auto &subdomain = bad_indices_[0];
 
-        // Save submatrix for direct step. TODO: refactor for multiple subdomains
+        // Save submatrix for direct step
         if (!do_mixed_precond || subdomain.size() == 0 || select_bad_dofs_from_rhs)
         {
             return;
@@ -437,6 +463,13 @@ namespace polysolve::linear
             }
         }
 #endif
+
+        if (save_problem)
+        {
+            std::ofstream file("rhs.mat");
+            file << remapped_rhs;
+            file.close();
+        }
 
         HYPRE_ParVector par_b;
         HYPRE_ParVector par_x;

@@ -233,10 +233,10 @@ namespace polysolve::linear
             }
 
             std::ofstream file("A.mat");
-            file << sparse_A.rows() << sparse_A.cols() << sparse_A.nonZeros() << std::endl;
+            file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros() << std::endl;
             for (auto & trip : triplets)
             {
-                file << trip.row() << trip.col() << trip.value() << std::endl;
+                file << trip.row() << " " << trip.col() << " " << trip.value() << std::endl;
             }
             file.close();
         }

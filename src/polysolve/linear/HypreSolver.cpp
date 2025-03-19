@@ -29,11 +29,10 @@ namespace polysolve::linear
             char name[] = "";
             char *argv[] = {name};
             char **argvv = &argv[0];
-            int myid, num_procs;
             MPI_Init(&argc, &argvv);
-            MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-            MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
         }
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 #endif
     }
 
@@ -85,14 +84,6 @@ namespace polysolve::linear
     {
         assert(precond_num_ > 0);
 
-        eigen_A = Ain;
-
-        //Eigen::BDCSVD<Eigen::MatrixXd> svd(Ain);
-        //double cond = svd.singularValues()(0) 
-        //    / svd.singularValues()(svd.singularValues().size()-1);
-
-        //std::cout << "Condition number: " << cond << std::endl;
-
         if (has_matrix_)
         {
             HYPRE_IJMatrixDestroy(A);
@@ -103,7 +94,10 @@ namespace polysolve::linear
         const HYPRE_Int rows = Ain.rows();
         const HYPRE_Int cols = Ain.cols();
 #ifdef HYPRE_WITH_MPI
-        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, rows - 1, 0, cols - 1, &A);
+        int local_size = rows / num_procs;
+        start_i = myid == 0 ? 0 : local_size * myid + myid;
+        end_i = myid == num_procs - 1 ? rows - 1 : start_i + local_size;
+        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, start_i, end_i, start_i, end_i, &A);
 #else
         HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
 #endif
@@ -114,21 +108,31 @@ namespace polysolve::linear
         // HYPRE_IJMatrixSetValues(A, 1, &nnz, &i, cols, values);
 
         // TODO: More efficient initialization of the Hypre matrix?
-        for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
+        double matrix_copy_time;
         {
-            for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
+            POLYSOLVE_SCOPED_STOPWATCH("copy matrix time", matrix_copy_time, *logger);
+            for (HYPRE_Int k = 0; k < Ain.outerSize(); ++k)
             {
-                const HYPRE_Int i[1] = {it.row()};
-                const HYPRE_Int j[1] = {it.col()};
-                const HYPRE_Complex v[1] = {it.value()};
-                HYPRE_Int n_cols[1] = {1};
-
-                HYPRE_IJMatrixSetValues(A, 1, n_cols, i, j, v);
+                HYPRE_Int row[1]; 
+                int counter = 0;
+                std::vector<HYPRE_Int> cols;
+                std::vector<double> vals;
+                for (StiffnessMatrix::InnerIterator it(Ain, k); it; ++it)
+                {
+                    // since A is spd, we swap rows and columns for more efficient initialization (temporary solution)
+                    ++counter;
+                    row[0] = it.col();
+                    cols.push_back((HYPRE_Int)it.row());
+                    vals.push_back(it.value());
+                }
+                HYPRE_Int n_cols[1] = {counter};
+                HYPRE_IJMatrixSetValues(A, 1, n_cols, row, cols.data(), vals.data());
             }
+
+            HYPRE_IJMatrixAssemble(A);
+            HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
         }
 
-        HYPRE_IJMatrixAssemble(A);
-        HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -136,37 +140,33 @@ namespace polysolve::linear
     namespace
     {
 
-        void eigen_to_hypre_par_vec(HYPRE_ParVector &par_x, HYPRE_IJVector &ij_x, const Eigen::VectorXd &x)
+        void eigen_to_hypre_par_vec(HYPRE_ParVector &par_x, HYPRE_IJVector &ij_x, const Eigen::VectorXd &x, int start_i, int end_i)
         {
     #ifdef HYPRE_WITH_MPI
-            HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, x.size() - 1, &ij_x);
+            HYPRE_IJVectorCreate(MPI_COMM_WORLD, start_i, end_i, &ij_x);
     #else
             HYPRE_IJVectorCreate(0, 0, x.size() - 1, &ij_x);
     #endif
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
             HYPRE_IJVectorInitialize(ij_x);
 
-            for (HYPRE_Int i = 0; i < x.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                const HYPRE_Complex v[1] = {HYPRE_Complex(x(i))};
-                HYPRE_IJVectorSetValues(ij_x, 1, index, v);
-            }
+    #ifdef HYPRE_WITH_MPI
+            HYPRE_IJVectorSetValues(ij_x, end_i - start_i + 1, nullptr, x.data() + start_i);
+    #else
+            HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, x.data());
+    #endif
 
             HYPRE_IJVectorAssemble(ij_x);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
-        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
+        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::Ref<Eigen::VectorXd> &x, int start_i, int end_i)
         {
-            for (HYPRE_Int i = 0; i < x.size(); ++i)
-            {
-                const HYPRE_Int index[1] = {i};
-                HYPRE_Complex v[1];
-                HYPRE_IJVectorGetValues(ij_x, 1, index, v);
-
-                x(i) = v[0];
-            }
+    #ifdef HYPRE_WITH_MPI
+            HYPRE_IJVectorGetValues(ij_x, end_i - start_i + 1, nullptr, x.data() + start_i);
+    #else
+            HYPRE_IJVectorGetValues(ij_x, x.size(), nullptr, x.data());
+    #endif            
         }
 
         void HypreBoomerAMG_SetDefaultOptions(HYPRE_Solver &amg_precond)
@@ -174,7 +174,7 @@ namespace polysolve::linear
             // AMG coarsening options:
             int coarsen_type = 10; // 10 = HMIS, 8 = PMIS, 6 = Falgout, 0 = CLJP
             int agg_levels = 1;    // number of aggressive coarsening levels
-            double theta = 0.25;   // strength threshold: 0.25, 0.5, 0.8
+            double theta = 0.5;   // strength threshold: 0.25, 0.5, 0.8
 
             // AMG interpolation options:
             int interp_type = 6; // 6 = extended+i, 0 = classical
@@ -275,11 +275,11 @@ namespace polysolve::linear
                     }
                 }
 
-                eigen_to_hypre_par_vec(par_rbms[0], rbms[0], rbm_xy);
+                eigen_to_hypre_par_vec(par_rbms[0], rbms[0], rbm_xy, 0, positions.rows() - 1);
                 if (dim == 3)
                 {
-                    eigen_to_hypre_par_vec(par_rbms[1], rbms[1], rbm_zx);
-                    eigen_to_hypre_par_vec(par_rbms[2], rbms[2], rbm_yz);
+                    eigen_to_hypre_par_vec(par_rbms[1], rbms[1], rbm_zx, 0, positions.rows() - 1);
+                    eigen_to_hypre_par_vec(par_rbms[2], rbms[2], rbm_yz, 0, positions.rows() - 1);
                 }
             
                 HYPRE_BoomerAMGSetInterpVectors(amg_precond, par_rbms.size(), &(par_rbms[0]));
@@ -303,45 +303,40 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy x and b", copy_b_and_x_time, *logger);
-            eigen_to_hypre_par_vec(par_b, b, rhs);
-            eigen_to_hypre_par_vec(par_x, x, result);
+            eigen_to_hypre_par_vec(par_b, b, rhs, start_i, end_i);
+            eigen_to_hypre_par_vec(par_x, x, result, start_i, end_i);
         }
 
         /* PCG with AMG preconditioner */
 
         /* Create solver */
         HYPRE_Solver solver, precond;
-#ifdef HYPRE_WITH_MPI
-        HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &solver);
-#else
-        HYPRE_ParCSRPCGCreate(0, &solver);
-#endif
 
-        /* Set some parameters (See Reference Manual for more parameters) */
-        HYPRE_PCGSetMaxIter(solver, 1); /* max iterations */
-        HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
-        HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
-        // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
-        HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
 
-        /* Now set up the AMG preconditioner and specify any parameters */
-        HYPRE_BoomerAMGCreate(&precond);
-
-#if 0
-    //HYPRE_BoomerAMGSetPrintLevel(precond, 2); /* print amg solution info */
-    HYPRE_BoomerAMGSetCoarsenType(precond, 6);
-    HYPRE_BoomerAMGSetOldDefault(precond);
-    HYPRE_BoomerAMGSetRelaxType(precond, 6); /* Sym G.S./Jacobi hybrid */
-    HYPRE_BoomerAMGSetNumSweeps(precond, 1);
-    HYPRE_BoomerAMGSetTol(precond, 0.0); /* conv. tolerance zero */
-    HYPRE_BoomerAMGSetMaxIter(precond, pre_max_iter_); /* do only one iteration! */
-#endif
-        const int num_rbms = dimension_ == 2 ? 1 : 3;
-        std::vector<HYPRE_ParVector> par_rbms(num_rbms);
-        std::vector<HYPRE_IJVector> rbms(num_rbms);
-        
+        double setup_pcg_time;
         {
-            POLYSOLVE_SCOPED_STOPWATCH("set options", set_options_time, *logger);
+            POLYSOLVE_SCOPED_STOPWATCH("setup pcg time", setup_pcg_time, *logger);
+#ifdef HYPRE_WITH_MPI
+            HYPRE_ParCSRPCGCreate(MPI_COMM_WORLD, &solver);
+#else
+            HYPRE_ParCSRPCGCreate(0, &solver);
+#endif
+
+            /* Set some parameters (See Reference Manual for more parameters) */
+            HYPRE_PCGSetMaxIter(solver, max_iter_); /* max iterations */
+            HYPRE_PCGSetTol(solver, conv_tol_);     /* conv. tolerance */
+            HYPRE_PCGSetTwoNorm(solver, 1);         /* use the two norm as the stopping criteria */
+            // HYPRE_PCGSetPrintLevel(solver, 2); /* print solve info */
+            HYPRE_PCGSetLogging(solver, 1); /* needed to get run info later */
+        }
+
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("set amg options", set_options_time, *logger);
+            HYPRE_BoomerAMGCreate(&precond);
+
+            const int num_rbms = dimension_ == 2 ? 1 : 3;
+            std::vector<HYPRE_ParVector> par_rbms(num_rbms);
+            std::vector<HYPRE_IJVector> rbms(num_rbms);
             HypreBoomerAMG_SetDefaultOptions(precond);
             if (dimension_ > 1)
             {
@@ -351,11 +346,15 @@ namespace polysolve::linear
 
         /* Set the PCG preconditioner */
         //HYPRE_BoomerAMGSetPrintLevel(precond, 1);
-        HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
-        HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
+        double final_setup_time;
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("final setup time", final_setup_time, *logger);
+        
+            HYPRE_PCGSetPrecond(solver, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSolve, (HYPRE_PtrToSolverFcn)HYPRE_BoomerAMGSetup, precond);
+            HYPRE_ParCSRPCGSetup(solver, parcsr_A, par_b, par_x);
+        }
 
         /* Now setup and solve! */
-        if (bad_indices_.size() == 0 && max_iter_ == 432)
         {
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
             HYPRE_ParCSRPCGSolve(solver, parcsr_A, par_b, par_x);
@@ -363,242 +362,20 @@ namespace polysolve::linear
             HYPRE_PCGGetNumIterations(solver, &num_iterations);
             HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
         }
-        else 
-        {
-            POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
-
-            /* Custom PCG */
-
-            double bi_prod = rhs.dot(rhs);
-            std::cout << "bi prod: " << bi_prod << std::endl;
-            double eps;
-            double ieee_check = 0.0;
-
-            if (bi_prod != 0.0)
-            {
-                ieee_check = bi_prod / bi_prod;
-            }
-
-            if (ieee_check != ieee_check)
-            {
-                std::cout << "NaN Input" << std::endl;
-                assert(false);
-            }
-
-            if (bi_prod > 0.0)
-            {
-                eps = conv_tol_ * conv_tol_;
-            }
-            else 
-            {
-                result.setZero();
-                assert(false);
-            }
-
-            Eigen::VectorXd r = rhs - (eigen_A * result);
-            Eigen::VectorXd p(r.size());
-            Eigen::VectorXd z(r.size());
-            Eigen::VectorXd z1(r.size());
-            Eigen::VectorXd z2(r.size());
-            Eigen::VectorXd z3(r.size());
-            z.setZero();
-            z1.setZero();
-            z2.setZero();
-            z3.setZero();
-
-            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-
-            assert(bad_indices_.size() == 1);
-            auto &subdomain = bad_indices_[0];
-            Eigen::MatrixXd D;
-            Eigen::LDLT<Eigen::MatrixXd> D_solver;
-            Eigen::VectorXd sub_rhs;
-            Eigen::VectorXd sub_result;
-
-            eigen_to_hypre_par_vec(par_x, x, z1);
-            eigen_to_hypre_par_vec(par_b, b, r);
-
-            HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-            hypre_vec_to_eigen(x, z1); 
-
-            if (bad_indices_[0].size() > 0 && max_iter_ == 400)
-            {
-                std::cout << "DSS Step" << std::endl;
-
-                D.resize(subdomain.size(), subdomain.size());
-                sub_rhs.resize(subdomain.size());
-                sub_result.resize(subdomain.size());
-
-                int i_counter = 0;
-                for (auto &i : subdomain)
-                {
-                    sub_rhs(i_counter) = r(i) - eigen_A.row(i).dot(z1);
-                    int j_counter = 0;
-                    for (auto &j : subdomain)
-                    {
-                        D(i_counter, j_counter) = eigen_A(i, j);
-                        ++j_counter;
-                    }
-                    ++i_counter;
-                }
-
-                D_solver.compute(D);
-
-                sub_result = D_solver.solve(sub_rhs);
-                i_counter = 0;
-                z2 = z1;
-                for (auto &i : subdomain)
-                {
-                    z2(i) += sub_result(i_counter);
-                    ++i_counter;
-                }
-
-                eigen_to_hypre_par_vec(par_x, x, z3);
-                eigen_to_hypre_par_vec(par_b, b, r - eigen_A * z2);
-
-                HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-                hypre_vec_to_eigen(x, z3);
-                z = z2 + z3;
-            }
-            else
-            {
-                z = z1;
-            }
-            
-            p = z;
-
-            double gamma = r.dot(z);
-            double old_gamma = gamma;
-
-            for (int k = 0; k < max_iter_; ++k)
-            {
-                num_iterations = k + 1;
-
-                double sdotp = p.dot(eigen_A * p);
-
-                if (sdotp == 0.0)
-                {
-                    std::cout << "Zero sdotp value" << std::endl;
-                    break;
-                }
-
-                double alpha = gamma / sdotp;
-
-                if (alpha <= 0.0)
-                {
-                    std::cout << "Negative or zero alpha value" << std::endl;
-                    break;
-                } 
-                else if (alpha < __DBL_MIN__)
-                {
-                    std::cout << "Subnormal alpha value" << std::endl;
-                    break;
-                }
-
-                result += alpha * p;
-                r -= alpha * eigen_A * p;
-                //r = rhs - (eigen_A * result);
-                double drob2 = alpha * alpha * p.dot(p) / bi_prod;
-
-                if (drob2 < conv_tol_ * conv_tol_)
-                {
-                    std::cout << "Converged" << std::endl;
-                    break;
-                }
-
-                double i_prod = r.dot(r);
-                std::cout << "i prod: " << i_prod << std::endl;
-                if (i_prod / bi_prod < eps)
-                {
-                    std::cout << "Converged 2" << std::endl;
-                    break;
-                }
-
-                z.setZero(); 
-                z1.setZero();
-                z2.setZero();
-                z3.setZero();
-
-                eigen_to_hypre_par_vec(par_x, x, z1);
-                eigen_to_hypre_par_vec(par_b, b, r);
-
-                HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-                hypre_vec_to_eigen(x, z1); 
-
-                if (bad_indices_[0].size() > 0 && max_iter_ == 400)
-                {
-
-                    int i_counter = 0;
-                    for (auto &i : subdomain)
-                    {
-                        sub_rhs(i_counter) = r(i) - eigen_A.row(i).dot(z1);
-                        ++i_counter;
-                    }
-
-                    sub_result = D_solver.solve(sub_rhs);
-                    i_counter = 0;
-                    z2 = z1;
-                    for (auto &i : subdomain)
-                    {
-                        z2(i) += sub_result(i_counter);
-                        ++i_counter;
-                    }
-
-                    eigen_to_hypre_par_vec(par_x, x, z3);
-                    eigen_to_hypre_par_vec(par_b, b, r - eigen_A * z2);
-
-                    HYPRE_BoomerAMGSolve(precond, parcsr_A, par_b, par_x);
-
-                    hypre_vec_to_eigen(x, z3);
-                    z = z2 + z3;
-                }
-                else
-                {
-                    z = z1;
-                }
-
-                gamma = r.dot(z);
-                double beta = gamma / old_gamma;
-                old_gamma = gamma;
-
-                p = z + beta*p;
-            }
-
-            final_res_norm = (rhs - (eigen_A * result)).norm();
-        }
-
-        //printf("\n");
-        std::cout << "Iterations: " << num_iterations << std::endl;
-        std::cout << "Final Relative Residual Norm: " << final_res_norm << std::endl;
-        //printf("Iterations = %lld\n", num_iterations);
-        //printf("Final Relative Residual Norm = %g\n", final_res_norm);
-        //printf("\n");
+        
+        logger->trace("Iterations: {}", num_iterations);
+        logger->trace("Final Relative Residual Norm: {}", final_res_norm);
 
         /* Destroy solver and preconditioner */
         HYPRE_BoomerAMGDestroy(precond);
         HYPRE_ParCSRPCGDestroy(solver);
 
-        /*assert(result.size() == rhs.size());
-        for (HYPRE_Int i = 0; i < rhs.size(); ++i)
-        {
-            const HYPRE_Int index[1] = {i};
-            HYPRE_Complex v[1];
-            HYPRE_IJVectorGetValues(x, 1, index, v);
-
-            result(i) = v[0];
-        }*/
+        assert(result.size() == rhs.size());
+        hypre_vec_to_eigen(x, result, start_i, end_i);
 
         HYPRE_IJVectorDestroy(x);
         HYPRE_IJVectorDestroy(b);
 
-    }
-
-    void HypreSolver::mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
-    {
-        
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -610,6 +387,12 @@ namespace polysolve::linear
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
         }
+#ifdef HYPRE_WITH_MPI
+        int finalized;
+        MPI_Finalized(&finalized);
+        if (!finalized)
+            MPI_Finalize();
+#endif
     }
 
 } // namespace polysolve::linear

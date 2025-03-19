@@ -73,12 +73,14 @@ namespace polysolve::linear
         bool has_matrix_ = false;
         int precond_num_;
 
+        int myid = 0;
+        int num_procs = 1;
+        int start_i, end_i;
+
         Eigen::MatrixXd eigen_A;
 
         HYPRE_IJMatrix A;
         HYPRE_ParCSRMatrix parcsr_A;
-
-        void mixed_direct_iterative_solve(const Ref<const VectorXd> b, Ref<VectorXd> x);
 
         double copy_b_and_x_time;
         double set_options_time;

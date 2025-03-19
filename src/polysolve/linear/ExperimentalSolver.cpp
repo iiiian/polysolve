@@ -56,7 +56,7 @@ namespace polysolve::linear
     // Set solver parameters
     void ExperimentalSolver::set_parameters(const json &params)
     {
-        if (params.contains("Hypre"))
+        if (params.contains("Experimental"))
         {
             if (params["Experimental"].contains("max_iter"))
             {
@@ -119,6 +119,7 @@ namespace polysolve::linear
             {
                 rho = params["Experimental"]["rho"];
             }
+#endif
             if (params["Experimental"].contains("save_grad_norms"))
             {
                 save_grad_norms = params["Experimental"]["save_grad_norms"];
@@ -127,7 +128,6 @@ namespace polysolve::linear
             {
                 save_problem = params["Experimental"]["save_problem"];
             }
-#endif
         }
     }
 
@@ -233,10 +233,11 @@ namespace polysolve::linear
             }
 
             std::ofstream file("A.mat");
-            file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros() << std::endl;
+            file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros();
             for (auto & trip : triplets)
             {
-                file << trip.row() << " " << trip.col() << " " << trip.value() << std::endl;
+                file << std::endl;
+                file << trip.row() << " " << trip.col() << " " << trip.value();
             }
             file.close();
         }
@@ -274,16 +275,15 @@ namespace polysolve::linear
                 HYPRE_Int n_cols[1] = {counter};
                 HYPRE_IJMatrixSetValues(A, 1, n_cols, row, cols.data(), vals.data());
             }
+            HYPRE_IJMatrixAssemble(A);
+            HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
         }
-
-        HYPRE_IJMatrixAssemble(A);
-        HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
 
         assert(bad_indices_.size() == 1);
         auto &subdomain = bad_indices_[0];
 
         // Save submatrix for direct step
-        if (!do_mixed_precond || subdomain.size() == 0 || select_bad_dofs_from_rhs)
+        if (!do_mixed_precond || select_bad_dofs_from_rhs || subdomain.size() == 0)
         {
             return;
         }

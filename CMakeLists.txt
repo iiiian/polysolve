@@ -30,8 +30,8 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
     include(${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
 endif()
 
-#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lmpi_cxx")
-#SET(CMAKE_CXX_COMPILER "/usr/bin/mpicxx")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lmpi_cxx")
+SET(CMAKE_CXX_COMPILER "/usr/bin/mpicxx")
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
@@ -361,6 +361,16 @@ target_link_libraries(polysolve PRIVATE polysolve::warnings)
 ################################################################################
 # Compiler options
 ################################################################################
+
+if(POLYSOLVE_TOPLEVEL_PROJECT)
+
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -no-pie")
+    add_executable(${PROJECT_NAME}_bin src/polysolve/main.cpp)
+
+    target_compile_features(${PROJECT_NAME}_bin PUBLIC cxx_std_14)
+
+    target_link_libraries(${PROJECT_NAME}_bin PUBLIC polysolve::polysolve polysolve::warnings)
+endif()
 
 
 ################################################################################

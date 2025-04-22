@@ -86,6 +86,10 @@ namespace polysolve::linear
         bool has_matrix_ = false;
         int precond_num_;
 
+        int myid = 0;
+        int num_procs = 1;
+        int start_i, end_i;
+
         Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
         std::deque<Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>> D_solvers;
 
@@ -111,6 +115,8 @@ namespace polysolve::linear
         void custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z);
         void amg_precond_iter(const HYPRE_Solver &precond, const Ref<const VectorXd> b, Eigen::VectorXd &x);
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
+        void matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result);
+
 
         void factorize_submatrix();
     };

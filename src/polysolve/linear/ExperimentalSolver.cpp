@@ -29,7 +29,7 @@ namespace polysolve::linear
         {
             num_threads = std::stoi(num_threads_val);
         }
-        Eigen::setNbThreads(num_threads);
+
 #ifdef HYPRE_WITH_MPI
         int done_already;
 
@@ -41,15 +41,22 @@ namespace polysolve::linear
             char name[] = "";
             char *argv[] = {name};
             char **argvv = &argv[0];
-            int myid, num_procs;
             MPI_Init(&argc, &argvv);
             MPI_Comm_rank(MPI_COMM_WORLD, &myid);
             MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-            if (myid == 0)
-            {
-                std::cout << "NUMPROCS: " << num_procs << std::endl;
-            }
         }
+        MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+        MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+        if (myid == 0)
+        {
+            Eigen::setNbThreads(num_threads);
+        }
+        else 
+        {
+            Eigen::setNbThreads(1);
+        }
+#else
+        Eigen::setNbThreads(num_threads);
 #endif
     }
 
@@ -151,7 +158,7 @@ namespace polysolve::linear
             sparse_A = Ain;
         }
 
-        #ifdef POLYSOLVE_WITH_ICHOL
+#ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
         {
             logger->trace("Factorizing for ichol");
@@ -234,7 +241,7 @@ namespace polysolve::linear
 
             std::ofstream file("A.mat");
             file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros();
-            for (auto & trip : triplets)
+            for (auto &trip : triplets)
             {
                 file << std::endl;
                 file << trip.row() << " " << trip.col() << " " << trip.value();
@@ -246,8 +253,13 @@ namespace polysolve::linear
         const HYPRE_Int rows = sparse_A.rows();
         const HYPRE_Int cols = sparse_A.cols();
 
+        int local_size = rows / num_procs;
+        start_i = myid == 0 ? 0 : local_size * myid + myid;
+        end_i = myid == num_procs - 1 ? rows - 1 : start_i + local_size;
+        logger->trace("World size: {}, myid: {}", num_procs, myid);
+        logger->trace("start {}, end {}", start_i, end_i);
 #ifdef HYPRE_WITH_MPI
-        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, 0, rows - 1, 0, cols - 1, &A);
+        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, start_i, end_i, start_i, end_i, &A);
 #else
         HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
 #endif
@@ -296,25 +308,35 @@ namespace polysolve::linear
     namespace
     {
 
-        void eigen_to_hypre_par_vec(HYPRE_ParVector &par_x, HYPRE_IJVector &ij_x, const Eigen::VectorXd &x)
+        void eigen_to_hypre_par_vec(HYPRE_ParVector &par_x, HYPRE_IJVector &ij_x, const Eigen::VectorXd &x, int start_i, int end_i)
         {
     #ifdef HYPRE_WITH_MPI
-            HYPRE_IJVectorCreate(MPI_COMM_WORLD, 0, x.size() - 1, &ij_x);
+            HYPRE_IJVectorCreate(MPI_COMM_WORLD, start_i, end_i, &ij_x);
     #else
             HYPRE_IJVectorCreate(0, 0, x.size() - 1, &ij_x);
     #endif
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
             HYPRE_IJVectorInitialize(ij_x);
 
+    #ifdef HYPRE_WITH_MPI
+            HYPRE_IJVectorSetValues(ij_x, end_i - start_i + 1, nullptr, x.data() + start_i);
+    #else
             HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, x.data());
+    #endif
 
             HYPRE_IJVectorAssemble(ij_x);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
-        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::VectorXd &x)
+        void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::Ref<Eigen::VectorXd> x, int start_i, int end_i)
         {
+    #ifdef HYPRE_WITH_MPI
+            x.setZero();
+            HYPRE_IJVectorGetValues(ij_x, end_i - start_i + 1, nullptr, x.data() + start_i);
+            MPI_Allreduce(MPI_IN_PLACE, x.data(), x.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    #else
             HYPRE_IJVectorGetValues(ij_x, x.size(), nullptr, x.data());
+    #endif            
         }
 
         void calculate_rbms(Eigen::VectorXd &rbm_xy, Eigen::VectorXd &rbm_zx, Eigen::VectorXd &rbm_yz, const Eigen::MatrixXd &positions, const int dim)
@@ -430,11 +452,11 @@ namespace polysolve::linear
                 Eigen::VectorXd rbm_xy, rbm_zx, rbm_yz;
                 calculate_rbms(rbm_xy, rbm_zx, rbm_yz, positions, dim);
 
-                eigen_to_hypre_par_vec(par_rbms[0], rbms[0], rbm_xy);
+                eigen_to_hypre_par_vec(par_rbms[0], rbms[0], rbm_xy, 0, positions.rows() - 1);
                 if (dim == 3)
                 {
-                    eigen_to_hypre_par_vec(par_rbms[1], rbms[1], rbm_zx);
-                    eigen_to_hypre_par_vec(par_rbms[2], rbms[2], rbm_yz);
+                    eigen_to_hypre_par_vec(par_rbms[1], rbms[1], rbm_zx, 0, positions.rows() - 1);
+                    eigen_to_hypre_par_vec(par_rbms[2], rbms[2], rbm_yz, 0, positions.rows() - 1);
                 }
             
                 HYPRE_BoomerAMGSetInterpVectors(amg_precond, par_rbms.size(), &(par_rbms[0]));
@@ -478,8 +500,8 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy x and b", copy_b_and_x_time, *logger);
-            eigen_to_hypre_par_vec(par_b, b, remapped_rhs);
-            eigen_to_hypre_par_vec(par_x, x, remapped_result);
+            eigen_to_hypre_par_vec(par_b, b, remapped_rhs, start_i, end_i);
+            eigen_to_hypre_par_vec(par_x, x, remapped_result, start_i, end_i);
         }
 
         /* AMG preconditioner */
@@ -594,6 +616,9 @@ namespace polysolve::linear
 
         /* Now setup and solve! */
         {
+#ifdef HYPRE_WITH_MPI
+            MPI_Barrier(MPI_COMM_WORLD);
+#endif
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
 
             /* Custom PCG */
@@ -605,7 +630,6 @@ namespace polysolve::linear
             
                 bi_prod = remapped_rhs.dot(remapped_rhs);
                 logger->trace("Experimental solver bi prod: {}", bi_prod);
-
 
                 if (bi_prod > 0.0)
                 {
@@ -621,14 +645,21 @@ namespace polysolve::linear
                     return;
                 }
 
-                r = remapped_rhs - (sparse_A * remapped_result);
+                Eigen::VectorXd A_times_result;
+                matmul(remapped_result, sparse_A, A_times_result);
+                r = remapped_rhs - A_times_result;
 
                 p.resize(r.size());
                 z.resize(r.size());
                 p.setZero();
                 z.setZero();
 
+                logger->trace("Before setup");
+#ifdef HYPRE_WITH_MPI
+                MPI_Barrier(MPI_COMM_WORLD);
+#endif
                 HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+                logger->trace("After setup");
 
     #ifdef POLYSOLVE_WITH_ICHOL
                 if (use_incomplete_cholesky_precond)
@@ -658,7 +689,9 @@ namespace polysolve::linear
                 POLYSOLVE_SCOPED_STOPWATCH("main loop time: ", loop_time, *logger);
                 num_iterations = k + 1;
 
-                double sdotp = p.dot(sparse_A * p);
+                Eigen::VectorXd A_times_p;
+                matmul(p, sparse_A, A_times_p);
+                double sdotp = p.dot(A_times_p);
 
                 if (sdotp == 0.0)
                 {
@@ -680,7 +713,8 @@ namespace polysolve::linear
                 }
 
                 remapped_result += alpha * p;
-                r -= alpha * sparse_A * p;
+                matmul(p, sparse_A, A_times_p);
+                r -= alpha * A_times_p;
                 //r = rhs - (sparse_A * result);
                 double drob2 = alpha * alpha * p.dot(p);
                 if (!use_absolute_tol) 
@@ -731,7 +765,9 @@ namespace polysolve::linear
                 p = z + beta*p;
             }
 
-            final_res_norm = (remapped_rhs - (sparse_A * remapped_result)).norm();
+            Eigen::VectorXd A_times_result;
+            matmul(remapped_result, sparse_A, A_times_result);
+            final_res_norm = (remapped_rhs - A_times_result).norm();
         }
 
         logger->debug("Experimental solver Iterations: {}", num_iterations);
@@ -785,9 +821,12 @@ namespace polysolve::linear
 
         if (dss_in_middle)
         {
+
             amg_precond_iter(precond, r, z1);
             dss_precond_iter(z1, r, z2);
-            amg_precond_iter(precond, r - sparse_A * z2, z3);
+            Eigen::VectorXd A_times_z2;
+            matmul(z2, sparse_A, A_times_z2);
+            amg_precond_iter(precond, r - A_times_z2, z3);
             z = z2 + z3;
         }
         else
@@ -795,7 +834,9 @@ namespace polysolve::linear
             Eigen::VectorXd z0(r.size());
             z0.setZero();
             dss_precond_iter(z0, r, z1);
-            amg_precond_iter(precond, r - sparse_A * z1, z2);
+            Eigen::VectorXd A_times_z1;
+            matmul(z2, sparse_A, A_times_z1);
+            amg_precond_iter(precond, r - A_times_z1, z2);
             z2 += z1;
             dss_precond_iter(z2, r, z);
         }
@@ -811,11 +852,14 @@ namespace polysolve::linear
         double solve_time;
         double copy_to_time;
         double copy_from_time;
+#ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy to hypre time: ", copy_to_time, *logger);
-            eigen_to_hypre_par_vec(par_x, x, eigen_x);
-            eigen_to_hypre_par_vec(par_b, b, eigen_b);
+            eigen_to_hypre_par_vec(par_x, x, eigen_x, start_i, end_i);
+            eigen_to_hypre_par_vec(par_b, b, eigen_b, start_i, end_i);
         }
 
         {
@@ -825,7 +869,7 @@ namespace polysolve::linear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy from hypre time: ", copy_from_time, *logger);
-            hypre_vec_to_eigen(x, eigen_x);
+            hypre_vec_to_eigen(x, eigen_x, start_i, end_i);
         }
         
     }
@@ -931,6 +975,23 @@ namespace polysolve::linear
             }
         }
 
+    }
+
+    void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
+    {
+#ifdef HYPRE_WITH_MPI
+        result.resize(x.size());
+        result.setZero();
+        
+        for (int i = start_i; i <= end_i; ++i)
+        {
+            result(i) = sparse_A.row(i).dot(x);
+        }
+
+        MPI_Allreduce(MPI_IN_PLACE, result.data(), result.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+#else
+        result = A*x;
+#endif
     }
 
     ////////////////////////////////////////////////////////////////////////////////

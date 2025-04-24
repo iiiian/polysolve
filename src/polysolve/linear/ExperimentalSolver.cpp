@@ -654,12 +654,10 @@ namespace polysolve::linear
                 p.setZero();
                 z.setZero();
 
-                logger->trace("Before setup");
 #ifdef HYPRE_WITH_MPI
                 MPI_Barrier(MPI_COMM_WORLD);
 #endif
                 HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-                logger->trace("After setup");
 
     #ifdef POLYSOLVE_WITH_ICHOL
                 if (use_incomplete_cholesky_precond)
@@ -821,7 +819,6 @@ namespace polysolve::linear
 
         if (dss_in_middle)
         {
-
             amg_precond_iter(precond, r, z1);
             dss_precond_iter(z1, r, z2);
             Eigen::VectorXd A_times_z2;
@@ -949,16 +946,12 @@ namespace polysolve::linear
                     }
                     for (Eigen::SparseMatrix<double, Eigen::RowMajor>::InnerIterator it(sparse_A, k); it; ++it)
                     {
-                        if (it.col() > it.row())
-                        {
-                            break;
-                        }
-                        if (bad_indices_[i].count(it.col()) == 0)
+
+                        if (bad_indices_[i].count(it.col()) == 0 || bad_indices_[i].count(it.row()) == 0)
                         {
                             continue;
                         }
                         triplets.push_back(Eigen::Triplet<double>(index_mapping[it.row()], index_mapping[it.col()], it.value()));
-                        triplets.push_back(Eigen::Triplet<double>(index_mapping[it.col()], index_mapping[it.row()], it.value()));
                     }
                 }
 

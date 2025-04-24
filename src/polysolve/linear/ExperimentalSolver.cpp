@@ -211,15 +211,6 @@ namespace polysolve::linear
         }
 #endif
 
-        if (print_conditioning)
-        {
-            Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
-            double cond = svd.singularValues()(0) 
-            / svd.singularValues()(svd.singularValues().size()-1);
-
-            logger->debug("Condition number: {}", cond);
-        }
-
         if (has_matrix_)
         {
             HYPRE_IJMatrixDestroy(A);
@@ -612,6 +603,84 @@ namespace polysolve::linear
             }
 
             factorize_submatrix();
+        }
+
+        if (print_conditioning)
+        {
+            Eigen::EigenSolver<Eigen::MatrixXd> eigensolver(sparse_A);
+            //Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
+            //double cond = svd.singularValues()(0) 
+            /// svd.singularValues()(svd.singularValues().size()-1);
+
+            Eigen::VectorXd eigenvalues = eigensolver.eigenvalues().real();
+            bool spd = true;
+            for (int i = 0; i < eigenvalues.size(); ++i)
+            {
+                if (eigenvalues(i) < 0)
+                {
+                    spd = false;
+                }
+            }
+            logger->trace("Analyzing Hessian...");
+            if (spd)
+            {
+                logger->trace("SPD confirmed!");
+            } else
+            {
+                logger->trace("Negative eigenvalue found, Hessian not SPD!");
+            }
+            Eigen::VectorXd abs_eigenvalues = eigenvalues.cwiseAbs();
+            double cond = abs_eigenvalues.maxCoeff() / abs_eigenvalues.minCoeff();
+            logger->trace("Condition number: {}", cond);
+
+            Eigen::MatrixXd preconditioned_A = sparse_A;
+
+            for (int col = 0; col < preconditioned_A.cols(); ++col)
+            {
+                auto &subdomain = bad_indices_[0];
+
+                Eigen::VectorXd sub_rhs;
+                Eigen::VectorXd sub_result;
+                sub_rhs.resize(subdomain.size());
+                sub_result.resize(subdomain.size());
+
+                int i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    sub_rhs(i_counter) = preconditioned_A(i, col);
+                    ++i_counter;
+                }
+
+                sub_result = D_solvers[0].solve(sub_rhs);
+                i_counter = 0;
+                for (auto &i : subdomain)
+                {
+                    preconditioned_A(i, col) = sub_result(i_counter);
+                    ++i_counter;
+                }
+            }
+
+            Eigen::EigenSolver<Eigen::MatrixXd> eigensolver2(preconditioned_A);
+            eigenvalues = eigensolver2.eigenvalues().real();
+            spd = true;
+            for (int i = 0; i < eigenvalues.size(); ++i)
+            {
+                if (eigenvalues(i) < 0)
+                {
+                    spd = false;
+                }
+            }
+            logger->trace("Analyzing Preconditioned Hessian...");
+            if (spd)
+            {
+                logger->trace("SPD confirmed!");
+            } else
+            {
+                logger->trace("Negative eigenvalue found, Hessian not SPD!");
+            }
+            abs_eigenvalues = eigenvalues.cwiseAbs();
+            cond = abs_eigenvalues.maxCoeff() / abs_eigenvalues.minCoeff();
+            logger->trace("Condition number: {}", cond);
         }
 
         /* Now setup and solve! */

@@ -117,6 +117,8 @@ namespace polysolve::linear
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
         void matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result);
 
+        void check_matrix_conditioning(const std::string name, const std::set<int>& subdomain);
+        void check_matrix_conditioning(const std::string name, const Eigen::MatrixXd& mat);
 
         void factorize_submatrix();
     };

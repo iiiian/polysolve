@@ -566,36 +566,6 @@ namespace polysolve::linear
                             for (int j = 0; j < dimension_; ++j)
                             {
                                 bad_indices_[0].insert(dimension_ * i + j);
-                                /*Eigen::VectorXd row = sparse_A.row(dimension_ * i + j);
-                                std::set<int> nonzero_indices;
-                                for (int index = 0; index < row.size(); ++index)
-                                {
-                                    if (row(index) != 0)
-                                    {
-                                        nonzero_indices.insert(index);
-                                    }
-                                }
-                                bool found_subdomain = false;
-                                for (auto &subdomain : bad_indices_)
-                                {
-                                    std::set<int> intersection;
-                                    std::set_intersection(
-                                        subdomain.begin(), subdomain.end(),
-                                        nonzero_indices.begin(), nonzero_indices.end(),
-                                        std::inserter(intersection, intersection.begin())
-                                    );
-                                    if (true || intersection.size() > 0)
-                                    {
-                                        subdomain.insert(dimension_ * i + j);
-                                        found_subdomain = true;
-                                        break;
-                                    }
-                                }
-                                if (!found_subdomain)
-                                {
-                                    bad_indices_.emplace_back();
-                                    bad_indices_.back().insert(dimension_ * i + j);
-                                }*/
                             }
                         }
                     }
@@ -607,56 +577,8 @@ namespace polysolve::linear
 
         if (print_conditioning)
         {
-            Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
-            double cond = svd.singularValues()(0) 
-            / svd.singularValues()(svd.singularValues().size()-1);
-
-            Eigen::LLT<Eigen::MatrixXd> chol_decomp(sparse_A);
-            bool spd = !(chol_decomp.info() == Eigen::NumericalIssue);
-            bool symm = sparse_A.isApprox(sparse_A.transpose());
-
-            logger->trace("Analyzing Hessian...");
-            logger->trace("SPD: {}, Symm: {}", spd, symm);
-            logger->trace("Condition number: {}", cond);
-
-            Eigen::MatrixXd preconditioned_A = sparse_A;
-
-            for (int col = 0; col < preconditioned_A.cols(); ++col)
-            {
-                auto &subdomain = bad_indices_[0];
-
-                Eigen::VectorXd sub_rhs;
-                Eigen::VectorXd sub_result;
-                sub_rhs.resize(subdomain.size());
-                sub_result.resize(subdomain.size());
-
-                int i_counter = 0;
-                for (auto &i : subdomain)
-                {
-                    sub_rhs(i_counter) = preconditioned_A(i, col);
-                    ++i_counter;
-                }
-
-                sub_result = D_solvers[0].solve(sub_rhs);
-                i_counter = 0;
-                for (auto &i : subdomain)
-                {
-                    preconditioned_A(i, col) = sub_result(i_counter);
-                    ++i_counter;
-                }
-            }
-
-            Eigen::BDCSVD<Eigen::MatrixXd> svd2(preconditioned_A);
-            cond = svd2.singularValues()(0) 
-            / svd2.singularValues()(svd2.singularValues().size()-1);
-
-            Eigen::LLT<Eigen::MatrixXd> chol_decomp2(preconditioned_A);
-            spd = !(chol_decomp2.info() == Eigen::NumericalIssue);
-            symm = preconditioned_A.isApprox(preconditioned_A.transpose());
-
-            logger->trace("Analyzing Preconditioned Hessian...");
-            logger->trace("SPD: {}, Symm: {}", spd, symm);
-            logger->trace("Condition number: {}", cond);
+            check_matrix_conditioning("Hessian", sparse_A);
+            check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
         }
 
         /* Now setup and solve! */
@@ -1012,7 +934,6 @@ namespace polysolve::linear
                 }
             }
         }
-
     }
 
     void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
@@ -1030,6 +951,57 @@ namespace polysolve::linear
 #else
         result = A*x;
 #endif
+    }
+
+    void ExperimentalSolver::check_matrix_conditioning(const std::string name, const std::set<int>& subdomain)
+    {
+        if (subdomain.size() == 0)
+        {
+            return;
+        }
+
+        Eigen::MatrixXd preconditioned_A = sparse_A;
+
+        for (int col = 0; col < preconditioned_A.cols(); ++col)
+        {
+            Eigen::VectorXd sub_rhs;
+            Eigen::VectorXd sub_result;
+            sub_rhs.resize(subdomain.size());
+            sub_result.resize(subdomain.size());
+
+            int i_counter = 0;
+            for (auto &i : subdomain)
+            {
+                sub_rhs(i_counter) = preconditioned_A(i, col);
+                ++i_counter;
+            }
+
+            sub_result = D_solvers[0].solve(sub_rhs);
+            i_counter = 0;
+            for (auto &i : subdomain)
+            {
+                preconditioned_A(i, col) = sub_result(i_counter);
+                ++i_counter;
+            }
+        }
+
+        check_matrix_conditioning(name, preconditioned_A);
+    }
+
+    void ExperimentalSolver::check_matrix_conditioning(const std::string name, const Eigen::MatrixXd& mat)
+    {
+        Eigen::BDCSVD<Eigen::MatrixXd> svd(mat);
+        double cond = svd.singularValues()(0) 
+        / svd.singularValues()(svd.singularValues().size()-1);
+
+        Eigen::LDLT<Eigen::MatrixXd> chol_decomp(mat);
+        bool spd = !(chol_decomp.info() == Eigen::NumericalIssue);
+        bool symm = mat.isApprox(mat.transpose());
+        bool isPos = chol_decomp.isPositive();
+
+        logger->trace("Analyzing {}...", name);
+        logger->trace("SPD: {}, Symm: {}, isPos: {}", spd, symm, isPos);
+        logger->trace("Condition number: {}", cond);
     }
 
     ////////////////////////////////////////////////////////////////////////////////

@@ -607,30 +607,16 @@ namespace polysolve::linear
 
         if (print_conditioning)
         {
-            Eigen::EigenSolver<Eigen::MatrixXd> eigensolver(sparse_A);
-            //Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
-            //double cond = svd.singularValues()(0) 
-            /// svd.singularValues()(svd.singularValues().size()-1);
+            Eigen::BDCSVD<Eigen::MatrixXd> svd(sparse_A);
+            double cond = svd.singularValues()(0) 
+            / svd.singularValues()(svd.singularValues().size()-1);
 
-            Eigen::VectorXd eigenvalues = eigensolver.eigenvalues().real();
-            bool spd = true;
-            for (int i = 0; i < eigenvalues.size(); ++i)
-            {
-                if (eigenvalues(i) < 0)
-                {
-                    spd = false;
-                }
-            }
+            Eigen::LLT<Eigen::MatrixXd> chol_decomp(sparse_A);
+            bool spd = !(chol_decomp.info() == Eigen::NumericalIssue);
+            bool symm = sparse_A.isApprox(sparse_A.transpose());
+
             logger->trace("Analyzing Hessian...");
-            if (spd)
-            {
-                logger->trace("SPD confirmed!");
-            } else
-            {
-                logger->trace("Negative eigenvalue found, Hessian not SPD!");
-            }
-            Eigen::VectorXd abs_eigenvalues = eigenvalues.cwiseAbs();
-            double cond = abs_eigenvalues.maxCoeff() / abs_eigenvalues.minCoeff();
+            logger->trace("SPD: {}, Symm: {}", spd, symm);
             logger->trace("Condition number: {}", cond);
 
             Eigen::MatrixXd preconditioned_A = sparse_A;
@@ -660,26 +646,16 @@ namespace polysolve::linear
                 }
             }
 
-            Eigen::EigenSolver<Eigen::MatrixXd> eigensolver2(preconditioned_A);
-            eigenvalues = eigensolver2.eigenvalues().real();
-            spd = true;
-            for (int i = 0; i < eigenvalues.size(); ++i)
-            {
-                if (eigenvalues(i) < 0)
-                {
-                    spd = false;
-                }
-            }
+            Eigen::BDCSVD<Eigen::MatrixXd> svd2(preconditioned_A);
+            cond = svd2.singularValues()(0) 
+            / svd2.singularValues()(svd2.singularValues().size()-1);
+
+            Eigen::LLT<Eigen::MatrixXd> chol_decomp2(preconditioned_A);
+            spd = !(chol_decomp2.info() == Eigen::NumericalIssue);
+            symm = preconditioned_A.isApprox(preconditioned_A.transpose());
+
             logger->trace("Analyzing Preconditioned Hessian...");
-            if (spd)
-            {
-                logger->trace("SPD confirmed!");
-            } else
-            {
-                logger->trace("Negative eigenvalue found, Hessian not SPD!");
-            }
-            abs_eigenvalues = eigenvalues.cwiseAbs();
-            cond = abs_eigenvalues.maxCoeff() / abs_eigenvalues.minCoeff();
+            logger->trace("SPD: {}, Symm: {}", spd, symm);
             logger->trace("Condition number: {}", cond);
         }
 

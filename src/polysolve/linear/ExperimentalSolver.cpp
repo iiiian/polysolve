@@ -135,6 +135,10 @@ namespace polysolve::linear
             {
                 save_problem = params["Experimental"]["save_problem"];
             }
+            if (params["Experimental"].contains("save_selected_indices"))
+            {
+                save_selected_indices = params["Experimental"]["save_selected_indices"];
+            }
         }
     }
 
@@ -581,6 +585,21 @@ namespace polysolve::linear
             check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
         }
 
+        if (save_selected_indices)
+        {
+            std::ofstream file;
+            file.open("selected_indices.txt", std::ios_base::app);
+            if (bad_indices_.size() > 0)
+            {
+                for (auto i : bad_indices_[0])
+                {
+                    file << i << " ";
+                }
+            }
+            file << std::endl;;
+            file.close();
+        }
+
         /* Now setup and solve! */
         {
 #ifdef HYPRE_WITH_MPI
@@ -668,7 +687,7 @@ namespace polysolve::linear
 
                 if (alpha <= 0.0)
                 {
-                    logger->debug("Experimental solver error: negative or zero alpha value");
+                    logger->debug("Experimental solver error: negative or zero alpha value. gamma: {}, sdotp: {}", gamma, sdotp);
                     break;
                 } 
                 else if (alpha < __DBL_MIN__)

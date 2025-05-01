@@ -473,7 +473,8 @@
             "bad_dof_grad_threshold",
             "select_bad_dofs_from_rhs",
             "save_grad_norms",
-            "save_problem"
+            "save_problem",
+            "save_selected_indices"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -578,6 +579,12 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to save matrix and rhs to separate files."
+    },
+    {
+        "pointer": "/Experimental/save_selected_indices",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to save the indices used in DSS to file."
     }
         
 ]

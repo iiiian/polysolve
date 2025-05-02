@@ -74,7 +74,10 @@ namespace polysolve::linear
         bool use_absolute_tol = false;
         bool select_bad_dofs_from_rhs;
         double bad_dof_grad_threshold;
+        bool select_bad_dofs_from_row_norms;
+        double bad_dof_row_norm_threshold;
         bool save_grad_norms;
+        bool save_row_norms;
         bool save_selected_indices;
         bool save_problem;
 

@@ -113,9 +113,17 @@ namespace polysolve::linear
             {
                 select_bad_dofs_from_rhs = params["Experimental"]["select_bad_dofs_from_rhs"];
             }
+            if (params["Experimental"].contains("select_bad_dofs_from_row_norms"))
+            {
+                select_bad_dofs_from_row_norms = params["Experimental"]["select_bad_dofs_from_row_norms"];
+            }
             if (params["Experimental"].contains("bad_dof_grad_threshold"))
             {
                 bad_dof_grad_threshold = params["Experimental"]["bad_dof_grad_threshold"];
+            }
+            if (params["Experimental"].contains("bad_dof_row_norm_threshold"))
+            {
+                bad_dof_row_norm_threshold = params["Experimental"]["bad_dof_row_norm_threshold"];
             }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
@@ -130,6 +138,10 @@ namespace polysolve::linear
             if (params["Experimental"].contains("save_grad_norms"))
             {
                 save_grad_norms = params["Experimental"]["save_grad_norms"];
+            }
+            if (params["Experimental"].contains("save_row_norms"))
+            {
+                save_row_norms = params["Experimental"]["save_row_norms"];
             }
             if (params["Experimental"].contains("save_problem"))
             {
@@ -576,6 +588,53 @@ namespace polysolve::linear
                 }
             }
 
+            factorize_submatrix();
+        }
+
+        if (select_bad_dofs_from_rhs && select_bad_dofs_from_row_norms)
+        {
+            logger->warn("Select from grad and row norms both selected, defaulting to the latter.");   
+        }
+
+        if (select_bad_dofs_from_row_norms)
+        {
+            bad_indices_.clear();
+            bad_indices_.resize(1);
+
+            {
+                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
+
+                assert(rhs.size() % dimension_ == 0);
+                Eigen::VectorXd sq_mags(rhs.size());
+                for (int i = 0; i < rhs.size(); ++i)
+                {
+                    sq_mags(i) = sparse_A.row(i).norm();
+                }
+                Eigen::VectorXd sq_mags_copy = sq_mags;
+                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
+
+                if (save_row_norms)
+                {
+                    std::ofstream file;
+                    file.open("row_norms.txt", std::ios_base::app);
+                    file << sq_mags_copy.transpose() << std::endl;
+                    file.close();
+                }
+
+                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_row_norm_threshold);
+                const double cutoff = sq_mags_copy(cutoff_index);
+
+                if (cutoff > 0)
+                {
+                    for (int i = 0; i < rhs.size(); ++i)
+                    {
+                        if (sq_mags(i) >= cutoff)
+                        {
+                            bad_indices_[0].insert(i);
+                        }
+                    }
+                }
+            }
             factorize_submatrix();
         }
 

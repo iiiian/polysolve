@@ -569,10 +569,28 @@
         "doc": "Whether or not to use magnitude of gradient at node to select problematic dofs."
     },
     {
+        "pointer": "/Experimental/bad_dof_row_norm_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "What percentile row norm magnitude to use as a cutoff for marking a node as problematic (between 0 and 1)."
+    },
+    {
+        "pointer": "/Experimental/select_bad_dofs_from_row_norms",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use magnitude of hessian rows for node to select problematic dofs."
+    },
+    {
         "pointer": "/Experimental/save_grad_norms",
         "default": false,
         "type": "bool",
         "doc": "Whether or not to save sorted magnitude of gradient to file."
+    },
+    {
+        "pointer": "/Experimental/save_row_norms",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to save sorted magnitude of hessian rows to file."
     },
     {
         "pointer": "/Experimental/save_problem",

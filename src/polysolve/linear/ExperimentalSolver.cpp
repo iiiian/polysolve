@@ -302,7 +302,7 @@ namespace polysolve::linear
         auto &subdomain = bad_indices_[0];
 
         // Save submatrix for direct step
-        if (!do_mixed_precond || select_bad_dofs_from_rhs || subdomain.size() == 0)
+        if (!do_mixed_precond || select_bad_dofs_from_rhs || select_bad_dofs_from_row_norms || subdomain.size() == 0)
         {
             return;
         }

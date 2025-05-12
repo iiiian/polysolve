@@ -474,6 +474,8 @@
             "select_bad_dofs_from_rhs",
             "bad_dof_row_norm_threshold",
             "select_bad_dofs_from_row_norms",
+            "bad_dof_amg_threshold",
+            "select_bad_dofs_from_amg",
             "save_grad_norms",
             "save_problem",
             "save_selected_indices",
@@ -582,6 +584,18 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to use magnitude of hessian rows for node to select problematic dofs."
+    },
+    {
+        "pointer": "/Experimental/select_bad_dofs_from_amg",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use amg iterations to select problematic dofs."
+    },
+    {
+        "pointer": "/Experimental/bad_dof_amg_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "What percentile amg dof magnitude to use as a cutoff for marking a node as problematic (between 0 and 1)."
     },
     {
         "pointer": "/Experimental/save_grad_norms",

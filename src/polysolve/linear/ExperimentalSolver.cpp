@@ -117,6 +117,10 @@ namespace polysolve::linear
             {
                 select_bad_dofs_from_row_norms = params["Experimental"]["select_bad_dofs_from_row_norms"];
             }
+            if (params["Experimental"].contains("select_bad_dofs_from_amg"))
+            {
+                select_bad_dofs_from_amg = params["Experimental"]["select_bad_dofs_from_amg"];
+            }
             if (params["Experimental"].contains("bad_dof_grad_threshold"))
             {
                 bad_dof_grad_threshold = params["Experimental"]["bad_dof_grad_threshold"];
@@ -124,6 +128,10 @@ namespace polysolve::linear
             if (params["Experimental"].contains("bad_dof_row_norm_threshold"))
             {
                 bad_dof_row_norm_threshold = params["Experimental"]["bad_dof_row_norm_threshold"];
+            }
+            if (params["Experimental"].contains("bad_dof_amg_threshold"))
+            {
+                bad_dof_amg_threshold = params["Experimental"]["bad_dof_amg_threshold"];
             }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
@@ -302,7 +310,7 @@ namespace polysolve::linear
         auto &subdomain = bad_indices_[0];
 
         // Save submatrix for direct step
-        if (!do_mixed_precond || select_bad_dofs_from_rhs || select_bad_dofs_from_row_norms || subdomain.size() == 0)
+        if (!do_mixed_precond || select_bad_dofs_from_rhs || select_bad_dofs_from_row_norms || select_bad_dofs_from_amg || subdomain.size() == 0)
         {
             return;
         }
@@ -635,6 +643,78 @@ namespace polysolve::linear
                     }
                 }
             }
+            factorize_submatrix();
+        }
+
+        if (select_bad_dofs_from_amg)
+        {
+            double select_dofs_from_amg_time;
+            POLYSOLVE_SCOPED_STOPWATCH("select dofs from amg", select_dofs_from_amg_time, *logger);
+            HYPRE_ParVector test_par_b;
+            HYPRE_ParVector test_par_x;
+            HYPRE_IJVector test_x;
+            HYPRE_IJVector test_b;
+
+            Eigen::VectorXd test_result = Eigen::VectorXd::Random(remapped_result.size());
+            Eigen::VectorXd test_rhs(remapped_result.size());
+            test_rhs.setZero();
+
+            eigen_to_hypre_par_vec(test_par_b, test_b, test_rhs, start_i, end_i);
+            eigen_to_hypre_par_vec(test_par_x, test_x, test_result, start_i, end_i);
+
+            HYPRE_Solver test_precond;
+            HypreBoomerAMG_SetDefaultOptions(test_precond);
+            if (dimension_ > 1)
+            {
+                HypreBoomerAMG_SetElasticityOptions(
+                    test_precond, 
+                    dimension_, 
+                    theta, 
+                    nodal_coarsening, 
+                    interp_rbms, 
+                    positions_,
+                    dof_to_function_, 
+                    rbms, 
+                    par_rbms
+                );
+            }
+
+            HYPRE_BoomerAMGSetMaxIter(test_precond, 10);
+            HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
+            HYPRE_BoomerAMGSolve(precond, parcsr_A, test_par_b, test_par_x);
+
+            hypre_vec_to_eigen(test_x, test_result, start_i, end_i);
+
+            bad_indices_.clear();
+            bad_indices_.resize(1);
+
+            {
+                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
+
+                assert(rhs.size() % dimension_ == 0);
+                Eigen::VectorXd sq_mags(rhs.size());
+                for (int i = 0; i < rhs.size(); ++i)
+                {
+                    sq_mags(i) = test_result(i) * test_result(i);
+                }
+                Eigen::VectorXd sq_mags_copy = sq_mags;
+                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
+
+                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_amg_threshold);
+                const double cutoff = sq_mags_copy(cutoff_index);
+
+                if (cutoff > 0)
+                {
+                    for (int i = 0; i < rhs.size(); ++i)
+                    {
+                        if (sq_mags(i) >= cutoff)
+                        {
+                            bad_indices_[0].insert(i);
+                        }
+                    }
+                }
+            }
+
             factorize_submatrix();
         }
 

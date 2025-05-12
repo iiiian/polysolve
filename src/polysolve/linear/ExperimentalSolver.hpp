@@ -76,6 +76,8 @@ namespace polysolve::linear
         double bad_dof_grad_threshold;
         bool select_bad_dofs_from_row_norms;
         double bad_dof_row_norm_threshold;
+        bool select_bad_dofs_from_amg;
+        double bad_dof_amg_threshold;
         bool save_grad_norms;
         bool save_row_norms;
         bool save_selected_indices;

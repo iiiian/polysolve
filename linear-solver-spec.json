@@ -472,9 +472,12 @@
             "rho",
             "bad_dof_grad_threshold",
             "select_bad_dofs_from_rhs",
+            "bad_dof_row_norm_threshold",
+            "select_bad_dofs_from_row_norms",
             "save_grad_norms",
             "save_problem",
-            "save_selected_indices"
+            "save_selected_indices",
+            "save_row_norms"
         ],
         "doc": "Settings for the Experimental solver."
     },

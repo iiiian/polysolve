@@ -681,7 +681,7 @@ namespace polysolve::linear
 
             HYPRE_BoomerAMGSetMaxIter(test_precond, 10);
             HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
-            HYPRE_BoomerAMGSolve(precond, parcsr_A, test_par_b, test_par_x);
+            HYPRE_BoomerAMGSolve(test_precond, parcsr_A, test_par_b, test_par_x);
 
             hypre_vec_to_eigen(test_x, test_result, start_i, end_i);
 

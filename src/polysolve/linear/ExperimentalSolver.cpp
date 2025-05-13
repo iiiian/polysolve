@@ -623,9 +623,14 @@ namespace polysolve::linear
 
                 if (save_row_norms)
                 {
+                    std::ofstream sorted_file;
+                    sorted_file.open("sorted_row_norms.txt", std::ios_base::app);
+                    sorted_file << sq_mags_copy.transpose() << std::endl;
+                    sorted_file.close();
+
                     std::ofstream file;
                     file.open("row_norms.txt", std::ios_base::app);
-                    file << sq_mags_copy.transpose() << std::endl;
+                    file << sq_mags.transpose() << std::endl;
                     file.close();
                 }
 

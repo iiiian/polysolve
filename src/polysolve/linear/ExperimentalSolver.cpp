@@ -411,7 +411,7 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetInterpType(amg_precond, interp_type);
             HYPRE_BoomerAMGSetPMaxElmts(amg_precond, Pmax);
             HYPRE_BoomerAMGSetPrintLevel(amg_precond, print_level);
-            //HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
+            HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
 
             // Use as a preconditioner (one V-cycle, zero tolerance)
             HYPRE_BoomerAMGSetMaxIter(amg_precond, 1);
@@ -663,6 +663,7 @@ namespace polysolve::linear
             eigen_to_hypre_par_vec(test_par_x, test_x, test_result, start_i, end_i);
 
             HYPRE_Solver test_precond;
+            HYPRE_BoomerAMGCreate(&test_precond);
             HypreBoomerAMG_SetDefaultOptions(test_precond);
             if (dimension_ > 1)
             {

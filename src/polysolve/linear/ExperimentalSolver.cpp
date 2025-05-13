@@ -411,7 +411,7 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetInterpType(amg_precond, interp_type);
             HYPRE_BoomerAMGSetPMaxElmts(amg_precond, Pmax);
             HYPRE_BoomerAMGSetPrintLevel(amg_precond, print_level);
-            HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
+            //HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
 
             // Use as a preconditioner (one V-cycle, zero tolerance)
             HYPRE_BoomerAMGSetMaxIter(amg_precond, 1);

@@ -552,6 +552,11 @@ namespace polysolve::linear
             check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
         }
 
+        #ifdef HYPRE_WITH_MPI
+            MPI_Barrier(MPI_COMM_WORLD);
+        #endif
+                    HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+
         /* Now setup and solve! */
         {
 #ifdef HYPRE_WITH_MPI
@@ -632,11 +637,6 @@ namespace polysolve::linear
             z.resize(r.size());
             p.setZero();
             z.setZero();
-
-#ifdef HYPRE_WITH_MPI
-            MPI_Barrier(MPI_COMM_WORLD);
-#endif
-            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
 #ifdef POLYSOLVE_WITH_ICHOL
             if (use_incomplete_cholesky_precond)

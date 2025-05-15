@@ -159,6 +159,10 @@ namespace polysolve::linear
             {
                 save_selected_indices = params["Experimental"]["save_selected_indices"];
             }
+            if (params["Experimental"].contains("use_gmres"))
+            {
+                use_gmres = params["Experimental"]["use_gmres"];
+            }
         }
     }
 
@@ -254,13 +258,13 @@ namespace polysolve::linear
                 }
             }
 
-            std::ofstream file("A.mat");
-            file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros();
+            std::ofstream file("A.mat", std::ios_base::app);
+            file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros() << std::endl;
             for (auto &trip : triplets)
             {
-                file << std::endl;
                 file << trip.row() << " " << trip.col() << " " << trip.value();
             }
+            file << std::endl;
             file.close();
         }
 
@@ -503,8 +507,9 @@ namespace polysolve::linear
 
         if (save_problem)
         {
-            std::ofstream file("rhs.mat");
-            file << remapped_rhs;
+            std::ofstream file("rhs.mat", std::ios_base::app);
+            file << remapped_rhs.transpose();
+            file << std::endl;
             file.close();
         }
 
@@ -722,6 +727,8 @@ namespace polysolve::linear
             }
 
             factorize_submatrix();
+            HYPRE_IJVectorDestroy(test_x);
+            HYPRE_IJVectorDestroy(test_b);
         }
 
         if (print_conditioning)
@@ -999,6 +1006,9 @@ namespace polysolve::linear
             POLYSOLVE_SCOPED_STOPWATCH("copy from hypre time: ", copy_from_time, *logger);
             hypre_vec_to_eigen(x, eigen_x, start_i, end_i);
         }
+
+        HYPRE_IJVectorDestroy(x);
+        HYPRE_IJVectorDestroy(b);
         
     }
 

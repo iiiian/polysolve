@@ -82,6 +82,7 @@ namespace polysolve::linear
         bool save_row_norms;
         bool save_selected_indices;
         bool save_problem;
+        bool use_gmres;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

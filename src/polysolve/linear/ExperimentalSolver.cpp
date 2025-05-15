@@ -262,7 +262,7 @@ namespace polysolve::linear
             file << sparse_A.rows() << " " << sparse_A.cols() << " " << sparse_A.nonZeros() << std::endl;
             for (auto &trip : triplets)
             {
-                file << trip.row() << " " << trip.col() << " " << trip.value();
+                file << trip.row() << " " << trip.col() << " " << trip.value() << " ";
             }
             file << std::endl;
             file.close();
@@ -310,16 +310,6 @@ namespace polysolve::linear
             HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
         }
 
-        assert(bad_indices_.size() == 1);
-        auto &subdomain = bad_indices_[0];
-
-        // Save submatrix for direct step
-        if (!do_mixed_precond || select_bad_dofs_from_rhs || select_bad_dofs_from_row_norms || select_bad_dofs_from_amg || subdomain.size() == 0)
-        {
-            return;
-        }
-
-        factorize_submatrix();
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -553,203 +543,13 @@ namespace polysolve::linear
             }
         }
 
-        if (select_bad_dofs_from_rhs)
-        {
-            bad_indices_.clear();
-            bad_indices_.resize(1);
-
-            {
-                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
-
-                assert(rhs.size() % dimension_ == 0);
-                Eigen::VectorXd sq_mags(rhs.size() / dimension_);
-                for (int i = 0; i < rhs.size() / dimension_; ++i)
-                {
-                    double sq_mag = rhs(dimension_ * i) * rhs(dimension_ * i);
-                    for (int j = 1; j < dimension_; ++j)
-                    {
-                        sq_mag += rhs(dimension_ * i + j) * rhs(dimension_ * i + j);
-                    } 
-                    sq_mags(i) = sq_mag;
-                }
-                Eigen::VectorXd sq_mags_copy = sq_mags;
-                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
-
-                if (save_grad_norms)
-                {
-                    std::ofstream file;
-                    file.open("grad_norms.txt", std::ios_base::app);
-                    file << sq_mags_copy.transpose() << std::endl;
-                    file.close();
-                }
-
-                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_grad_threshold);
-                const double cutoff = sq_mags_copy(cutoff_index);
-
-                if (cutoff > 0)
-                {
-                    for (int i = 0; i < rhs.size() / dimension_; ++i)
-                    {
-                        if (sq_mags(i) >= cutoff)
-                        {
-                            for (int j = 0; j < dimension_; ++j)
-                            {
-                                bad_indices_[0].insert(dimension_ * i + j);
-                            }
-                        }
-                    }
-                }
-            }
-
-            factorize_submatrix();
-        }
-
-        if (select_bad_dofs_from_rhs && select_bad_dofs_from_row_norms)
-        {
-            logger->warn("Select from grad and row norms both selected, defaulting to the latter.");   
-        }
-
-        if (select_bad_dofs_from_row_norms)
-        {
-            bad_indices_.clear();
-            bad_indices_.resize(1);
-
-            {
-                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
-
-                assert(rhs.size() % dimension_ == 0);
-                Eigen::VectorXd sq_mags(rhs.size());
-                for (int i = 0; i < rhs.size(); ++i)
-                {
-                    sq_mags(i) = sparse_A.row(i).norm();
-                }
-                Eigen::VectorXd sq_mags_copy = sq_mags;
-                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
-
-                if (save_row_norms)
-                {
-                    std::ofstream sorted_file;
-                    sorted_file.open("sorted_row_norms.txt", std::ios_base::app);
-                    sorted_file << sq_mags_copy.transpose() << std::endl;
-                    sorted_file.close();
-
-                    std::ofstream file;
-                    file.open("row_norms.txt", std::ios_base::app);
-                    file << sq_mags.transpose() << std::endl;
-                    file.close();
-                }
-
-                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_row_norm_threshold);
-                const double cutoff = sq_mags_copy(cutoff_index);
-
-                if (cutoff > 0)
-                {
-                    for (int i = 0; i < rhs.size(); ++i)
-                    {
-                        if (sq_mags(i) >= cutoff)
-                        {
-                            bad_indices_[0].insert(i);
-                        }
-                    }
-                }
-            }
-            factorize_submatrix();
-        }
-
-        if (select_bad_dofs_from_amg)
-        {
-            double select_dofs_from_amg_time;
-            POLYSOLVE_SCOPED_STOPWATCH("select dofs from amg", select_dofs_from_amg_time, *logger);
-            HYPRE_ParVector test_par_b;
-            HYPRE_ParVector test_par_x;
-            HYPRE_IJVector test_x;
-            HYPRE_IJVector test_b;
-
-            Eigen::VectorXd test_result = Eigen::VectorXd::Random(remapped_result.size());
-            Eigen::VectorXd test_rhs(remapped_result.size());
-            test_rhs.setZero();
-
-            eigen_to_hypre_par_vec(test_par_b, test_b, test_rhs, start_i, end_i);
-            eigen_to_hypre_par_vec(test_par_x, test_x, test_result, start_i, end_i);
-
-            HYPRE_Solver test_precond;
-            HYPRE_BoomerAMGCreate(&test_precond);
-            HypreBoomerAMG_SetDefaultOptions(test_precond);
-            if (dimension_ > 1)
-            {
-                HypreBoomerAMG_SetElasticityOptions(
-                    test_precond, 
-                    dimension_, 
-                    theta, 
-                    nodal_coarsening, 
-                    interp_rbms, 
-                    positions_,
-                    dof_to_function_, 
-                    rbms, 
-                    par_rbms
-                );
-            }
-
-            HYPRE_BoomerAMGSetMaxIter(test_precond, 10);
-            HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
-            HYPRE_BoomerAMGSolve(test_precond, parcsr_A, test_par_b, test_par_x);
-
-            hypre_vec_to_eigen(test_x, test_result, start_i, end_i);
-
-            bad_indices_.clear();
-            bad_indices_.resize(1);
-
-            {
-                POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
-
-                assert(rhs.size() % dimension_ == 0);
-                Eigen::VectorXd sq_mags(rhs.size());
-                for (int i = 0; i < rhs.size(); ++i)
-                {
-                    sq_mags(i) = test_result(i) * test_result(i);
-                }
-                Eigen::VectorXd sq_mags_copy = sq_mags;
-                std::sort(sq_mags_copy.data(), sq_mags_copy.data() + sq_mags_copy.size());
-
-                const int cutoff_index = sq_mags_copy.size() * (1 - bad_dof_amg_threshold);
-                const double cutoff = sq_mags_copy(cutoff_index);
-
-                if (cutoff > 0)
-                {
-                    for (int i = 0; i < rhs.size(); ++i)
-                    {
-                        if (sq_mags(i) >= cutoff)
-                        {
-                            bad_indices_[0].insert(i);
-                        }
-                    }
-                }
-            }
-
-            factorize_submatrix();
-            HYPRE_IJVectorDestroy(test_x);
-            HYPRE_IJVectorDestroy(test_b);
-        }
+        select_bad_indices(remapped_rhs);
+        factorize_submatrix();
 
         if (print_conditioning)
         {
             check_matrix_conditioning("Hessian", sparse_A);
             check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
-        }
-
-        if (save_selected_indices)
-        {
-            std::ofstream file;
-            file.open("selected_indices.txt", std::ios_base::app);
-            if (bad_indices_.size() > 0)
-            {
-                for (auto i : bad_indices_[0])
-                {
-                    file << i << " ";
-                }
-            }
-            file << std::endl;;
-            file.close();
         }
 
         /* Now setup and solve! */
@@ -759,146 +559,13 @@ namespace polysolve::linear
 #endif
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
 
-            /* Custom PCG */
-            double pre_loop_time;
-            double bi_prod, eps, gamma, old_gamma;
-            Eigen::VectorXd r, p, z;
+            if (use_gmres)
             {
-                POLYSOLVE_SCOPED_STOPWATCH("pre loop time: ", pre_loop_time, *logger);
-            
-                bi_prod = remapped_rhs.dot(remapped_rhs);
-                logger->trace("Experimental solver bi prod: {}", bi_prod);
-
-                if (bi_prod > 0.0)
-                {
-                    eps = conv_tol_ * conv_tol_;
-                }
-                else 
-                {
-                    result.setZero();
-                    num_iterations = 0;
-                    final_res_norm = 0;
-                    logger->debug("Experimental solver Iterations: {}", num_iterations);
-                    logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
-                    return;
-                }
-
-                Eigen::VectorXd A_times_result;
-                matmul(remapped_result, sparse_A, A_times_result);
-                r = remapped_rhs - A_times_result;
-
-                p.resize(r.size());
-                z.resize(r.size());
-                p.setZero();
-                z.setZero();
-
-#ifdef HYPRE_WITH_MPI
-                MPI_Barrier(MPI_COMM_WORLD);
-#endif
-                HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-
-    #ifdef POLYSOLVE_WITH_ICHOL
-                if (use_incomplete_cholesky_precond)
-                {
-                    z = inc_chol_precond->solve(r);
-                } else
-    #endif
-                if (!do_mixed_precond || bad_indices_.size() == 0)
-                {
-                    amg_precond_iter(precond, r, z);
-                }
-                else
-                {
-                    custom_mixed_precond_iter(precond, r, z);
-                }
-                
-                p = z;
-
-                gamma = r.dot(z);
-                old_gamma = gamma;
-            }
-
-            double loop_time;
-            for (int k = 0; k < max_iter_; ++k)
+                gmres_solve(remapped_rhs, remapped_result, par_b, par_x, precond);
+            } 
+            else
             {
-                
-                POLYSOLVE_SCOPED_STOPWATCH("main loop time: ", loop_time, *logger);
-                num_iterations = k + 1;
-
-                Eigen::VectorXd A_times_p;
-                matmul(p, sparse_A, A_times_p);
-                double sdotp = p.dot(A_times_p);
-
-                if (sdotp == 0.0)
-                {
-                    logger->debug("Experimental solver error: zero sdotp value");
-                    break;
-                }
-
-                double alpha = gamma / sdotp;
-
-                if (alpha <= 0.0)
-                {
-                    logger->debug("Experimental solver error: negative or zero alpha value. gamma: {}, sdotp: {}", gamma, sdotp);
-                    break;
-                } 
-                else if (alpha < __DBL_MIN__)
-                {
-                    logger->debug("Experimental solver error: subnormal alpha value");
-                    break;
-                }
-
-                remapped_result += alpha * p;
-                matmul(p, sparse_A, A_times_p);
-                r -= alpha * A_times_p;
-                //r = rhs - (sparse_A * result);
-                double drob2 = alpha * alpha * p.dot(p);
-                if (!use_absolute_tol) 
-                {
-                    drob2 /= bi_prod;
-                }
-
-                if (drob2 < conv_tol_ * conv_tol_)
-                {
-                    logger->debug("Experimental solver converged: change in residual too small");
-                    break;
-                }
-
-                double i_prod = r.dot(r);
-                logger->trace("Experimental solver i prod: {}", i_prod);
-                if (!use_absolute_tol) 
-                {
-                    i_prod /= bi_prod;
-                }
-
-                if (i_prod < eps)
-                {
-                    logger->debug("Experimental solver converged: residual too small");
-                    break;
-                }
-
-                z.setZero(); 
-
-#ifdef POLYSOLVE_WITH_ICHOL
-                if (use_incomplete_cholesky_precond)
-                {
-                    z = inc_chol_precond->solve(r);
-                } else
-#endif
-                if (!do_mixed_precond || bad_indices_.size() == 0)
-                {
-                    amg_precond_iter(precond, r, z);
-                }
-                else
-                {
-                    custom_mixed_precond_iter(precond, r, z);
-                }
-
-                gamma = r.dot(z);
-                double beta = gamma / old_gamma;
-                old_gamma = gamma;
-
-                p = z + beta*p;
+                pcg_solve(remapped_rhs, remapped_result, par_b, par_x, precond);
             }
 
             Eigen::VectorXd A_times_result;
@@ -930,11 +597,158 @@ namespace polysolve::linear
             HYPRE_IJVectorDestroy(x);
             HYPRE_IJVectorDestroy(b);
         }
+    }
 
-        if (select_bad_dofs_from_rhs)
+    void ExperimentalSolver::pcg_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
+    {
+        double pre_loop_time;
+        double bi_prod, eps, gamma, old_gamma;
+        Eigen::VectorXd r, p, z;
         {
-            bad_indices_.clear();
+            POLYSOLVE_SCOPED_STOPWATCH("pre loop time: ", pre_loop_time, *logger);
+        
+            bi_prod = rhs.dot(rhs);
+            logger->trace("Experimental solver bi prod: {}", bi_prod);
+
+            if (bi_prod > 0.0)
+            {
+                eps = conv_tol_ * conv_tol_;
+            }
+            else 
+            {
+                result.setZero();
+                num_iterations = 0;
+                final_res_norm = 0;
+                logger->debug("Experimental solver Iterations: {}", num_iterations);
+                logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
+                return;
+            }
+
+            Eigen::VectorXd A_times_result;
+            matmul(result, sparse_A, A_times_result);
+            r = rhs - A_times_result;
+
+            p.resize(r.size());
+            z.resize(r.size());
+            p.setZero();
+            z.setZero();
+
+#ifdef HYPRE_WITH_MPI
+            MPI_Barrier(MPI_COMM_WORLD);
+#endif
+            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+
+#ifdef POLYSOLVE_WITH_ICHOL
+            if (use_incomplete_cholesky_precond)
+            {
+                z = inc_chol_precond->solve(r);
+            } else
+#endif
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, r, z);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, r, z);
+            }
+            
+            p = z;
+
+            gamma = r.dot(z);
+            old_gamma = gamma;
         }
+
+        double loop_time;
+        for (int k = 0; k < max_iter_; ++k)
+        {
+            
+            POLYSOLVE_SCOPED_STOPWATCH("main loop time: ", loop_time, *logger);
+            num_iterations = k + 1;
+
+            Eigen::VectorXd A_times_p;
+            matmul(p, sparse_A, A_times_p);
+            double sdotp = p.dot(A_times_p);
+
+            if (sdotp == 0.0)
+            {
+                logger->debug("Experimental solver error: zero sdotp value");
+                break;
+            }
+
+            double alpha = gamma / sdotp;
+
+            if (alpha <= 0.0)
+            {
+                logger->debug("Experimental solver error: negative or zero alpha value. gamma: {}, sdotp: {}", gamma, sdotp);
+                break;
+            } 
+            else if (alpha < __DBL_MIN__)
+            {
+                logger->debug("Experimental solver error: subnormal alpha value");
+                break;
+            }
+
+            result += alpha * p;
+            matmul(p, sparse_A, A_times_p);
+            r -= alpha * A_times_p;
+            //r = rhs - (sparse_A * result);
+            double drob2 = alpha * alpha * p.dot(p);
+            if (!use_absolute_tol) 
+            {
+                drob2 /= bi_prod;
+            }
+
+            if (drob2 < conv_tol_ * conv_tol_)
+            {
+                logger->debug("Experimental solver converged: change in residual too small");
+                break;
+            }
+
+            double i_prod = r.dot(r);
+            logger->trace("Experimental solver i prod: {}", i_prod);
+            if (!use_absolute_tol) 
+            {
+                i_prod /= bi_prod;
+            }
+
+            if (i_prod < eps)
+            {
+                logger->debug("Experimental solver converged: residual too small");
+                break;
+            }
+
+            z.setZero(); 
+
+#ifdef POLYSOLVE_WITH_ICHOL
+            if (use_incomplete_cholesky_precond)
+            {
+                z = inc_chol_precond->solve(r);
+            } else
+#endif
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, r, z);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, r, z);
+            }
+
+            gamma = r.dot(z);
+            double beta = gamma / old_gamma;
+            old_gamma = gamma;
+
+            p = z + beta*p;
+        }
+    }
+
+    void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
+    {
+        //TODO
+        Eigen::VectorXd A_times_x;
+        matmul(result, sparse_A, A_times_x);
+        Eigen::VectorXd r1 = rhs - A_times_x;
 
     }
 
@@ -1056,6 +870,159 @@ namespace polysolve::linear
         return dimension_ * ichol_dof_remapping(nod_index) + func_offset;
     }
 #endif
+
+    void ExperimentalSolver::select_bad_indices(Eigen::VectorXd &rhs)
+    {
+        POLYSOLVE_SCOPED_STOPWATCH("bad dof selection time", bad_dof_selection_time, *logger);
+        Eigen::VectorXd sq_mags(rhs.size());
+        double cutoff_threshold; 
+
+        if (!(select_bad_dofs_from_amg || select_bad_dofs_from_rhs || select_bad_dofs_from_row_norms))
+        {
+            return; 
+        }
+
+        if (select_bad_dofs_from_amg + select_bad_dofs_from_rhs + select_bad_dofs_from_row_norms > 1)
+        {
+            logger->warn("Multiple selection methods specified, defaulting to row norms.");   
+        }
+
+        bad_indices_.clear();
+        bad_indices_.resize(1);
+
+        if (select_bad_dofs_from_rhs)
+        {
+            assert(rhs.size() % dimension_ == 0);
+            for (int i = 0; i < rhs.size() / dimension_; ++i)
+            {
+                double sq_mag = rhs(dimension_ * i) * rhs(dimension_ * i);
+                for (int j = 1; j < dimension_; ++j)
+                {
+                    sq_mag += rhs(dimension_ * i + j) * rhs(dimension_ * i + j);
+                } 
+                for (int j = 1; j < dimension_; ++j)
+                {
+                    sq_mags(dimension_ * i + j) = sq_mag;
+                } 
+            }
+
+            if (save_grad_norms)
+            {
+                std::ofstream file;
+                file.open("grad_norms.txt", std::ios_base::app);
+                file << sq_mags.transpose() << std::endl;
+                file.close();
+            }
+
+            cutoff_threshold = bad_dof_grad_threshold;
+        }
+
+        if (select_bad_dofs_from_amg)
+        {
+            double select_dofs_from_amg_time;
+            POLYSOLVE_SCOPED_STOPWATCH("select dofs from amg", select_dofs_from_amg_time, *logger);
+            HYPRE_ParVector test_par_b, test_par_x;
+            HYPRE_IJVector test_x, test_b;
+
+            Eigen::VectorXd test_result = Eigen::VectorXd::Random(rhs.size());
+            Eigen::VectorXd test_rhs(rhs.size());
+            test_rhs.setZero();
+
+            eigen_to_hypre_par_vec(test_par_b, test_b, test_rhs, start_i, end_i);
+            eigen_to_hypre_par_vec(test_par_x, test_x, test_result, start_i, end_i);
+
+            HYPRE_Solver test_precond;
+            HYPRE_BoomerAMGCreate(&test_precond);
+            HypreBoomerAMG_SetDefaultOptions(test_precond);
+            if (dimension_ > 1)
+            {
+                const int num_rbms = dimension_ == 2 ? 1 : 3;
+                std::vector<HYPRE_ParVector> par_rbms(num_rbms);
+                std::vector<HYPRE_IJVector> rbms(num_rbms);
+                HypreBoomerAMG_SetElasticityOptions(
+                    test_precond, 
+                    dimension_, 
+                    theta, 
+                    nodal_coarsening, 
+                    interp_rbms, 
+                    positions_,
+                    dof_to_function_, 
+                    rbms, 
+                    par_rbms
+                );
+            }
+
+            HYPRE_BoomerAMGSetMaxIter(test_precond, 10);
+            HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
+            HYPRE_BoomerAMGSolve(test_precond, parcsr_A, test_par_b, test_par_x);
+
+            hypre_vec_to_eigen(test_x, test_result, start_i, end_i);
+
+            assert(rhs.size() % dimension_ == 0);
+            Eigen::VectorXd sq_mags(rhs.size());
+            for (int i = 0; i < rhs.size(); ++i)
+            {
+                sq_mags(i) = test_result(i) * test_result(i);
+            }
+            cutoff_threshold = bad_dof_amg_threshold;
+            
+            HYPRE_IJVectorDestroy(test_x);
+            HYPRE_IJVectorDestroy(test_b);
+        }
+
+        if (select_bad_dofs_from_row_norms)
+        {
+            assert(rhs.size() % dimension_ == 0);
+            for (int i = 0; i < rhs.size(); ++i)
+            {
+                sq_mags(i) = sparse_A.row(i).norm();
+            }
+
+            if (save_row_norms)
+            {
+                std::ofstream file;
+                file.open("row_norms.txt", std::ios_base::app);
+                file << sq_mags.transpose() << std::endl;
+                file.close();
+            }
+
+            cutoff_threshold = bad_dof_row_norm_threshold;
+
+        }
+
+        Eigen::VectorXd sorted_sq_mags = sq_mags;
+        std::sort(sorted_sq_mags.data(), sorted_sq_mags.data() + sorted_sq_mags.size());
+
+        const int cutoff_index = sorted_sq_mags.size() * (1 - cutoff_threshold);
+        const double cutoff = sorted_sq_mags(cutoff_index);
+
+        if (cutoff > 0)
+        {
+            for (int i = 0; i < rhs.size(); ++i)
+            {
+                if (sq_mags(i) >= cutoff)
+                {
+                    bad_indices_[0].insert(i);
+                }
+            }
+        }
+
+        if (save_selected_indices)
+        {
+            std::ofstream file;
+            file.open("selected_indices.txt", std::ios_base::app);
+            if (bad_indices_.size() > 0)
+            {
+                for (auto i : bad_indices_[0])
+                {
+                    file << i << " ";
+                }
+            }
+            file << std::endl;;
+            file.close();
+        }
+
+    }
 
     void ExperimentalSolver::factorize_submatrix()
     {

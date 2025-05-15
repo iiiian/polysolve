@@ -127,7 +127,12 @@ namespace polysolve::linear
         void check_matrix_conditioning(const std::string name, const std::set<int>& subdomain);
         void check_matrix_conditioning(const std::string name, const Eigen::MatrixXd& mat);
 
+        void select_bad_indices(Eigen::VectorXd &rhs);
         void factorize_submatrix();
+
+        void pcg_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
+        void gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
+        
     };
 
 } // namespace polysolve::linear

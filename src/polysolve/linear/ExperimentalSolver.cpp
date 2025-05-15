@@ -799,7 +799,9 @@ namespace polysolve::linear
 
         Eigen::VectorXd w(rhs.size());
         w.setZero();
-        Eigen::VectorXd v, w2;
+        Eigen::VectorXd w2(rhs.size());
+        w2.setZero();
+        Eigen::VectorXd v;
 
         while (num_iterations < max_iter_)
         {
@@ -947,6 +949,7 @@ namespace polysolve::linear
 
             if (istop != 0)
             {
+                logger->trace("Stopping due to {}", istop);
                 break;
             }
         }

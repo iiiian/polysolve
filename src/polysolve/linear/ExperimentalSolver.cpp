@@ -749,7 +749,207 @@ namespace polysolve::linear
         Eigen::VectorXd A_times_x;
         matmul(result, sparse_A, A_times_x);
         Eigen::VectorXd r1 = rhs - A_times_x;
+        
+        Eigen::VectorXd y(rhs.size());
+        #ifdef POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            z = inc_chol_precond->solve(r1);
+        } else
+        #endif  
+        if (!do_mixed_precond || bad_indices_.size() == 0)
+        {
+            amg_precond_iter(precond, r1, y);
+        }
+        else
+        {
+            custom_mixed_precond_iter(precond, r1, y);
+        }
 
+        double beta1 = r1.dot(y);
+        double bnorm = rhs.norm();
+        if (beta1 == 0 || bnorm == 0)
+        {
+            result.setZero();
+            num_iterations = 0;
+            final_res_norm = 0;
+            logger->debug("Experimental solver Iterations: {}", num_iterations);
+            logger->debug("Experimental solver Final Relative Residual Norm: {}", final_res_norm);
+            return;
+        }
+        beta1 = sqrt(beta1);
+        num_iterations = 0;
+        double beta = beta1;
+        double tnorm2 = 0;
+        Eigen::VectorXd r2 = r1;
+        double oldb = 0;
+        double dbar = 0;
+        double epsln = 0;
+        double qrnorm = beta1;
+        double phibar = beta1;
+        double rhs1 = beta1;
+        double rhs2 = 0;
+        double gmax = 0;
+        double gmin = DBL_MAX;
+        double cs = -1;
+        double sn = 0;
+        double rnorm = 0;
+        int istop = 0;
+        double eps = std::numeric_limits<double>::epsilon();
+
+        Eigen::VectorXd w(rhs.size());
+        w.setZero();
+        Eigen::VectorXd v, w2;
+
+        while (num_iterations < max_iter_)
+        {
+            ++num_iterations;
+            double s = 1.0 / beta;
+            v = s*y;
+            Eigen::VectorXd A_times_v;
+            matmul(v, sparse_A, A_times_v);
+
+            if (num_iterations >= 2)
+            {
+                y -= (beta/oldb) * r1;
+            }
+
+            double alpha = v.dot(y);
+            y -= (alpha/beta) * r2;
+            r1 = r2;
+            r2 = y;
+
+            #ifdef POLYSOLVE_WITH_ICHOL
+            if (use_incomplete_cholesky_precond)
+            {
+                z = inc_chol_precond->solve(r2);
+            } else
+            #endif  
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, r2, y);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, r2, y);
+            }
+
+            oldb = beta;
+            beta = r2.dot(y);
+
+            if (beta < 0)
+            {
+                logger->trace("Experimental solver error: non symmetric matrix");
+                break;
+            }
+
+            beta = sqrt(beta);
+            tnorm2 += alpha*alpha + oldb*oldb + beta*beta;
+
+            if (num_iterations == 1 && beta/beta1 <= 10*eps)
+            {
+                istop = -1;
+            }
+
+            double oldeps = epsln;
+            double delta = cs * dbar + sn * alpha;
+            double gbar = sn * dbar - cs * alpha;
+            epsln = sn * beta;
+            double dbar = -1 * cs * beta;
+            double root = sqrt(gbar * gbar + dbar * dbar);
+            double Arnorm = phibar * root;
+
+            double gamma = sqrt(gbar * gbar + beta * beta);
+            gamma = gamma > eps ? gamma : eps;
+            cs = gbar / gamma;
+            sn = beta / gamma;
+            double phi = cs * phibar;
+            phibar = sn * phibar;
+
+            double denom = 1.0 / gamma;
+            Eigen::VectorXd w1 = w2;
+            w2 = w;
+            w = (v - oldeps*w1 - delta*w2) * denom;
+            result += phi*w;
+
+            gmax = gmax > gamma ? gmax : gamma;
+            gmin = gmin < gamma? gmin : gamma;
+            double z = rhs1 / gamma;
+            rhs1 = rhs2 - delta * z;
+            rhs2 -= epsln*z;
+
+            double Anorm = sqrt(tnorm2);
+            double ynorm = result.norm();
+            double epsa = Anorm * eps;
+            double epsx = Anorm * ynorm *eps;
+            double epsr = Anorm * ynorm * conv_tol_;
+            double diag = gbar;
+            if (diag == 0)
+            {
+                diag = epsa;
+            }
+
+            qrnorm = phibar;
+            rnorm = qrnorm;
+
+            double test1, test2;
+            if (ynorm == 0 || Anorm == 0)
+            {
+                test1 = std::numeric_limits<double>::infinity();
+            }
+            else
+            {
+                test1 = rnorm / (Anorm * ynorm);
+            }
+
+            if (Anorm == 0)
+            {
+                test2 = std::numeric_limits<double>::infinity();
+            }
+            else
+            {
+                test2 = root / Anorm;
+            }
+
+            double Acond = gmax / gmin;
+
+            if (istop == 0)
+            {
+                if ((1 + test2) <= 1)
+                {
+                    istop = 2;
+                }
+                if ((1 + test1) <= 1)
+                {
+                    istop = 1;
+                }
+                if (num_iterations >= max_iter_)
+                {
+                    istop = 6;
+                }
+                if (Acond >= 0.1/eps)
+                {
+                    istop = 4;
+                }
+                if (epsx >= beta1)
+                {
+                    istop = 3;
+                }
+                if (test2 <= conv_tol_)
+                {
+                    istop = 2;
+                }
+                if (test1 <= conv_tol_)
+                {
+                    istop = 1;
+                }
+            }
+
+            if (istop != 0)
+            {
+                break;
+            }
+        }
     }
 
     void ExperimentalSolver::custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z)

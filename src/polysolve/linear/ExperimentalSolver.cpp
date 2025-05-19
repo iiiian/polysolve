@@ -745,7 +745,48 @@ namespace polysolve::linear
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
     {
-        //TODO
+        Eigen::VectorXd A_times_x;
+        matmul(result, sparse_A, A_times_x);
+        Eigen::VectorXd r = rhs - A_times_x;
+        Eigen::VectorXd p0 = r;
+
+        Eigen::VectorXd A_times_p0;
+        matmul(p0, sparse_A, A_times_p0);
+        Eigen::VectorXd s0 = A_times_p0;
+        Eigen::VectorXd p1 = p0;
+        Eigen::VectorXd s1 = s0;
+
+        for (int iter = 1; iter <= max_iter_; ++iter)
+        {
+            Eigen::VectorXd p2 = p1; 
+            p1 = p0;
+            Eigen::VectorXd s2 = s1;
+            s1 = s0;
+            double alpha = r.dot(s1) / s1.dot(s1);
+            result += alpha * p1;
+            r -= alpha * s1;
+            double rsq = r.dot(r);
+            logger->trace("MINRES: iter {}, rsquared {}", iter, rsq);
+            if (rsq < conv_tol_*conv_tol_)
+            {
+                break;
+            }
+            p0 = s1;
+            Eigen::VectorXd A_times_s1;
+            matmul(s1, sparse_A, A_times_s1);
+            s0 = A_times_s1;
+            double beta1 = s0.dot(s1) / s1.dot(s1);
+            p0 -= beta1 * p1;
+            s0 -= beta1 * s1;
+            if (iter > 1)
+            {
+                double beta2 = s0.dot(s2) / s2.dot(s2);
+                p0 -= beta2 * p2;
+                s0 -= beta2 * s2;
+            }
+        }
+        
+        /*//TODO
         Eigen::VectorXd A_times_x;
         matmul(result, sparse_A, A_times_x);
         Eigen::VectorXd r1 = rhs - A_times_x;
@@ -952,7 +993,7 @@ namespace polysolve::linear
                 logger->trace("Stopping due to {}", istop);
                 break;
             }
-        }
+        }*/
     }
 
     void ExperimentalSolver::custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z)

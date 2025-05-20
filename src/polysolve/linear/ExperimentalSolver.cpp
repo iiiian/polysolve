@@ -748,7 +748,20 @@ namespace polysolve::linear
         Eigen::VectorXd A_times_x;
         matmul(result, sparse_A, A_times_x);
         Eigen::VectorXd r = rhs - A_times_x;
-        Eigen::VectorXd p0 = r;
+        Eigen::VectorXd z;
+        z.resize(r.size());
+        z.setZero();
+
+        if (!do_mixed_precond || bad_indices_.size() == 0)
+        {
+            amg_precond_iter(precond, r, z);
+        }
+        else
+        {
+            custom_mixed_precond_iter(precond, r, z);
+        }
+
+        Eigen::VectorXd p0 = z;
 
         Eigen::VectorXd A_times_p0;
         matmul(p0, sparse_A, A_times_p0);
@@ -756,7 +769,7 @@ namespace polysolve::linear
         Eigen::VectorXd p1 = p0;
         Eigen::VectorXd s1 = s0;
 
-        for (int iter = 1; iter <= max_iter_; ++iter)
+        for (num_iterations = 1; num_iterations <= max_iter_; ++num_iterations)
         {
             Eigen::VectorXd p2 = p1; 
             p1 = p0;
@@ -766,7 +779,7 @@ namespace polysolve::linear
             result += alpha * p1;
             r -= alpha * s1;
             double rsq = r.dot(r);
-            logger->trace("MINRES: iter {}, rsquared {}", iter, rsq);
+            logger->trace("MINRES: iter {}, rsquared {}", num_iterations, rsq);
             if (rsq < conv_tol_*conv_tol_)
             {
                 break;
@@ -775,10 +788,24 @@ namespace polysolve::linear
             Eigen::VectorXd A_times_s1;
             matmul(s1, sparse_A, A_times_s1);
             s0 = A_times_s1;
+
+            z.setZero();
+
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, s0, z);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, s0, z);
+            }
+
+            s0 = z;
+
             double beta1 = s0.dot(s1) / s1.dot(s1);
             p0 -= beta1 * p1;
             s0 -= beta1 * s1;
-            if (iter > 1)
+            if (num_iterations > 1)
             {
                 double beta2 = s0.dot(s2) / s2.dot(s2);
                 p0 -= beta2 * p2;

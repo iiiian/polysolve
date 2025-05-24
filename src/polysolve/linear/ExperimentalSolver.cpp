@@ -753,15 +753,6 @@ namespace polysolve::linear
             matmul(result, sparse_A, A_times_x);
             Eigen::VectorXd z = rhs - A_times_x;
             
-            double rsq = z.dot(z);
-            if (rsq < conv_tol_ * conv_tol_)
-            {
-                return;
-            }
-
-            logger->trace("GMRES. Iter: {}, rsq: {}", num_iterations, rsq);
-            ++num_iterations;
-
             Eigen::VectorXd r0(z.size());
             r0.setZero();
 
@@ -774,7 +765,16 @@ namespace polysolve::linear
                 custom_mixed_precond_iter(precond, z, r0);
             }
 
-            double beta = r0.dot(r0);
+            double rsq = r0.dot(r0);
+            if (rsq < conv_tol_ * conv_tol_)
+            {
+                return;
+            }
+
+            logger->trace("GMRES. Iter: {}, rsq: {}", num_iterations, rsq);
+            ++num_iterations;
+
+            double beta = r0.norm();
             
             Eigen::MatrixXd V(r0.size(), m);
             V.col(0) = r0 / beta;
@@ -785,6 +785,8 @@ namespace polysolve::linear
                 Eigen::VectorXd w, A_times_vj;
                 Eigen::VectorXd vj = V.col(j - 1);
                 matmul(vj, sparse_A, A_times_vj);
+                w.resize(r0.size());
+                w.setZero();
 
                 if (!do_mixed_precond || bad_indices_.size() == 0)
                 {
@@ -794,12 +796,13 @@ namespace polysolve::linear
                 {
                     custom_mixed_precond_iter(precond, A_times_vj, w);
                 }
-                for (int i = 0; i < j; ++j)
+
+                for (int i = 0; i < j; ++i)
                 {
                     H(i, j - 1) = w.dot(V.col(i));
                     w -= H(i, j-1) * V.col(i);
                 }
-                H(j, j - 1) = w.dot(w);
+                H(j, j - 1) = w.norm();
                 V.col(j) = w / H(j, j - 1);
             }
 

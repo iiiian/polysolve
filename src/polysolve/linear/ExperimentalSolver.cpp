@@ -765,13 +765,13 @@ namespace polysolve::linear
                 custom_mixed_precond_iter(precond, z, r0);
             }
 
-            double rsq = r0.dot(r0);
-            if (rsq < conv_tol_ * conv_tol_)
+            double rsq = z.dot(z);
+            double mrsq = r0.dot(r0);
+            logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
+            if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
             {
                 return;
             }
-
-            logger->trace("GMRES. Iter: {}, rsq: {}", num_iterations, rsq);
             ++num_iterations;
 
             double beta = r0.norm();

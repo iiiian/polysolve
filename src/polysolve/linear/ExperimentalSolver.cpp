@@ -989,6 +989,7 @@ namespace polysolve::linear
             HYPRE_IJVector test_x, test_b;
 
             Eigen::VectorXd test_result = Eigen::VectorXd::Random(rhs.size());
+            Eigen::VectorXd start_result = test_result;
             Eigen::VectorXd test_rhs(rhs.size());
             test_rhs.setZero();
 
@@ -1016,7 +1017,7 @@ namespace polysolve::linear
                 );
             }
 
-            HYPRE_BoomerAMGSetMaxIter(test_precond, 10);
+            HYPRE_BoomerAMGSetMaxIter(test_precond, 20);
             HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
             HYPRE_BoomerAMGSolve(test_precond, parcsr_A, test_par_b, test_par_x);
 
@@ -1026,7 +1027,7 @@ namespace polysolve::linear
             Eigen::VectorXd sq_mags(rhs.size());
             for (int i = 0; i < rhs.size(); ++i)
             {
-                sq_mags(i) = test_result(i) * test_result(i);
+                sq_mags(i) = abs(test_result(i) / start_result(i));
             }
             cutoff_threshold = bad_dof_amg_threshold;
             

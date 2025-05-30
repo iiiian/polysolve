@@ -72,14 +72,11 @@ namespace polysolve::linear
         bool print_conditioning = false;
         bool use_incomplete_cholesky_precond = false;
         bool use_absolute_tol = false;
+        bool save_selection_criteria;
+        double bad_dof_threshold;
         bool select_bad_dofs_from_rhs;
-        double bad_dof_grad_threshold;
         bool select_bad_dofs_from_row_norms;
-        double bad_dof_row_norm_threshold;
         bool select_bad_dofs_from_amg;
-        double bad_dof_amg_threshold;
-        bool save_grad_norms;
-        bool save_row_norms;
         bool save_selected_indices;
         bool save_problem;
         bool use_gmres;

@@ -121,17 +121,9 @@ namespace polysolve::linear
             {
                 select_bad_dofs_from_amg = params["Experimental"]["select_bad_dofs_from_amg"];
             }
-            if (params["Experimental"].contains("bad_dof_grad_threshold"))
+            if (params["Experimental"].contains("bad_dof_threshold"))
             {
-                bad_dof_grad_threshold = params["Experimental"]["bad_dof_grad_threshold"];
-            }
-            if (params["Experimental"].contains("bad_dof_row_norm_threshold"))
-            {
-                bad_dof_row_norm_threshold = params["Experimental"]["bad_dof_row_norm_threshold"];
-            }
-            if (params["Experimental"].contains("bad_dof_amg_threshold"))
-            {
-                bad_dof_amg_threshold = params["Experimental"]["bad_dof_amg_threshold"];
+                bad_dof_threshold = params["Experimental"]["bad_dof_threshold"];
             }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Experimental"].contains("use_incomplete_cholesky_precond"))
@@ -143,13 +135,9 @@ namespace polysolve::linear
                 rho = params["Experimental"]["rho"];
             }
 #endif
-            if (params["Experimental"].contains("save_grad_norms"))
+            if (params["Experimental"].contains("save_selection_criteria"))
             {
-                save_grad_norms = params["Experimental"]["save_grad_norms"];
-            }
-            if (params["Experimental"].contains("save_row_norms"))
-            {
-                save_row_norms = params["Experimental"]["save_row_norms"];
+                save_selection_criteria = params["Experimental"]["save_selection_criteria"];
             }
             if (params["Experimental"].contains("save_problem"))
             {
@@ -956,6 +944,8 @@ namespace polysolve::linear
 
         if (select_bad_dofs_from_rhs)
         {
+            double select_dofs_from_rhs_time;
+            POLYSOLVE_SCOPED_STOPWATCH("select dofs from rhs", select_dofs_from_rhs_time, *logger);
             assert(rhs.size() % dimension_ == 0);
             for (int i = 0; i < rhs.size() / dimension_; ++i)
             {
@@ -970,15 +960,6 @@ namespace polysolve::linear
                 } 
             }
 
-            if (save_grad_norms)
-            {
-                std::ofstream file;
-                file.open("grad_norms.txt", std::ios_base::app);
-                file << sq_mags.transpose() << std::endl;
-                file.close();
-            }
-
-            cutoff_threshold = bad_dof_grad_threshold;
         }
 
         if (select_bad_dofs_from_amg)
@@ -1029,7 +1010,6 @@ namespace polysolve::linear
             {
                 sq_mags(i) = abs(test_result(i) / start_result(i));
             }
-            cutoff_threshold = bad_dof_amg_threshold;
             
             HYPRE_IJVectorDestroy(test_x);
             HYPRE_IJVectorDestroy(test_b);
@@ -1037,28 +1017,28 @@ namespace polysolve::linear
 
         if (select_bad_dofs_from_row_norms)
         {
+            double select_dofs_from_row_norms_time;
+            POLYSOLVE_SCOPED_STOPWATCH("select dofs from hess row norms", select_dofs_from_row_norms_time, *logger);
             assert(rhs.size() % dimension_ == 0);
             for (int i = 0; i < rhs.size(); ++i)
             {
                 sq_mags(i) = sparse_A.row(i).norm();
             }
 
-            if (save_row_norms)
-            {
-                std::ofstream file;
-                file.open("row_norms.txt", std::ios_base::app);
-                file << sq_mags.transpose() << std::endl;
-                file.close();
-            }
+        }
 
-            cutoff_threshold = bad_dof_row_norm_threshold;
-
+        if (save_selection_criteria)
+        {
+            std::ofstream file;
+            file.open("criteria.txt", std::ios_base::app);
+            file << sq_mags.transpose() << std::endl;
+            file.close();
         }
 
         Eigen::VectorXd sorted_sq_mags = sq_mags;
         std::sort(sorted_sq_mags.data(), sorted_sq_mags.data() + sorted_sq_mags.size());
 
-        const int cutoff_index = sorted_sq_mags.size() * (1 - cutoff_threshold);
+        const int cutoff_index = sorted_sq_mags.size() * (1 - bad_dof_threshold);
         const double cutoff = sorted_sq_mags(cutoff_index);
 
         if (cutoff > 0)

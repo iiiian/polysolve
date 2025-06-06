@@ -477,7 +477,8 @@
             "save_selection_criteria",
             "save_problem",
             "save_selected_indices",
-            "use_gmres"
+            "use_gmres",
+            "m"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -612,5 +613,11 @@
         "default": false,
         "type": "bool",
         "doc": "If true, use gmres as linear solver, otherwise default to PCG."
-    }          
+    }          ,
+    {
+        "pointer": "/Experimental/m",
+        "default": 10,
+        "type": "int",
+        "doc": "Restart value for GMRES"
+    }    
 ]

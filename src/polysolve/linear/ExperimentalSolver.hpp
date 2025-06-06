@@ -46,7 +46,28 @@ namespace polysolve::linear
         virtual void get_info(json &params) const override;
 
         // Analyze sparsity pattern
-        virtual void analyze_pattern(const StiffnessMatrix &A, const int precond_num) override { precond_num_ = precond_num; }
+        virtual void analyze_pattern(const StiffnessMatrix &A, const int precond_num) override 
+        { 
+            precond_num_ = precond_num; 
+
+#ifdef HYPRE_WITH_MPI
+            if (myid == 0)
+            {
+                int rows, cols, nnzs;
+                rows = A.rows();
+                cols = A.cols();
+                nnzs = A.nonZeros();
+
+                MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(&cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(&nnzs, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+                MPI_Bcast(A.valuePtr(), nnzs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                MPI_Bcast(A.innerIndexPtr(), nnzs, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(A.outerIndexPtr(), rows, MPI_INT, 0, MPI_COMM_WORLD);
+            }
+#endif
+        }
 
         // Factorize system matrix
         virtual void factorize(const StiffnessMatrix &A) override;

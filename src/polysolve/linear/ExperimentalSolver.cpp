@@ -808,9 +808,10 @@ namespace polysolve::linear
                     H(i, j - 1) = w.dot(V.col(i));
                     w -= H(i, j-1) * V.col(i);
                 }
-                H(j, j - 1) = w.norm();
-                logger->trace("GMRES. W norm: ", H(j, j - 1));
-                if (H(j, j - 1) < conv_tol_)
+                double wnorm = w.norm();
+                H(j, j - 1) = wnorm;
+                logger->trace("GMRES. W norm: {}", wnorm);
+                if (wnorm < conv_tol_)
                 {
                     m_ = j - 1;
                     break;

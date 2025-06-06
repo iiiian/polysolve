@@ -151,6 +151,10 @@ namespace polysolve::linear
             {
                 use_gmres = params["Experimental"]["use_gmres"];
             }
+            if (params["Experimental"].contains("m"))
+            {
+                m_ = params["Experimental"]["m"];
+            }
         }
     }
 
@@ -733,7 +737,6 @@ namespace polysolve::linear
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
     {
-        int m = 10;
         num_iterations = 0;
         while (num_iterations < max_iter_)
         {
@@ -753,22 +756,13 @@ namespace polysolve::linear
                 custom_mixed_precond_iter(precond, z, r0);
             }
 
-            double rsq = z.dot(z);
-            double mrsq = r0.dot(r0);
-            logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
-            if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
-            {
-                return;
-            }
-            ++num_iterations;
-
             double beta = r0.norm();
             
-            Eigen::MatrixXd V(r0.size(), m);
+            Eigen::MatrixXd V(r0.size(), m_);
             V.col(0) = r0 / beta;
-            Eigen::MatrixXd H(m+1, m);
+            Eigen::MatrixXd H(m_+1, m_);
             H.setZero();
-            for (int j = 1; j < m; ++j)
+            for (int j = 1; j < m_ + 1; ++j)
             {
                 Eigen::VectorXd w, A_times_vj;
                 Eigen::VectorXd vj = V.col(j - 1);
@@ -792,15 +786,35 @@ namespace polysolve::linear
                 }
                 H(j, j - 1) = w.norm();
                 V.col(j) = w / H(j, j - 1);
+
+                Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr_solver(H.block(0, 0, j+2, j+1));
+                Eigen::VectorXd e1(j+2);
+                e1.setZero();
+                e1(0) = beta;
+                Eigen::VectorXd y = qr_solver.solve(e1);
+
+                result += V.block(0, 0, r0.size(), j+2) * y;
+
+                Eigen::VectorXd rn = H.block(0, 0, j+2, j+1) * y - e1;
+                Eigen::VectorXd mrn(rn.size());
+                if (!do_mixed_precond || bad_indices_.size() == 0)
+                {
+                    amg_precond_iter(precond, rn, mrn);
+                }
+                else
+                {
+                    custom_mixed_precond_iter(precond, rn, mrn);
+                }
+                
+                ++num_iterations;
+                double rsq = rn.dot(rn);
+                double mrsq = mrn.dot(mrn);
+                logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
+                if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
+                {
+                    return;
+                }
             }
-
-            Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr_solver(H);
-            Eigen::VectorXd e1(m+1);
-            e1.setZero();
-            e1(0) = beta;
-            Eigen::VectorXd y = qr_solver.solve(e1);
-
-            result += V * y;
         }
     }
 
@@ -998,7 +1012,7 @@ namespace polysolve::linear
                 );
             }
 
-            HYPRE_BoomerAMGSetMaxIter(test_precond, 20);
+            HYPRE_BoomerAMGSetMaxIter(test_precond, 5);
             HYPRE_BoomerAMGSetup(test_precond, parcsr_A, test_par_b, test_par_x);
             HYPRE_BoomerAMGSolve(test_precond, parcsr_A, test_par_b, test_par_x);
 
@@ -1013,6 +1027,7 @@ namespace polysolve::linear
             
             HYPRE_IJVectorDestroy(test_x);
             HYPRE_IJVectorDestroy(test_b);
+            HYPRE_BoomerAMGDestroy(test_precond);
         }
 
         if (select_bad_dofs_from_row_norms)
@@ -1024,7 +1039,6 @@ namespace polysolve::linear
             {
                 sq_mags(i) = sparse_A.row(i).norm();
             }
-
         }
 
         if (save_selection_criteria)

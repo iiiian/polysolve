@@ -770,6 +770,15 @@ namespace polysolve::linear
                 custom_mixed_precond_iter(precond, z, r0);
             }
 
+            double rsq = z.dot(z);
+            double mrsq = r0.dot(r0);
+            logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
+            if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
+            {
+                return;
+            }
+            ++num_iterations;
+
             double beta = r0.norm();
             
             Eigen::MatrixXd V(r0.size(), m_);
@@ -778,6 +787,7 @@ namespace polysolve::linear
             H.setZero();
             for (int j = 1; j < m_ + 1; ++j)
             {
+                ++num_iterations;
                 Eigen::VectorXd w, A_times_vj;
                 Eigen::VectorXd vj = V.col(j - 1);
                 matmul(vj, sparse_A, A_times_vj);
@@ -799,39 +809,22 @@ namespace polysolve::linear
                     w -= H(i, j-1) * V.col(i);
                 }
                 H(j, j - 1) = w.norm();
+                logger->trace("GMRES. W norm: ", H(j, j - 1));
+                if (H(j, j - 1) < conv_tol_)
+                {
+                    m_ = j - 1;
+                    break;
+                }
                 V.col(j) = w / H(j, j - 1);
-
-                Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr_solver(H.block(0, 0, j+2, j+1));
-                Eigen::VectorXd e1(j+2);
-                e1.setZero();
-                e1(0) = beta;
-                Eigen::VectorXd y = qr_solver.solve(e1);
-
-                result += V.block(0, 0, r0.size(), j+2) * y;
-
-                A_times_x;
-                matmul(result, sparse_A, A_times_x);
-                z = rhs - A_times_x;
-                r0.setZero();
-
-                if (!do_mixed_precond || bad_indices_.size() == 0)
-                {
-                    amg_precond_iter(precond, z, r0);
-                }
-                else
-                {
-                    custom_mixed_precond_iter(precond, z, r0);
-                }
-                
-                ++num_iterations;
-                double rsq = z.dot(z);
-                double mrsq = r0.dot(r0);
-                logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
-                if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
-                {
-                    return;
-                }
             }
+
+            Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr_solver(H.block(0, 0, m_ + 1, m_));
+            Eigen::VectorXd e1(m_+1);
+            e1.setZero();
+            e1(0) = beta;
+            Eigen::VectorXd y = qr_solver.solve(e1);
+
+            result += V * y;
         }
     }
 

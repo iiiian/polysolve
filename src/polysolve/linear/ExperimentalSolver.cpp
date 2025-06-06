@@ -809,20 +809,23 @@ namespace polysolve::linear
 
                 result += V.block(0, 0, r0.size(), j+2) * y;
 
-                Eigen::VectorXd rn = H.block(0, 0, j+2, j+1) * y - e1;
-                Eigen::VectorXd mrn(rn.size());
+                A_times_x;
+                matmul(result, sparse_A, A_times_x);
+                z = rhs - A_times_x;
+                r0.setZero();
+
                 if (!do_mixed_precond || bad_indices_.size() == 0)
                 {
-                    amg_precond_iter(precond, rn, mrn);
+                    amg_precond_iter(precond, z, r0);
                 }
                 else
                 {
-                    custom_mixed_precond_iter(precond, rn, mrn);
+                    custom_mixed_precond_iter(precond, z, r0);
                 }
                 
                 ++num_iterations;
-                double rsq = rn.dot(rn);
-                double mrsq = mrn.dot(mrn);
+                double rsq = z.dot(z);
+                double mrsq = r0.dot(r0);
                 logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
                 if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
                 {

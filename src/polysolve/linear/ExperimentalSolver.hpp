@@ -70,7 +70,7 @@ namespace polysolve::linear
 
                 MPI_Bcast(sparse_A.valuePtr(), nnzs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
                 MPI_Bcast(sparse_A.innerIndexPtr(), nnzs, MPI_INT, 0, MPI_COMM_WORLD);
-                MPI_Bcast(sparse_A.outerIndexPtr(), rows, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(sparse_A.outerIndexPtr(), rows + 1, MPI_INT, 0, MPI_COMM_WORLD);
             }
 #endif
         }

@@ -173,6 +173,14 @@ namespace polysolve::linear
         {
             int start_factorize =1 ;
             MPI_Bcast(&start_factorize, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        } 
+        else 
+        {
+            double eigen_copy_time;
+            {
+                POLYSOLVE_SCOPED_STOPWATCH("eigen matrix copy time", eigen_copy_time, *logger);
+                sparse_A = Ain;
+            }
         }
 #endif
         logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
@@ -237,8 +245,9 @@ namespace polysolve::linear
             has_matrix_ = false;
         }
 
-        if (save_problem)
+        if (save_problem && myid == 0)
         {
+            logger->trace("Saving problem");
             std::vector<Eigen::Triplet<double>> triplets;
             triplets.reserve(sparse_A.nonZeros());
 
@@ -261,12 +270,13 @@ namespace polysolve::linear
         }
 
         has_matrix_ = true;
+
         const HYPRE_Int rows = sparse_A.rows();
         const HYPRE_Int cols = sparse_A.cols();
 
         int local_size = rows / num_procs;
         start_i = myid == 0 ? 0 : local_size * myid + myid;
-        end_i = myid == num_procs - 1 ? rows - 1 : start_i + local_size;
+        end_i = myid == (num_procs - 1) ? rows - 1 : start_i + local_size;
         logger->trace("World size: {}, myid: {}", num_procs, myid);
         logger->trace("start {}, end {}", start_i, end_i);
 #ifdef HYPRE_WITH_MPI
@@ -557,7 +567,7 @@ namespace polysolve::linear
         #ifdef HYPRE_WITH_MPI
             MPI_Barrier(MPI_COMM_WORLD);
         #endif
-                    HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+            HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
         /* Now setup and solve! */
         {
@@ -1220,12 +1230,6 @@ namespace polysolve::linear
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
         }
-#ifdef HYPRE_WITH_MPI
-        int finalized;
-        MPI_Finalized(&finalized);
-        if (!finalized)
-            MPI_Finalize();
-#endif
 
     }
 

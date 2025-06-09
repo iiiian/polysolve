@@ -561,12 +561,6 @@
         "doc": "If using incomplete cholesky preconditioner, threshold used in setting sparsity pattern."
     },
     {
-        "pointer": "/Experimental/bad_dof_grad_threshold",
-        "default": 0.1,
-        "type": "float",
-        "doc": "What percentile gradient magnitude to use as a cutoff for marking a node as problematic (between 0 and 1)."
-    },
-    {
         "pointer": "/Experimental/select_bad_dofs_from_rhs",
         "default": false,
         "type": "bool",

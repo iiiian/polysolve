@@ -756,7 +756,7 @@ namespace polysolve::linear
     }
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
-    {
+{
         num_iterations = 0;
         while (num_iterations < max_iter_)
         {
@@ -814,14 +814,7 @@ namespace polysolve::linear
                     H(i, j - 1) = w.dot(V.col(i));
                     w -= H(i, j-1) * V.col(i);
                 }
-                double wnorm = w.norm();
-                H(j, j - 1) = wnorm;
-                logger->trace("GMRES. W norm: {}", wnorm);
-                if (wnorm < conv_tol_)
-                {
-                    m_ = j - 1;
-                    break;
-                }
+                H(j, j - 1) = w.norm();
                 V.col(j) = w / H(j, j - 1);
             }
 

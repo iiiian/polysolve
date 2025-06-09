@@ -30,8 +30,8 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
     include(${CMAKE_CURRENT_SOURCE_DIR}/PolySolveOptions.cmake)
 endif()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lmpi_cxx")
-SET(CMAKE_CXX_COMPILER "/opt/homebrew/bin/mpicxx")
+#SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lmpi_cxx")
+#SET(CMAKE_CXX_COMPILER "/opt/homebrew/bin/mpicxx")
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)

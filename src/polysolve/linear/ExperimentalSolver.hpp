@@ -50,21 +50,27 @@ namespace polysolve::linear
         { 
             precond_num_ = precond_num; 
 
+            double eigen_copy_time;
+            {
+                POLYSOLVE_SCOPED_STOPWATCH("eigen matrix copy time", eigen_copy_time, *logger);
+                sparse_A = A;
+            }
+
 #ifdef HYPRE_WITH_MPI
             if (myid == 0)
             {
                 int rows, cols, nnzs;
-                rows = A.rows();
-                cols = A.cols();
-                nnzs = A.nonZeros();
+                rows = sparse_A.rows();
+                cols = sparse_A.cols();
+                nnzs = sparse_A.nonZeros();
 
                 MPI_Bcast(&rows, 1, MPI_INT, 0, MPI_COMM_WORLD);
                 MPI_Bcast(&cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
                 MPI_Bcast(&nnzs, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-                MPI_Bcast(A.valuePtr(), nnzs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-                MPI_Bcast(A.innerIndexPtr(), nnzs, MPI_INT, 0, MPI_COMM_WORLD);
-                MPI_Bcast(A.outerIndexPtr(), rows, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(sparse_A.valuePtr(), nnzs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                MPI_Bcast(sparse_A.innerIndexPtr(), nnzs, MPI_INT, 0, MPI_COMM_WORLD);
+                MPI_Bcast(sparse_A.outerIndexPtr(), rows, MPI_INT, 0, MPI_COMM_WORLD);
             }
 #endif
         }

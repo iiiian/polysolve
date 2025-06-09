@@ -178,12 +178,6 @@ namespace polysolve::linear
         logger->trace("Num Threads for ExperimentalSolver: {}", num_threads);
         logger->trace("Eigen num threads: {}", Eigen::nbThreads());
 
-        double eigen_copy_time;
-        {
-            POLYSOLVE_SCOPED_STOPWATCH("eigen matrix copy time", eigen_copy_time, *logger);
-            sparse_A = Ain;
-        }
-
 #ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)
         {
@@ -477,18 +471,19 @@ namespace polysolve::linear
 
     void ExperimentalSolver::solve(const Eigen::Ref<const VectorXd> rhs, Eigen::Ref<VectorXd> result)
     {
+        assert(result.size() == rhs.size());
+        Eigen::VectorXd remapped_rhs = rhs;
+        Eigen::VectorXd remapped_result = result;
+
 #ifdef HYPRE_WITH_MPI
         if (myid == 0)
         {
-            MPI_Bcast(rhs.data(), rows, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            MPI_Bcast(remapped_rhs.data(), remapped_rhs.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
             int start_solve = 1;
             MPI_Bcast(&start_solve, 1, MPI_INT, 0, MPI_COMM_WORLD);
         }
 #endif
-        
-        assert(result.size() == rhs.size());
-        Eigen::VectorXd remapped_rhs = rhs;
-        Eigen::VectorXd remapped_result = result;
+
 
 #ifdef POLYSOLVE_WITH_ICHOL
         if (use_incomplete_cholesky_precond)

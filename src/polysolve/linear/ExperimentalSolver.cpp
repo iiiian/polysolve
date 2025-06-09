@@ -479,6 +479,7 @@ namespace polysolve::linear
         if (myid == 0)
         {
             MPI_Bcast(remapped_rhs.data(), remapped_rhs.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+            MPI_Bcast(remapped_result.data(), remapped_result.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
             int start_solve = 1;
             MPI_Bcast(&start_solve, 1, MPI_INT, 0, MPI_COMM_WORLD);
         }

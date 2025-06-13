@@ -836,7 +836,7 @@ namespace polysolve::linear
                 H(i+1, i) = w.norm();
                 V.col(i + 1) = w / H(i+1, i);
                 
-                for (k = 0; k <= i; ++k)
+                for (k = 0; k < i; ++k)
                 {
                     ApplyPlaneRotation(H(k,i), H(k+1,i), cs(k), sn(k));
                 }

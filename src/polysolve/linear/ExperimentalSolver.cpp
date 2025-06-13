@@ -756,77 +756,130 @@ namespace polysolve::linear
     }
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
-{
-        num_iterations = 0;
-        while (num_iterations < max_iter_)
+    {
+        double residual;
+        int i, j = 1, k;
+        Eigen::VectorXd s(m_ + 1);
+        Eigen::VectorXd cs(m_ + 1);
+        Eigen::VectorXd sn(m_ + 1);
+        Eigen::VectorXd w;
+
+        Eigen::VectorXd z(rhs.size());
+        if (!do_mixed_precond || bad_indices_.size() == 0)
         {
-            Eigen::VectorXd A_times_x;
-            matmul(result, sparse_A, A_times_x);
-            Eigen::VectorXd z = rhs - A_times_x;
-            
-            Eigen::VectorXd r0(z.size());
-            r0.setZero();
+            amg_precond_iter(precond, rhs, z);
+        }
+        else
+        {
+            custom_mixed_precond_iter(precond, rhs, z);
+        }
 
-            if (!do_mixed_precond || bad_indices_.size() == 0)
-            {
-                amg_precond_iter(precond, z, r0);
-            }
-            else
-            {
-                custom_mixed_precond_iter(precond, z, r0);
-            }
+        double normb = z.norm();
+        Eigen::VectorXd A_times_x;
+        matmul(result, sparse_A, A_times_x);
+        Eigen::VectorXd r0 = rhs - A_times_x;
 
-            double rsq = z.dot(z);
-            double mrsq = r0.dot(r0);
-            logger->trace("GMRES. Iter: {}, rsq: {}, mrsq: {}", num_iterations, rsq, mrsq);
-            if (rsq < conv_tol_ * conv_tol_ && mrsq < conv_tol_ * conv_tol_)
-            {
-                return;
-            }
-            ++num_iterations;
+        Eigen::VectorXd r(rhs.size());
+        if (!do_mixed_precond || bad_indices_.size() == 0)
+        {
+            amg_precond_iter(precond, r0, r);
+        }
+        else
+        {
+            custom_mixed_precond_iter(precond, r0, r);
+        }
 
-            double beta = r0.norm();
-            
-            Eigen::MatrixXd V(r0.size(), m_);
-            V.col(0) = r0 / beta;
-            Eigen::MatrixXd H(m_+1, m_);
-            H.setZero();
-            for (int j = 1; j < m_ + 1; ++j)
+        double beta = r.norm();
+        if (normb == 0)
+        {
+            normb = 1;
+        }
+
+        residual = beta / normb;
+        if (residual < conv_tol_)
+        {
+            num_iterations = 0;
+            return;
+        }
+
+        Eigen::MatrixXd V(rhs.size(), m_ + 1);
+        Eigen::MatrixXd H(m_ + 2, m_ + 1);
+        H.setZero();
+
+        while (j < max_iter_)
+        {
+            V.col(0) = r / beta;
+            s.setZero();
+            s(0) = beta;
+
+            for (i = 0; i < m_ && j <= max_iter_; ++i, ++j)
             {
-                ++num_iterations;
-                Eigen::VectorXd w, A_times_vj;
-                Eigen::VectorXd vj = V.col(j - 1);
-                matmul(vj, sparse_A, A_times_vj);
-                w.resize(r0.size());
-                w.setZero();
+                Eigen::VectorXd A_times_vi;
+                Eigen::VectorXd vi = V.col(i);
+                matmul(vi, sparse_A, A_times_vi);
 
                 if (!do_mixed_precond || bad_indices_.size() == 0)
                 {
-                    amg_precond_iter(precond, A_times_vj, w);
+                    amg_precond_iter(precond, A_times_vi, w);
                 }
                 else
                 {
-                    custom_mixed_precond_iter(precond, A_times_vj, w);
+                    custom_mixed_precond_iter(precond, A_times_vi, w);
                 }
 
-                for (int i = 0; i < j; ++i)
+                for (k = 0; k <= i; ++k)
                 {
-                    H(i, j - 1) = w.dot(V.col(i));
-                    w -= H(i, j-1) * V.col(i);
+                    H(k, i) = w.dot(V.col(k));
+                    w -= H(k, i) * V.col(k);
                 }
-                H(j, j - 1) = w.norm();
-                V.col(j) = w / H(j, j - 1);
+
+                H(i+1, i) = w.norm();
+                V.col(i + 1) = w / H(i+1, i);
+                
+                for (k = 0; k <= i; ++k)
+                {
+                    ApplyPlaneRotation(H(k,i), H(k+1,i), cs(k), sn(k));
+                }
+        
+                GeneratePlaneRotation(H(i,i), H(i+1,i), cs(i), sn(i));
+                ApplyPlaneRotation(H(i,i), H(i+1,i), cs(i), sn(i));
+                ApplyPlaneRotation(s(i), s(i+1), cs(i), sn(i));
+                
+                residual = abs(s(i+1)) / normb;
+                if (residual < conv_tol_) 
+                {
+                    Update(result, i, H, s, V);
+                    num_iterations = j;
+                    return;
+                }
             }
 
-            Eigen::FullPivHouseholderQR<Eigen::MatrixXd> qr_solver(H.block(0, 0, m_ + 1, m_));
-            Eigen::VectorXd e1(m_+1);
-            e1.setZero();
-            e1(0) = beta;
-            Eigen::VectorXd y = qr_solver.solve(e1);
+            Update(result, m_ - 1, H, s, V);
+            matmul(result, sparse_A, A_times_x);
+            r0 = rhs - A_times_x;
 
-            result += V * y;
+            r.setZero();
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, r0, r);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, r0, r);
+            }
+            beta = r.norm();
+
+            residual = beta / normb;
+            if (residual < conv_tol_) 
+            {
+                num_iterations = j;
+                return;
+            }
+
         }
+        num_iterations = max_iter_;
     }
+
 
     void ExperimentalSolver::custom_mixed_precond_iter(const HYPRE_Solver &precond, const Eigen::VectorXd &r, Eigen::VectorXd &z)
     {        

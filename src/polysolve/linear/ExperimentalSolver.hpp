@@ -149,6 +149,44 @@ namespace polysolve::linear
         void dss_precond_iter(const Eigen::VectorXd &z, const Eigen::VectorXd &r, Eigen::VectorXd &next_z);
         void matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result);
 
+        void GeneratePlaneRotation(double &dx, double &dy, double &cs, double &sn)
+        {
+            if (dy == 0.0) {
+                cs = 1.0;
+                sn = 0.0;
+            } else if (abs(dy) > abs(dx)) {
+                double temp = dx / dy;
+                sn = 1.0 / sqrt( 1.0 + temp*temp );
+                cs = temp * sn;
+            } else {
+                double temp = dy / dx;
+                cs = 1.0 / sqrt( 1.0 + temp*temp );
+                sn = temp * cs;
+            }
+        }
+
+        void ApplyPlaneRotation(double &dx, double &dy, double &cs, double &sn)
+        {
+            double temp  =  cs * dx + sn * dy;
+            dy = -sn * dx + cs * dy;
+            dx = temp;
+        }
+
+        void Update(Eigen::VectorXd &x, int k, Eigen::MatrixXd &h, Eigen::VectorXd &s, Eigen::MatrixXd &v)
+        {
+            Eigen::VectorXd y = s;
+
+            // Backsolve:  
+            for (int i = k; i >= 0; i--) {
+                y(i) /= h(i,i);
+                for (int j = i - 1; j >= 0; j--)
+                    y(j) -= h(j,i) * y(i);
+            }
+
+            for (int j = 0; j <= k; j++)
+                x += v.col(j) * y(j);
+        }
+
         void check_matrix_conditioning(const std::string name, const std::set<int>& subdomain);
         void check_matrix_conditioning(const std::string name, const Eigen::MatrixXd& mat);
 

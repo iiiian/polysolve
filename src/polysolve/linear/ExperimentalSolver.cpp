@@ -795,7 +795,12 @@ namespace polysolve::linear
             normb = 1;
         }
 
-        residual = beta / normb;
+        residual = beta;
+        if (!use_absolute_tol)
+        {
+            residual /= normb;
+        }
+
         if (residual < conv_tol_)
         {
             num_iterations = 0;
@@ -845,7 +850,14 @@ namespace polysolve::linear
                 ApplyPlaneRotation(H(i,i), H(i+1,i), cs(i), sn(i));
                 ApplyPlaneRotation(s(i), s(i+1), cs(i), sn(i));
                 
-                residual = abs(s(i+1)) / normb;
+                residual = abs(s(i+1));
+                if (!use_absolute_tol)
+                {
+                    residual /= normb;
+                }
+
+                logger->trace("GMRES. Iter: {}, Residual: {}", j, residual);
+
                 if (residual < conv_tol_) 
                 {
                     Update(result, i, H, s, V);
@@ -869,7 +881,12 @@ namespace polysolve::linear
             }
             beta = r.norm();
 
-            residual = beta / normb;
+            residual = beta;
+            if (!use_absolute_tol)
+            {
+                residual /= normb;
+            }
+
             if (residual < conv_tol_) 
             {
                 num_iterations = j;

@@ -762,7 +762,7 @@ namespace polysolve::linear
         Eigen::VectorXd s(m_ + 1);
         Eigen::VectorXd cs(m_ + 1);
         Eigen::VectorXd sn(m_ + 1);
-        Eigen::VectorXd w;
+        Eigen::VectorXd w(rhs.size());
 
         Eigen::VectorXd z(rhs.size());
         if (!do_mixed_precond || bad_indices_.size() == 0)
@@ -811,7 +811,7 @@ namespace polysolve::linear
         Eigen::MatrixXd H(m_ + 2, m_ + 1);
         H.setZero();
 
-        while (j < max_iter_)
+        while (j <= max_iter_)
         {
             V.col(0) = r / beta;
             s.setZero();

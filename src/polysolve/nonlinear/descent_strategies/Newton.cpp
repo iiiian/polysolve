@@ -181,7 +181,7 @@ namespace polysolve::nonlinear
             linear_solver->set_elements(elements);
             linear_solver->set_dof_to_function(dof_to_function);
             linear_solver->set_problematic_dofs(problematic_indices);
-            linear_solver->full_to_reduced_func = objFunc.full_to_reduced_func;
+            linear_solver->reduced_to_full_func = objFunc.reduced_to_full_func;
         }
 
         {

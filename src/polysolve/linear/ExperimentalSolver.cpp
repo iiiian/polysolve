@@ -1125,7 +1125,7 @@ namespace polysolve::linear
         {
             std::ofstream file;
             file.open("criteria.txt", std::ios_base::app);
-            file << sq_mags.transpose() << std::endl;
+            file << full_to_reduced_func(sq_mags).transpose() << std::endl;
             file.close();
         }
 

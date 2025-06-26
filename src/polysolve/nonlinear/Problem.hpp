@@ -106,6 +106,7 @@ namespace polysolve::nonlinear
 
         virtual void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
         virtual void get_dof_to_func_mapping(std::vector<int> &dof_to_func_mapping_out) {};
+        std::function<Eigen::VectorXd(const Eigen::VectorXd&)> full_to_reduced_func;
 
         /// --- Misc ----------------------------------------------------------
 

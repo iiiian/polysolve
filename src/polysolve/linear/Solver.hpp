@@ -141,6 +141,7 @@ namespace polysolve::linear
         std::vector<std::set<int>> bad_indices_;
 
         spdlog::logger *logger = nullptr;
+        std::function<Eigen::VectorXd(const Eigen::VectorXd&)> full_to_reduced_func;
     };
 
 } // namespace polysolve::linear

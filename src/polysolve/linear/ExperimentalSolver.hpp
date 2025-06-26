@@ -84,6 +84,7 @@ namespace polysolve::linear
         // Name of the solver type (for debugging purposes)
         virtual std::string name() const override { return "Experimental"; }
 
+
     protected:
         int dimension_ = 1; // 1 = scalar (Laplace), 2 or 3 = vector (Elasticity)
         int max_iter_ = 1000;

@@ -118,6 +118,7 @@ namespace polysolve::nonlinear
 
         void reset(const int ndof) override;
         bool handle_error() override;
+        void handle_success() override;
 
     private:
         const bool project_to_psd;

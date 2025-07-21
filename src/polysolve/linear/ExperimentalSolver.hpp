@@ -108,6 +108,7 @@ namespace polysolve::linear
         bool save_selected_indices;
         bool save_problem;
         bool use_gmres;
+        bool use_minres;
         int m_ = 10;
 
         HYPRE_Int num_iterations;
@@ -195,7 +196,9 @@ namespace polysolve::linear
         void factorize_submatrix();
 
         void pcg_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
+        void minres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
         void gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
+
         
     };
 

@@ -37,6 +37,7 @@ namespace polysolve::nonlinear
 
         virtual bool is_direction_descent() { return true; }
         virtual bool handle_error() { return false; }
+        virtual void handle_success() { }
 
         /// @brief Compute descent direction along which to do line search
         /// @param objFunc Problem to be minimized

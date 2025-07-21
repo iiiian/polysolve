@@ -478,6 +478,7 @@
             "save_problem",
             "save_selected_indices",
             "use_gmres",
+            "use_minres",
             "m"
         ],
         "doc": "Settings for the Experimental solver."
@@ -607,7 +608,13 @@
         "default": false,
         "type": "bool",
         "doc": "If true, use gmres as linear solver, otherwise default to PCG."
-    }          ,
+    },
+    {
+        "pointer": "/Experimental/use_minres",
+        "default": false,
+        "type": "bool",
+        "doc": "If true, use minres as linear solver, otherwise default to PCG."
+    },
     {
         "pointer": "/Experimental/m",
         "default": 10,

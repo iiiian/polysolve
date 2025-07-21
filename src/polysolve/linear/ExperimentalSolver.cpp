@@ -151,6 +151,10 @@ namespace polysolve::linear
             {
                 use_gmres = params["Experimental"]["use_gmres"];
             }
+            if (params["Experimental"].contains("use_minres"))
+            {
+                use_minres = params["Experimental"]["use_minres"];
+            }
             if (params["Experimental"].contains("m"))
             {
                 m_ = params["Experimental"]["m"];
@@ -576,7 +580,11 @@ namespace polysolve::linear
 #endif
             POLYSOLVE_SCOPED_STOPWATCH("actual solve time", actual_solve_time, *logger);
 
-            if (use_gmres)
+            if (use_minres)
+            {
+                minres_solve(remapped_rhs, remapped_result, par_b, par_x, precond);
+            } 
+            else if (use_gmres)
             {
                 gmres_solve(remapped_rhs, remapped_result, par_b, par_x, precond);
             } 
@@ -753,6 +761,11 @@ namespace polysolve::linear
 
             p = z + beta*p;
         }
+    }
+
+    void ExperimentalSolver::minres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
+    {
+        // TODO
     }
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)

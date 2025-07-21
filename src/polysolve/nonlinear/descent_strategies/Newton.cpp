@@ -332,6 +332,14 @@ namespace polysolve::nonlinear
         reg_weight *= reg_weight_inc;
         return reg_weight < reg_weight_max;
     }
+
+    void RegularizedNewton::handle_success()
+    {
+        if (reg_weight > reg_weight_min)
+        {
+            reg_weight /= reg_weight_inc;
+        }
+    }
     // =======================================================================
 
     void Newton::update_solver_info(json &solver_info, const double per_iteration)

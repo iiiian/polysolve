@@ -766,6 +766,118 @@ namespace polysolve::linear
     void ExperimentalSolver::minres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
     {
         // TODO
+        double beta, eta, gamma0, gamma1, sigma0, sigma1;
+        double alpha, delta, rho1, rho2, rho3, norm_goal;
+
+        bool converged = false;
+
+        Eigen::VectorXd v1;
+        matmul(result, sparse_A, v1);
+        v1 = rhs - v1;
+
+        Eigen::VectorXd q(rhs.size());
+        Eigen::VectorXd v0(rhs.size());
+        Eigen::VectorXd w0(rhs.size());
+        Eigen::VectorXd w1(rhs.size());
+        Eigen::VectorXd u1(rhs.size());
+        if (!do_mixed_precond || bad_indices_.size() == 0)
+        {
+            amg_precond_iter(precond, v1, u1);
+        }
+        else
+        {
+            custom_mixed_precond_iter(precond, v1, u1);
+        }
+
+        eta = beta = sqrt(u1.dot(v1));
+        gamma0 = gamma1 = 1.;
+        sigma0 = sigma1 = 0.;
+
+        norm_goal = conv_tol_;
+        if (!use_absolute_tol)
+        {
+            norm_goal *= eta;
+        }
+
+        if (eta <= norm_goal)
+        {
+            num_iterations = 0;
+            return;
+        }
+
+        for (num_iterations = 1; num_iterations <= max_iter_; ++num_iterations)
+        {
+            v1 /= beta;
+            u1 /= beta;
+
+            matmul(u1, sparse_A, q);
+            alpha = u1.dot(q);
+
+            if (num_iterations > 1)
+            {
+                q -= beta * v0;
+            }
+
+            v0 = q - alpha * v1;
+
+            delta = gamma1 * alpha - gamma0 * sigma1 * beta;
+            rho3 = sigma0 * beta;
+            rho2 = sigma1 * alpha + gamma0 * gamma1 * beta;
+
+            if (!do_mixed_precond || bad_indices_.size() == 0)
+            {
+                amg_precond_iter(precond, v0, q);
+            }
+            else
+            {
+                custom_mixed_precond_iter(precond, v0, q);
+            }
+            beta = sqrt(v0.dot(q));
+            rho1 = std::hypot(delta, beta);
+
+            if (num_iterations == 1)
+            {
+                w0 = u1 / rho1;
+            }
+            else if (num_iterations == 2)
+            {
+                w0 = 1 / rho1 * w0 - rho2 / rho1 * w1;
+            }
+            else
+            {
+                w0 = -rho3 / rho1 * w0 - rho2 / rho1 * w1;
+                w0 += u1 / rho1;
+            }
+
+            gamma0 = gamma1;
+            gamma1 = delta/rho1;
+
+            result += gamma1 * eta * w0;
+
+            sigma0 = sigma1;
+            sigma1 = beta/rho1;
+
+            eta = -sigma1 * eta;
+
+            if (fabs(eta) <= norm_goal)
+            {
+                return;
+            }
+
+            Eigen::VectorXd temp;
+            temp = u1;
+            u1 = q;
+            q = temp;
+            
+            temp = v0;
+            v0 = v1;
+            v1 = temp;
+
+            temp = w0;
+            w0 = w1;
+            w1 = temp;
+        }
+
     }
 
     void ExperimentalSolver::gmres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)

@@ -769,8 +769,6 @@ namespace polysolve::linear
         double beta, eta, gamma0, gamma1, sigma0, sigma1;
         double alpha, delta, rho1, rho2, rho3, norm_goal;
 
-        bool converged = false;
-
         Eigen::VectorXd v1;
         matmul(result, sparse_A, v1);
         v1 = rhs - v1;
@@ -841,7 +839,7 @@ namespace polysolve::linear
             }
             else if (num_iterations == 2)
             {
-                w0 = 1 / rho1 * w0 - rho2 / rho1 * w1;
+                w0 = 1 / rho1 * u1 - rho2 / rho1 * w1;
             }
             else
             {
@@ -858,6 +856,11 @@ namespace polysolve::linear
             sigma1 = beta/rho1;
 
             eta = -sigma1 * eta;
+            logger->trace("MINRES eta: {}, loop iter: {}", eta, num_iterations);
+            Eigen::VectorXd A_times_x;
+            matmul(result, sparse_A, A_times_x);
+            Eigen::VectorXd r0 = rhs - A_times_x;
+            logger->trace("RESIDUAL: {}", r0.norm());
 
             if (fabs(eta) <= norm_goal)
             {

@@ -830,10 +830,27 @@ namespace polysolve::linear
             {
                 custom_mixed_precond_iter(precond, v0, q);
             }
+            bool v0_isnan = false;
+            bool q_isnan = false;
+            for (int i = 0; i < q.size(); ++i)
+            {
+                if (std::isnan(v0(i)))
+                {
+                    v0_isnan = true;
+                }
+                if (std::isnan(q(i)))
+                {
+                    q_isnan = true;
+                }
+            }
             beta = sqrt(v0.dot(q));
             rho1 = std::hypot(delta, beta);
+            logger->trace("DOT: {}", v0.dot(q));
             logger->trace("RHO1: {}", rho1);
-            logger->trace("RHO1: {}", beta);
+            logger->trace("BETA: {}", beta);
+            logger->trace("DELTA: {}", delta);
+            logger->trace("qnan: {}", q_isnan);
+            logger->trace("v0nan: {}", v0_isnan);
 
             if (num_iterations == 1)
             {
@@ -1299,6 +1316,9 @@ namespace polysolve::linear
             POLYSOLVE_SCOPED_STOPWATCH("assemble D", dss_assembly_time, *logger);
             D_solvers.clear();
             D_solvers.resize(bad_indices_.size());
+
+            logger->trace("H symmetric: {}", sparse_A.isApprox(sparse_A.transpose()));
+
             #pragma omp parallel for
             for (int i = 0; i < bad_indices_.size(); ++i)
             {
@@ -1336,6 +1356,7 @@ namespace polysolve::linear
                 {
                     POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
                     D.setFromTriplets(triplets.begin(), triplets.end());
+                    logger->trace("D symmetric: {}", D.isApprox(D.transpose()));
                 }
 
                 {

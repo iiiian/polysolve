@@ -832,6 +832,8 @@ namespace polysolve::linear
             }
             beta = sqrt(v0.dot(q));
             rho1 = std::hypot(delta, beta);
+            logger->trace("RHO1: {}", rho1);
+            logger->trace("RHO1: {}", beta);
 
             if (num_iterations == 1)
             {

@@ -1363,6 +1363,20 @@ namespace polysolve::linear
                     POLYSOLVE_SCOPED_STOPWATCH("factorize D", dss_factorization_time, *logger);
                     D_solvers[i].compute(D);
                 }
+            
+
+                // check symmetry
+                int rows = bad_indices_.size();
+                Eigen::VectorXd test_u(rows);
+                Eigen::VectorXd test_v(rows);
+                test_u.setRandom();
+                test_v.setRandom();
+                test_u /= test_u.norm();
+                test_v /= test_v.norm();
+                Eigen::VectorXd inverse_u = D_solvers[i].solve(test_u);
+                Eigen::VectorXd inverse_v = D_solvers[i].solve(test_v);
+                double sym_check = test_v.dot(inverse_u) - test_u.dot(inverse_v);
+                logger->trace("D Symmetry check: {}", sym_check);
             }
         }
     }

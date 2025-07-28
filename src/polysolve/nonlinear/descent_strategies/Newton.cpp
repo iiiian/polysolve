@@ -8,6 +8,12 @@
 #include <spdlog/fmt/bundled/color.h>
 #endif
 
+#include <GenEigsSolver.h>
+#include <SymEigsSolver.h>
+#include <MatOp/SparseGenMatProd.h>
+#include <MatOp/DenseSymMatProd.h>
+#include <MatOp/SparseSymMatProd.h>
+
 namespace polysolve::nonlinear
 {
 
@@ -61,9 +67,10 @@ namespace polysolve::nonlinear
                    const json &solver_params,
                    const json &linear_solver_params,
                    const double characteristic_length,
+                   const bool try_neg_eig_dir,
                    spdlog::logger &logger)
         : Superclass(solver_params, characteristic_length, logger),
-          is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance)
+          is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance), try_neg_eig_dir(try_neg_eig_dir)
     {
         linear_solver = polysolve::linear::Solver::create(linear_solver_params, logger);
         if (linear_solver->is_dense() == sparse)
@@ -79,7 +86,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger)
+        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, extract_param("Newton", "try_neg_eig_dir", solver_params), logger)
     {
     }
 
@@ -89,7 +96,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger)
+        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger)
     {
     }
 
@@ -100,7 +107,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Superclass(sparse, extract_param("RegularizedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger),
+        : Superclass(sparse, extract_param("RegularizedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger),
           project_to_psd(project_to_psd)
     {
         reg_weight_min = extract_param("RegularizedNewton", "reg_weight_min", solver_params);
@@ -150,7 +157,32 @@ namespace polysolve::nonlinear
             m_logger.debug("[{}] large (or nan) linear solve residual {}>{} (‖∇f‖={})",
                            name(), residual, residual_tolerance * characteristic_length, grad.norm());
 
-            return false;
+            // TODO: find largest negative eigenvalue and use it as search
+            polysolve::StiffnessMatrix hessian;
+            compute_hessian(objFunc, x, hessian);
+            Spectra::SparseSymMatProd<double> op(hessian);
+            Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
+
+            if (!try_neg_eig_dir)
+            {
+                return false;
+            }
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            Eigen::MatrixXd eigenvectors;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+            {
+                eigenvalues = eigs.eigenvalues();
+                eigenvectors = eigs.eigenvectors();
+
+                m_logger.debug("eigenvalue found: {}", eigenvalues(0)); 
+                direction = eigenvectors.col(0);
+            }
+
+            return true;
+            //return false;
         }
         else
         {

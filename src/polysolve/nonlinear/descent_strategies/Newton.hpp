@@ -26,6 +26,7 @@ namespace polysolve::nonlinear
                const json &solver_params,
                const json &linear_solver_params,
                const double characteristic_length,
+               const bool try_neg_eig_dir,
                spdlog::logger &logger);
 
     public:
@@ -50,6 +51,8 @@ namespace polysolve::nonlinear
         const bool is_sparse;
         const double characteristic_length;
         double residual_tolerance;
+
+        bool try_neg_eig_dir;
 
         std::shared_ptr<polysolve::linear::Solver> linear_solver; ///< Linear solver used to solve the linear system
 

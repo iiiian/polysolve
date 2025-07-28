@@ -406,6 +406,7 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetCoarsenType(amg_precond, coarsen_type);
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, agg_levels);
             HYPRE_BoomerAMGSetRelaxType(amg_precond, relax_type);
+            HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_type, 3);
             HYPRE_BoomerAMGSetNumSweeps(amg_precond, relax_sweeps);
             HYPRE_BoomerAMGSetStrongThreshold(amg_precond, theta);
             HYPRE_BoomerAMGSetInterpType(amg_precond, interp_type);

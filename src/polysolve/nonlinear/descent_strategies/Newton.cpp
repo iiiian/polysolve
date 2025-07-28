@@ -86,7 +86,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, extract_param("Newton", "try_neg_eig_dir", solver_params), logger)
+        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, solver_params["Newton"]["try_neg_eig_dir"], logger)
     {
     }
 
@@ -179,10 +179,11 @@ namespace polysolve::nonlinear
 
                 m_logger.debug("eigenvalue found: {}", eigenvalues(0)); 
                 direction = eigenvectors.col(0);
+
+                return true;
             }
 
-            return true;
-            //return false;
+            return false;
         }
         else
         {

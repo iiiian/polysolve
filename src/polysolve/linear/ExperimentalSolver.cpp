@@ -797,6 +797,7 @@ namespace polysolve::linear
         Eigen::VectorXd w0(rhs.size());
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
+        u1 = v1;
         if (!do_mixed_precond || bad_indices_.size() == 0)
         {
             amg_precond_iter(precond, v1, u1);

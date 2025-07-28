@@ -1377,6 +1377,7 @@ namespace polysolve::linear
                 Eigen::VectorXd inverse_v = D_solvers[i].solve(test_v);
                 double sym_check = test_v.dot(inverse_u) - test_u.dot(inverse_v);
                 logger->trace("D Symmetry check: {}", sym_check);
+                logger->trace("Dmax: {}, Dmin: {}", D.coeffs().maxCoeff(), D.coeffs().minCoeff());
             }
         }
     }

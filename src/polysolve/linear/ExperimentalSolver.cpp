@@ -573,6 +573,25 @@ namespace polysolve::linear
         #endif
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
+        Eigen::VectorXd test_u(remapped_rhs.size());
+        Eigen::VectorXd test_v(remapped_rhs.size());
+        test_u.setRandom();
+        test_v.setRandom();
+        test_u /= test_u.norm();
+        test_v /= test_v.norm();
+        Eigen::VectorXd u_amg(remapped_rhs.size());
+        Eigen::VectorXd v_amg(remapped_rhs.size());
+        amg_precond_iter(precond, test_u, u_amg);
+        amg_precond_iter(precond, test_v, v_amg);
+        double sym_check = test_v.dot(sparse_A * test_u) - test_u.dot(sparse_A * test_v);
+        double sym_check2 = test_v.dot(u_amg) - test_u.dot(v_amg);
+        double sym_check3 = test_v.dot(v_amg);
+        double sym_check4 = test_u.dot(u_amg);
+        logger->trace("H Symmetry check: {}", sym_check);
+        logger->trace("AMG Symmetry check: {}", sym_check2);
+        logger->trace("AMG SPD check1: {}", sym_check3);
+        logger->trace("AMG SPD check2: {}", sym_check4);
+
         /* Now setup and solve! */
         {
 #ifdef HYPRE_WITH_MPI
@@ -1366,18 +1385,25 @@ namespace polysolve::linear
             
 
                 // check symmetry
-                int rows = bad_indices_.size();
-                Eigen::VectorXd test_u(rows);
-                Eigen::VectorXd test_v(rows);
-                test_u.setRandom();
-                test_v.setRandom();
-                test_u /= test_u.norm();
-                test_v /= test_v.norm();
-                Eigen::VectorXd inverse_u = D_solvers[i].solve(test_u);
-                Eigen::VectorXd inverse_v = D_solvers[i].solve(test_v);
-                double sym_check = test_v.dot(inverse_u) - test_u.dot(inverse_v);
-                logger->trace("D Symmetry check: {}", sym_check);
-                logger->trace("Dmax: {}, Dmin: {}", D.coeffs().maxCoeff(), D.coeffs().minCoeff());
+                int rows = D.rows();
+                if (rows > 0)
+                {
+                    Eigen::VectorXd test_u(rows);
+                    Eigen::VectorXd test_v(rows);
+                    test_u.setRandom();
+                    test_v.setRandom();
+                    test_u /= test_u.norm();
+                    test_v /= test_v.norm();
+                    Eigen::VectorXd inverse_u = D_solvers[i].solve(test_u);
+                    Eigen::VectorXd inverse_v = D_solvers[i].solve(test_v);
+                    double sym_check = test_v.dot(inverse_u) - test_u.dot(inverse_v);
+                    double sym_check2 = test_u.dot(inverse_u);
+                    double sym_check3 = test_v.dot(inverse_v);
+                    logger->trace("D Symmetry check: {}", sym_check);
+                    logger->trace("D Symmetry check2: {}", sym_check2);
+                    logger->trace("D Symmetry check3: {}", sym_check3);
+                    logger->trace("Dmax: {}, Dmin: {}", D.coeffs().maxCoeff(), D.coeffs().minCoeff());
+                }
             }
         }
     }

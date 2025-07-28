@@ -579,8 +579,8 @@ namespace polysolve::linear
         test_v.setRandom();
         test_u /= test_u.norm();
         test_v /= test_v.norm();
-        Eigen::VectorXd u_amg(remapped_rhs.size());
-        Eigen::VectorXd v_amg(remapped_rhs.size());
+        Eigen::VectorXd u_amg = test_u;
+        Eigen::VectorXd v_amg = test_v;
         amg_precond_iter(precond, test_u, u_amg);
         amg_precond_iter(precond, test_v, v_amg);
         double sym_check = test_v.dot(sparse_A * test_u) - test_u.dot(sparse_A * test_v);

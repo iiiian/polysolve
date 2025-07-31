@@ -789,12 +789,11 @@ namespace polysolve::linear
         Eigen::VectorXd w0(rhs.size());
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
-        u1 = v1;
+        u1.setZero();
 
         if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
         {
             amg_precond_iter(precond, v1, u1);
-
         } 
         else 
         {
@@ -849,10 +848,10 @@ namespace polysolve::linear
             rho3 = sigma0 * beta;
             rho2 = sigma1 * alpha + gamma0 * gamma1 * beta;
 
+            q.setZero();
             if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
             {
                 amg_precond_iter(precond, v0, q);
-
             } 
             else 
             {

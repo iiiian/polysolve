@@ -790,7 +790,9 @@ namespace polysolve::linear
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
         u1.setZero();
+        custom_mixed_preocond_iter(precond, v1, u1);
 
+        /*
         if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
         {
             amg_precond_iter(precond, v1, u1);
@@ -823,6 +825,7 @@ namespace polysolve::linear
             amg_precond_iter(precond, r2, x2);
             u1 = x2;
         }
+        */
         
     
         eta = beta = sqrt(u1.dot(v1));
@@ -861,6 +864,8 @@ namespace polysolve::linear
             rho2 = sigma1 * alpha + gamma0 * gamma1 * beta;
 
             q.setZero();
+            custom_mixed_precond_iter(precond, v0, q);
+            /*
             if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
             {
                 amg_precond_iter(precond, v0, q);
@@ -886,6 +891,7 @@ namespace polysolve::linear
                         x2(index) -= x1(index);
                     }
                 }
+                */
 
                 Eigen::VectorXd A_times_x2;
                 matmul(x2, sparse_A, A_times_x2);

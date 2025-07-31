@@ -790,7 +790,7 @@ namespace polysolve::linear
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
         u1.setZero();
-        custom_mixed_preocond_iter(precond, v1, u1);
+        custom_mixed_precond_iter(precond, v1, u1);
 
         /*
         if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
@@ -891,14 +891,14 @@ namespace polysolve::linear
                         x2(index) -= x1(index);
                     }
                 }
-                */
+                
 
                 Eigen::VectorXd A_times_x2;
                 matmul(x2, sparse_A, A_times_x2);
                 Eigen::VectorXd r2 = v0 - A_times_x2;
                 amg_precond_iter(precond, r2, x2);
                 q = x2;
-            }
+            }*/
             
             bool v0_isnan = false;
             bool q_isnan = false;

@@ -582,16 +582,26 @@ namespace polysolve::linear
         test_v /= test_v.norm();
         Eigen::VectorXd u_amg = test_u;
         Eigen::VectorXd v_amg = test_v;
+        Eigen::VectorXd u_custom = test_u;
+        Eigen::VectorXd v_custom = test_v;
         amg_precond_iter(precond, test_u, u_amg);
         amg_precond_iter(precond, test_v, v_amg);
+        custom_mixed_precond_iter(precond, test_u, u_custom);
+        custom_mixed_precond_iter(precond, test_v, v_custom);
         double sym_check = test_v.dot(sparse_A * test_u) - test_u.dot(sparse_A * test_v);
         double sym_check2 = test_v.dot(u_amg) - test_u.dot(v_amg);
         double sym_check3 = test_v.dot(v_amg);
         double sym_check4 = test_u.dot(u_amg);
+        double sym_check5 = test_v.dot(u_custom) - test_u.dot(v_custom);
+        double sym_check6 = test_v.dot(v_custom);
+        double sym_check7 = test_u.dot(u_custom);
         logger->trace("H Symmetry check: {}", sym_check);
         logger->trace("AMG Symmetry check: {}", sym_check2);
         logger->trace("AMG SPD check1: {}", sym_check3);
         logger->trace("AMG SPD check2: {}", sym_check4);
+        logger->trace("Custom Symmetry check: {}", sym_check5);
+        logger->trace("Custom SPD check1: {}", sym_check6);
+        logger->trace("Custom SPD check2: {}", sym_check7);
 
         /* Now setup and solve! */
         {

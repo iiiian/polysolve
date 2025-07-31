@@ -684,14 +684,10 @@ namespace polysolve::linear
                 z = inc_chol_precond->solve(r);
             } else
 #endif
-            if (!do_mixed_precond || bad_indices_.size() == 0)
-            {
-                amg_precond_iter(precond, r, z);
-            }
-            else
             {
                 custom_mixed_precond_iter(precond, r, z);
             }
+            
             
             p = z;
 
@@ -766,11 +762,6 @@ namespace polysolve::linear
                 z = inc_chol_precond->solve(r);
             } else
 #endif
-            if (!do_mixed_precond || bad_indices_.size() == 0)
-            {
-                amg_precond_iter(precond, r, z);
-            }
-            else
             {
                 custom_mixed_precond_iter(precond, r, z);
             }
@@ -799,15 +790,30 @@ namespace polysolve::linear
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
         u1 = v1;
-        if (!do_mixed_precond || bad_indices_.size() == 0)
+
+        if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
         {
             amg_precond_iter(precond, v1, u1);
-        }
-        else
-        {
-            custom_mixed_precond_iter(precond, v1, u1);
-        }
 
+        } 
+        else 
+        {
+            Eigen::VectorXd A_times_u1;
+            matmul(u1, sparse_A, A_times_u1);
+            Eigen::VectorXd r0 = v1 - A_times_u1;
+            Eigen::VectorXd x1 = u1; 
+            amg_precond_iter(precond, r0, x1);
+            Eigen::VectorXd x2 = x1;
+            dss_precond_iter(x1, v1, x2);
+
+            Eigen::VectorXd A_times_x2;
+            matmul(x2, sparse_A, A_times_x2);
+            Eigen::VectorXd r2 = v1 - A_times_x2;
+            amg_precond_iter(precond, r2, x2);
+            u1 = x2;
+        }
+        
+    
         eta = beta = sqrt(u1.dot(v1));
         gamma0 = gamma1 = 1.;
         sigma0 = sigma1 = 0.;
@@ -843,14 +849,28 @@ namespace polysolve::linear
             rho3 = sigma0 * beta;
             rho2 = sigma1 * alpha + gamma0 * gamma1 * beta;
 
-            if (!do_mixed_precond || bad_indices_.size() == 0)
+            if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
             {
                 amg_precond_iter(precond, v0, q);
-            }
-            else
+
+            } 
+            else 
             {
-                custom_mixed_precond_iter(precond, v0, q);
+                Eigen::VectorXd A_times_q;
+                matmul(q, sparse_A, A_times_q);
+                Eigen::VectorXd r0 = v0 - A_times_q;
+                Eigen::VectorXd x1 = q; 
+                amg_precond_iter(precond, r0, x1);
+                Eigen::VectorXd x2 = x1;
+                dss_precond_iter(x1, v0, x2);
+
+                Eigen::VectorXd A_times_x2;
+                matmul(x2, sparse_A, A_times_x2);
+                Eigen::VectorXd r2 = v0 - A_times_x2;
+                amg_precond_iter(precond, r2, x2);
+                q = x2;
             }
+            
             bool v0_isnan = false;
             bool q_isnan = false;
             for (int i = 0; i < q.size(); ++i)
@@ -933,14 +953,8 @@ namespace polysolve::linear
         Eigen::VectorXd w(rhs.size());
 
         Eigen::VectorXd z(rhs.size());
-        if (!do_mixed_precond || bad_indices_.size() == 0)
-        {
-            amg_precond_iter(precond, rhs, z);
-        }
-        else
-        {
-            custom_mixed_precond_iter(precond, rhs, z);
-        }
+        custom_mixed_precond_iter(precond, rhs, z);
+        
 
         double normb = z.norm();
         Eigen::VectorXd A_times_x;
@@ -948,14 +962,8 @@ namespace polysolve::linear
         Eigen::VectorXd r0 = rhs - A_times_x;
 
         Eigen::VectorXd r(rhs.size());
-        if (!do_mixed_precond || bad_indices_.size() == 0)
-        {
-            amg_precond_iter(precond, r0, r);
-        }
-        else
-        {
-            custom_mixed_precond_iter(precond, r0, r);
-        }
+        custom_mixed_precond_iter(precond, r0, r);
+        
 
         double beta = r.norm();
         if (normb == 0)
@@ -991,14 +999,8 @@ namespace polysolve::linear
                 Eigen::VectorXd vi = V.col(i);
                 matmul(vi, sparse_A, A_times_vi);
 
-                if (!do_mixed_precond || bad_indices_.size() == 0)
-                {
-                    amg_precond_iter(precond, A_times_vi, w);
-                }
-                else
-                {
-                    custom_mixed_precond_iter(precond, A_times_vi, w);
-                }
+                custom_mixed_precond_iter(precond, A_times_vi, w);
+                
 
                 for (k = 0; k <= i; ++k)
                 {
@@ -1039,14 +1041,8 @@ namespace polysolve::linear
             r0 = rhs - A_times_x;
 
             r.setZero();
-            if (!do_mixed_precond || bad_indices_.size() == 0)
-            {
-                amg_precond_iter(precond, r0, r);
-            }
-            else
-            {
-                custom_mixed_precond_iter(precond, r0, r);
-            }
+            custom_mixed_precond_iter(precond, r0, r);
+            
             beta = r.norm();
 
             residual = beta;
@@ -1076,7 +1072,7 @@ namespace polysolve::linear
         z3.setZero();
 
         assert(bad_indices_.size() == 1);
-        if (bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
+        if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
         {
             amg_precond_iter(precond, r, z1);
             z = z1;

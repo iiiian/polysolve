@@ -807,9 +807,13 @@ namespace polysolve::linear
 
             for (int index = 0; index < x2.size(); ++index)
             {
-                if (!(bad_indices_[0].count(index) > 0))
+                if (bad_indices_[0].count(index) == 0)
                 {
                     x2(index) = v1(index) - sparse_A.row(index).dot(x1);
+                }
+                else 
+                {
+                    x2(index) -= x1(index);
                 }
             }
 
@@ -873,9 +877,13 @@ namespace polysolve::linear
 
                 for (int index = 0; index < x2.size(); ++index)
                 {
-                    if (!(bad_indices_[0].count(index) > 0))
+                    if (bad_indices_[0].count(index) == 0)
                     {
                         x2(index) = v0(index) - sparse_A.row(index).dot(x1);
+                    }
+                    else 
+                    {
+                        x2(index) -= x1(index);
                     }
                 }
 

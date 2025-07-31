@@ -805,6 +805,14 @@ namespace polysolve::linear
             Eigen::VectorXd x2 = x1;
             dss_precond_iter(x1, v1, x2);
 
+            for (int index = 0; index < x2.size(); ++index)
+            {
+                if (!(bad_indices_[0].count(index) > 0))
+                {
+                    x2(index) = v1(index) - sparse_A.row(index).dot(x1);
+                }
+            }
+
             Eigen::VectorXd A_times_x2;
             matmul(x2, sparse_A, A_times_x2);
             Eigen::VectorXd r2 = v1 - A_times_x2;
@@ -862,6 +870,14 @@ namespace polysolve::linear
                 amg_precond_iter(precond, r0, x1);
                 Eigen::VectorXd x2 = x1;
                 dss_precond_iter(x1, v0, x2);
+
+                for (int index = 0; index < x2.size(); ++index)
+                {
+                    if (!(bad_indices_[0].count(index) > 0))
+                    {
+                        x2(index) = v0(index) - sparse_A.row(index).dot(x1);
+                    }
+                }
 
                 Eigen::VectorXd A_times_x2;
                 matmul(x2, sparse_A, A_times_x2);

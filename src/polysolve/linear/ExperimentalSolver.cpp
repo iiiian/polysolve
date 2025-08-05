@@ -932,6 +932,18 @@ namespace polysolve::linear
             logger->trace("qnan: {}", q_isnan);
             logger->trace("v0nan: {}", v0_isnan);
 
+            if (v0_isnan)
+            {
+                std::ofstream A_file("fail_A.mat");
+                A_file << sparse_A;
+                A_file.close();
+
+                std::ofstream b_file("fail_b.mat");
+                b_file << rhs;
+                b_file.close();
+                exit(1);
+            }
+
             if (num_iterations == 1)
             {
                 w0 = u1 / rho1;

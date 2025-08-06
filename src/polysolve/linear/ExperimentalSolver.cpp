@@ -800,43 +800,7 @@ namespace polysolve::linear
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
         u1.setZero();
-        custom_mixed_precond_iter(precond, v1, u1);
-
-        /*
-        if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
-        {
-            amg_precond_iter(precond, v1, u1);
-        } 
-        else 
-        {
-            Eigen::VectorXd A_times_u1;
-            matmul(u1, sparse_A, A_times_u1);
-            Eigen::VectorXd r0 = v1 - A_times_u1;
-            Eigen::VectorXd x1 = u1; 
-            amg_precond_iter(precond, r0, x1);
-            Eigen::VectorXd x2 = x1;
-            dss_precond_iter(x1, v1, x2);
-
-            for (int index = 0; index < x2.size(); ++index)
-            {
-                if (bad_indices_[0].count(index) == 0)
-                {
-                    x2(index) = v1(index) - sparse_A.row(index).dot(x1);
-                }
-                else 
-                {
-                    x2(index) -= x1(index);
-                }
-            }
-
-            Eigen::VectorXd A_times_x2;
-            matmul(x2, sparse_A, A_times_x2);
-            Eigen::VectorXd r2 = v1 - A_times_x2;
-            amg_precond_iter(precond, r2, x2);
-            u1 = x2;
-        }
-        */
-        
+        custom_mixed_precond_iter(precond, v1, u1);        
     
         eta = beta = sqrt(u1.dot(v1));
         gamma0 = gamma1 = 1.;
@@ -875,41 +839,7 @@ namespace polysolve::linear
 
             q.setZero();
             custom_mixed_precond_iter(precond, v0, q);
-            /*
-            if (!do_mixed_precond || bad_indices_.size() == 0 || bad_indices_[0].size() == 0)
-            {
-                amg_precond_iter(precond, v0, q);
-            } 
-            else 
-            {
-                Eigen::VectorXd A_times_q;
-                matmul(q, sparse_A, A_times_q);
-                Eigen::VectorXd r0 = v0 - A_times_q;
-                Eigen::VectorXd x1 = q; 
-                amg_precond_iter(precond, r0, x1);
-                Eigen::VectorXd x2 = x1;
-                dss_precond_iter(x1, v0, x2);
 
-                for (int index = 0; index < x2.size(); ++index)
-                {
-                    if (bad_indices_[0].count(index) == 0)
-                    {
-                        x2(index) = v0(index) - sparse_A.row(index).dot(x1);
-                    }
-                    else 
-                    {
-                        x2(index) -= x1(index);
-                    }
-                }
-                
-
-                Eigen::VectorXd A_times_x2;
-                matmul(x2, sparse_A, A_times_x2);
-                Eigen::VectorXd r2 = v0 - A_times_x2;
-                amg_precond_iter(precond, r2, x2);
-                q = x2;
-            }*/
-            
             bool v0_isnan = false;
             bool q_isnan = false;
             for (int i = 0; i < q.size(); ++i)
@@ -941,6 +871,23 @@ namespace polysolve::linear
                 std::ofstream b_file("fail_b.mat");
                 b_file << rhs;
                 b_file.close();
+
+                Eigen::VectorXd e(rhs.size());
+                Eigen::VectorXd out(rhs.size());
+                Eigen::MatrixXd M(rhs.size(), rhs.size());
+                for (int k = 0; k < rhs.size(); ++k)
+                {
+                    e.setZero();
+                    out.setZero();
+                    e(k) = 1;
+                    amg_precond_iter(precond, e, out);
+                    M.col(k) = out;
+                }
+
+                std::ofstream M_file("fail_M.mat");
+                M_file << M;
+                M_file.close();
+
                 exit(1);
             }
 

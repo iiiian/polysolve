@@ -17,7 +17,7 @@ include(CPM)
 CPMAddPackage(
     NAME hypre
     GITHUB_REPOSITORY hypre-space/hypre
-    GIT_TAG v2.28.0
+    GIT_TAG v2.33.0
     SOURCE_SUBDIR src
 )
 file(REMOVE "${hypre_SOURCE_DIR}/src/utilities/version")

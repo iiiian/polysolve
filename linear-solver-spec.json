@@ -620,5 +620,11 @@
         "default": 10,
         "type": "int",
         "doc": "Restart value for GMRES"
-    }    
+    },
+    {
+        "pointer": "/Experimental/amg_iters",
+        "default": 1,
+        "type": "int",
+        "doc": "Number of AMG iterations to use during preconditioning"
+    }        
 ]

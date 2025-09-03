@@ -110,6 +110,7 @@ namespace polysolve::linear
         bool use_gmres;
         bool use_minres;
         int m_ = 10;
+        int amg_iters = 1;
 
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;

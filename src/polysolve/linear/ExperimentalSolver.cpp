@@ -159,6 +159,10 @@ namespace polysolve::linear
             {
                 m_ = params["Experimental"]["m"];
             }
+            if (params["Experimental"].contains("amg_iters"))
+            {
+                amg_iters = params["Experimental"]["amg_iters"];
+            }
         }
     }
 
@@ -403,14 +407,25 @@ namespace polysolve::linear
             int print_level = 0; // print AMG iterations? 1 = no, 2 = yes
             int max_levels = 25; // max number of levels in AMG hierarchy
 
+            int min_coarse_size = 5;
+
             HYPRE_BoomerAMGSetCoarsenType(amg_precond, coarsen_type);
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, agg_levels);
             HYPRE_BoomerAMGSetRelaxType(amg_precond, relax_type);
+            
+            //relax_type = 88;
+            HYPRE_BoomerAMGSetMinCoarseSize(amg_precond, min_coarse_size);
+            //HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_type, 1);
+            //HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_type, 2);
             HYPRE_BoomerAMGSetCycleRelaxType(amg_precond, relax_type, 3);
+            //HYPRE_BoomerAMGSetDebugFlag(amg_precond, 1);
+            //HYPRE_BoomerAMGSetNodal(amg_precond, 0);
+            //HYPRE_BoomerAMGSetNodalDiag(amg_precond, 0);
             HYPRE_BoomerAMGSetNumSweeps(amg_precond, relax_sweeps);
             HYPRE_BoomerAMGSetStrongThreshold(amg_precond, theta);
             HYPRE_BoomerAMGSetInterpType(amg_precond, interp_type);
             HYPRE_BoomerAMGSetPMaxElmts(amg_precond, Pmax);
+            //print_level = 3;
             HYPRE_BoomerAMGSetPrintLevel(amg_precond, print_level);
             HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
 
@@ -558,6 +573,8 @@ namespace polysolve::linear
                     par_rbms
                 );
             }
+
+            HYPRE_BoomerAMGSetMaxIter(precond, amg_iters);
         }
 
         select_bad_indices(remapped_rhs);
@@ -602,6 +619,43 @@ namespace polysolve::linear
         logger->trace("Custom Symmetry check: {}", sym_check5);
         logger->trace("Custom SPD check1: {}", sym_check6);
         logger->trace("Custom SPD check2: {}", sym_check7);
+
+        if (false)
+        {
+            Eigen::VectorXd e(rhs.size());
+            Eigen::VectorXd out(rhs.size());
+            Eigen::MatrixXd M(rhs.size(), rhs.size());
+            for (int k = 0; k < rhs.size(); ++k)
+            {
+                e.setZero();
+                out.setZero();
+                e(k) = 1;
+                amg_precond_iter(precond, e, out);
+                M.col(k) = out;
+            }
+
+            std::ofstream M_file("fail_M.mat");
+            M_file << M;
+            M_file.close();
+
+            HYPRE_Int cgrid[9120];
+            HYPRE_BoomerAMGGetGridHierarchy(precond, cgrid);
+
+            Eigen::VectorXi eigen_cgrid(9120);
+            for (int i = 0; i < 9120; ++i)
+            {
+                eigen_cgrid(i) = cgrid[i];
+            }
+            std::cout << "HEYO2" << std::endl;
+            std::ofstream cgrid_file("fail_cgrid.mat");
+            cgrid_file << eigen_cgrid;
+            cgrid_file.close();
+
+            std::ofstream A_file("fail_A.mat");
+            A_file << sparse_A;
+            A_file.close();
+            exit(1);
+        }
 
         /* Now setup and solve! */
         {
@@ -800,9 +854,14 @@ namespace polysolve::linear
         Eigen::VectorXd w1(rhs.size());
         Eigen::VectorXd u1(rhs.size());
         u1.setZero();
-        custom_mixed_precond_iter(precond, v1, u1);        
+        //Eigen::SimplicialLDLT<Eigen::SparseMatrix<double, Eigen::RowMajor>> test_precond;
+        //test_precond.compute(sparse_A);
+        custom_mixed_precond_iter(precond, v1, u1);     
+        //u1 = test_precond.solve(v1);   
+        //u1 = v1;      
     
         eta = beta = sqrt(u1.dot(v1));
+        logger->trace("Starting eta: {}", eta);
         gamma0 = gamma1 = 1.;
         sigma0 = sigma1 = 0.;
 
@@ -815,6 +874,26 @@ namespace polysolve::linear
         if (eta <= norm_goal)
         {
             num_iterations = 0;
+            if (eta > 0)
+            {
+                logger->trace("ETA TO SMALL");
+                Eigen::VectorXd e(rhs.size());
+                Eigen::VectorXd out(rhs.size());
+                Eigen::MatrixXd M(rhs.size(), rhs.size());
+                for (int k = 0; k < rhs.size(); ++k)
+                {
+                    e.setZero();
+                    out.setZero();
+                    e(k) = 1;
+                    amg_precond_iter(precond, e, out);
+                    M.col(k) = out;
+                }
+
+                std::ofstream M_file("fail_M.mat");
+                M_file << M;
+                M_file.close();
+                exit(1);
+            }
             return;
         }
 
@@ -838,7 +917,9 @@ namespace polysolve::linear
             rho2 = sigma1 * alpha + gamma0 * gamma1 * beta;
 
             q.setZero();
+            //q = test_precond.solve(v0);
             custom_mixed_precond_iter(precond, v0, q);
+            //q = v0;
 
             bool v0_isnan = false;
             bool q_isnan = false;
@@ -856,6 +937,17 @@ namespace polysolve::linear
             beta = sqrt(v0.dot(q));
             rho1 = std::hypot(delta, beta);
             logger->trace("DOT: {}", v0.dot(q));
+            logger->trace("v0 norm: {}", v0.norm());
+            logger->trace("q norm: {}", q.norm());
+
+            if (false && v0.dot(q) < 0)
+            {
+                std::ofstream v0_file("fail_v0.mat");
+                v0_file << v0;
+                v0_file.close();
+                exit(1);
+            }
+
             logger->trace("RHO1: {}", rho1);
             logger->trace("BETA: {}", beta);
             logger->trace("DELTA: {}", delta);
@@ -872,6 +964,10 @@ namespace polysolve::linear
                 b_file << rhs;
                 b_file.close();
 
+                std::ofstream v0_file("fail_v0.mat");
+                v0_file << v0;
+                v0_file.close();
+
                 Eigen::VectorXd e(rhs.size());
                 Eigen::VectorXd out(rhs.size());
                 Eigen::MatrixXd M(rhs.size(), rhs.size());
@@ -887,6 +983,23 @@ namespace polysolve::linear
                 std::ofstream M_file("fail_M.mat");
                 M_file << M;
                 M_file.close();
+
+                std::cout << "HEYO" << std::endl;
+
+                HYPRE_Int cgrid[9120];
+                HYPRE_BoomerAMGGetGridHierarchy(precond, cgrid);
+
+                Eigen::VectorXi eigen_cgrid(9120);
+                for (int i = 0; i < 9120; ++i)
+                {
+                    eigen_cgrid(i) = cgrid[i];
+                }
+                std::cout << "HEYO2" << std::endl;
+                std::ofstream cgrid_file("fail_cgrid.mat");
+                cgrid_file << eigen_cgrid;
+                cgrid_file.close();
+
+                std::cout << "HEYO3" << std::endl;
 
                 exit(1);
             }

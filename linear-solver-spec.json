@@ -479,7 +479,8 @@
             "save_selected_indices",
             "use_gmres",
             "use_minres",
-            "m"
+            "m",
+            "amg_iters"
         ],
         "doc": "Settings for the Experimental solver."
     },

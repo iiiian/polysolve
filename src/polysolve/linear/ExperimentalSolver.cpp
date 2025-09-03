@@ -874,7 +874,7 @@ namespace polysolve::linear
         if (eta <= norm_goal)
         {
             num_iterations = 0;
-            if (eta > 0)
+            if (false && eta > 0)
             {
                 logger->trace("ETA TO SMALL");
                 Eigen::VectorXd e(rhs.size());

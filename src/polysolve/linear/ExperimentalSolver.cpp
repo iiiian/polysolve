@@ -619,6 +619,8 @@ namespace polysolve::linear
         logger->trace("Custom Symmetry check: {}", sym_check5);
         logger->trace("Custom SPD check1: {}", sym_check6);
         logger->trace("Custom SPD check2: {}", sym_check7);
+        logger->trace("Amax: {}, Amin: {}", sparse_A.coeffs().maxCoeff(), sparse_A.coeffs().minCoeff());
+
 
         if (false)
         {
@@ -638,6 +640,19 @@ namespace polysolve::linear
             M_file << M;
             M_file.close();
 
+            for (int k = 0; k < rhs.size(); ++k)
+            {
+                e.setZero();
+                out.setZero();
+                e(k) = 1;
+                custom_mixed_precond_iter(precond, e, out);
+                M.col(k) = out;
+            }
+
+            std::ofstream Mdss_file("fail_M_dss.mat");
+            Mdss_file << M;
+            Mdss_file.close();
+
             HYPRE_Int cgrid[9120];
             HYPRE_BoomerAMGGetGridHierarchy(precond, cgrid);
 
@@ -646,7 +661,6 @@ namespace polysolve::linear
             {
                 eigen_cgrid(i) = cgrid[i];
             }
-            std::cout << "HEYO2" << std::endl;
             std::ofstream cgrid_file("fail_cgrid.mat");
             cgrid_file << eigen_cgrid;
             cgrid_file.close();
@@ -983,6 +997,19 @@ namespace polysolve::linear
                 std::ofstream M_file("fail_M.mat");
                 M_file << M;
                 M_file.close();
+
+                for (int k = 0; k < rhs.size(); ++k)
+                {
+                    e.setZero();
+                    out.setZero();
+                    e(k) = 1;
+                    custom_mixed_precond_iter(precond, e, out);
+                    M.col(k) = out;
+                }
+
+                std::ofstream Mdss_file("fail_M_dss.mat");
+                Mdss_file << M;
+                Mdss_file.close();
 
                 std::cout << "HEYO" << std::endl;
 

@@ -112,6 +112,8 @@ namespace polysolve::linear
         int m_ = 10;
         int amg_iters = 1;
 
+        int project_d_option = 0;
+
         HYPRE_Int num_iterations;
         HYPRE_Complex final_res_norm;
 

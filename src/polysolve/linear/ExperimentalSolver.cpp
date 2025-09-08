@@ -163,6 +163,10 @@ namespace polysolve::linear
             {
                 amg_iters = params["Experimental"]["amg_iters"];
             }
+            if (params["Experimental"].contains("project_d_option"))
+            {
+                project_d_option = params["Experimental"]["project_d_option"];
+            }
         }
     }
 
@@ -1512,6 +1516,42 @@ namespace polysolve::linear
                     POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
                     D.setFromTriplets(triplets.begin(), triplets.end());
                     logger->trace("D symmetric: {}", D.isApprox(D.transpose()));
+                }
+
+                double d_projection_time;
+                {
+                    POLYSOLVE_SCOPED_STOPWATCH("project D", d_projection_time, *logger);
+                    if (project_d_option == 1)
+                    {
+                        // make diagonally dominant row by row
+                        for (int ri = 0; ri < D.rows(); ++ri)
+                        {
+                            double row_sum = D.row(ri).cwiseAbs().sum();
+                            D.coeffRef(ri, ri) = row_sum;
+                        }
+                    }
+                    else if (project_d_option == 2)
+                    {
+                        Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double, Eigen::RowMajor>>
+                            eigensolver(D);
+                        if (eigensolver.info() != Eigen::Success) {
+                            logger->trace("unable to project matrix onto positive definite cone");
+                        }
+                        // Check if all eigen values are positive.
+                        // The eigenvalues are sorted in increasing order.
+                        else if (eigensolver.eigenvalues()[0] <= 0.0) 
+                        {
+
+                            Eigen::DiagonalMatrix<double, Eigen::Dynamic> Diag(eigensolver.eigenvalues());
+                            for (int ri = 0; ri < Diag.rows(); ri++) {
+                                if (Diag.diagonal()[ri] <= 0.0) {
+                                    Diag.diagonal()[ri] = 0;
+                                } 
+                            }
+                            Eigen::MatrixXd dense_D = eigensolver.eigenvectors() * Diag * eigensolver.eigenvectors().transpose();
+                            D = dense_D.sparseView(); 
+                        }
+                    }
                 }
 
                 {

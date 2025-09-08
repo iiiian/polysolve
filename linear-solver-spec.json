@@ -480,7 +480,8 @@
             "use_gmres",
             "use_minres",
             "m",
-            "amg_iters"
+            "amg_iters",
+            "project_d_option"
         ],
         "doc": "Settings for the Experimental solver."
     },
@@ -627,5 +628,11 @@
         "default": 1,
         "type": "int",
         "doc": "Number of AMG iterations to use during preconditioning"
-    }        
+    },
+    {
+        "pointer": "/Experimental/project_d_option",
+        "default": 0,
+        "type": "int",
+        "doc": "Option for projecting D"
+    }             
 ]

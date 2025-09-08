@@ -134,6 +134,7 @@ namespace polysolve::nonlinear
         polysolve::StiffnessMatrix hessian_cache;
 
         double reg_weight; ///< Regularization Coefficients
+        bool compare_to_full = false;
     protected:
         void compute_hessian(Problem &objFunc,
                              const TVector &x,

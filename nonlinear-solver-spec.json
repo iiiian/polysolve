@@ -131,7 +131,8 @@
             "reg_weight_inc",
             "force_psd_projection",
             "use_psd_projection",
-            "use_psd_projection_in_regularized"
+            "use_psd_projection_in_regularized",
+            "compare_to_full"
         ],
         "doc": "Options for Newton."
     },
@@ -140,6 +141,12 @@
         "default": 1e-5,
         "type": "float",
         "doc": "Tolerance of the linear system residual. If residual is above, the direction is rejected."
+    },
+    {
+        "pointer": "/Newton/compare_to_full",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to compare projected Hessian to full Hessian"
     },
     {
         "pointer": "/Newton/try_neg_eig_dir",
@@ -304,7 +311,8 @@
         ],
         "optional": [
             "residual_tolerance",
-            "try_neg_eig_dir"
+            "try_neg_eig_dir",
+            "compare_to_full"
         ],
         "doc": "Options for projected Newton."
     },
@@ -496,6 +504,12 @@
         "default": 1e-5,
         "type": "float",
         "doc": "Tolerance of the linear system residual. If residual is above, the direction is rejected."
+    },
+    {
+        "pointer": "/solver/*/compare_to_full",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to compare projected Hessian to full Hessian"
     },
     {
         "pointer": "/solver/*/try_neg_eig_dir",

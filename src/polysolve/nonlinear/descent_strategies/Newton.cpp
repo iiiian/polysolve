@@ -13,6 +13,7 @@
 #include <MatOp/SparseGenMatProd.h>
 #include <MatOp/DenseSymMatProd.h>
 #include <MatOp/SparseSymMatProd.h>
+#include <fstream>
 
 namespace polysolve::nonlinear
 {
@@ -27,6 +28,7 @@ namespace polysolve::nonlinear
         // Copies stuff from main newton
         json proj_solver_params = R"({"ProjectedNewton": {}})"_json;
         proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        proj_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
 
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
@@ -96,7 +98,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger)
+        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProjectedNewton"]["compare_to_full"])
     {
     }
 
@@ -157,16 +159,15 @@ namespace polysolve::nonlinear
             m_logger.debug("[{}] large (or nan) linear solve residual {}>{} (‖∇f‖={})",
                            name(), residual, residual_tolerance * characteristic_length, grad.norm());
 
-            // TODO: find largest negative eigenvalue and use it as search
-            polysolve::StiffnessMatrix hessian;
-            compute_hessian(objFunc, x, hessian);
-            Spectra::SparseSymMatProd<double> op(hessian);
-            Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
-
             if (!try_neg_eig_dir)
             {
                 return false;
             }
+
+            polysolve::StiffnessMatrix hessian;
+            compute_hessian(objFunc, x, hessian);
+            Spectra::SparseSymMatProd<double> op(hessian);
+            Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
 
             eigs.init();
             int nconv = eigs.compute();
@@ -307,6 +308,34 @@ namespace polysolve::nonlinear
     {
         objFunc.set_project_to_psd(true);
         objFunc.hessian(x, hessian);
+
+        if (compare_to_full)
+        {
+            polysolve::StiffnessMatrix full_hessian;
+            objFunc.set_project_to_psd(false);
+            objFunc.hessian(x, full_hessian);
+
+            polysolve::StiffnessMatrix diff_hessian = full_hessian - hessian;
+            Eigen::MatrixXd HTH = diff_hessian.transpose() * diff_hessian;
+
+            Spectra::DenseSymMatProd<double> op(HTH);
+            Spectra::SymEigsSolver<double, Spectra::LARGEST_MAGN, Spectra::DenseSymMatProd<double>> eigs(&op, 1, 6);
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+                eigenvalues = eigs.eigenvalues();
+
+            double largestSingularValue = eigenvalues(0); 
+
+            m_logger.trace("L2 Norm of Hessian - Proj(Hessian): {}", largestSingularValue);
+
+            Eigen::SimplicialLDLT<polysolve::StiffnessMatrix> chol_decomp(full_hessian);
+            bool spd = !(chol_decomp.info() == Eigen::NumericalIssue);
+            m_logger.trace("Hessian isSPD: {}", spd);
+
+        }
     }
 
     void RegularizedNewton::compute_hessian(Problem &objFunc,
@@ -343,6 +372,29 @@ namespace polysolve::nonlinear
     {
         objFunc.set_project_to_psd(true);
         objFunc.hessian(x, hessian);
+
+        if (compare_to_full)
+        {
+            Eigen::MatrixXd full_hessian;
+            objFunc.set_project_to_psd(false);
+            objFunc.hessian(x, full_hessian);
+
+            Eigen::MatrixXd diff_hessian = full_hessian - hessian;
+            Eigen::MatrixXd HTH = diff_hessian.transpose() * diff_hessian;
+
+            Spectra::DenseSymMatProd<double> op(HTH);
+            Spectra::SymEigsSolver<double, Spectra::LARGEST_MAGN, Spectra::DenseSymMatProd<double>> eigs(&op, 1, 6);
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+                eigenvalues = eigs.eigenvalues();
+
+            double largestSingularValue = eigenvalues(0); 
+
+            m_logger.trace("L2 Norm of Hessian - Proj(Hessian): {}", largestSingularValue);
+        }
     }
 
     void RegularizedNewton::compute_hessian(Problem &objFunc,

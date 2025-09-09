@@ -1530,7 +1530,7 @@ namespace polysolve::linear
                             D.coeffRef(ri, ri) = row_sum;
                         }
                     }
-                    else if (project_d_option == 2)
+                    else if (project_d_option == 2 && D.rows() > 0)
                     {
                         Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double, Eigen::RowMajor>>
                             eigensolver(D);

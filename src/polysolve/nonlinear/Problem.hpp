@@ -128,5 +128,8 @@ namespace polysolve::nonlinear
             Eigen::VectorXd &alphas,
             Eigen::VectorXd &fs,
             Eigen::VectorXi &valid);
+
+        int projection_setting = 0;
+        std::set<int> dofs_to_project;
     };
 } // namespace polysolve::nonlinear

@@ -68,6 +68,10 @@ namespace polysolve::nonlinear
             {
                 return std::make_shared<ProjectedNewton>(true, solver_params, linear_solver_params, characteristic_length, logger);
             }
+            else if (solver_name == "ProgressivelyProjectedNewton")
+            {
+                return std::make_shared<ProjectedNewton>(true, solver_params, linear_solver_params, characteristic_length, logger);
+            }
             else if (solver_name == "RegularizedNewton")
             {
                 return std::make_shared<RegularizedNewton>(true, false, solver_params, linear_solver_params, characteristic_length, logger);

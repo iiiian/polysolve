@@ -71,6 +71,8 @@ namespace polysolve::nonlinear
                                      const TVector &x,
                                      Eigen::MatrixXd &hessian);
 
+        Eigen::VectorXd last_residual;
+
     public:
         bool compute_update_direction(Problem &objFunc, const TVector &x, const TVector &grad, TVector &direction) override;
 
@@ -103,6 +105,40 @@ namespace polysolve::nonlinear
                              Eigen::MatrixXd &hessian) override;
         bool compare_to_full = false;
     };
+
+
+    class ProgressivelyProjectedNewton : public Newton
+    {
+    public:
+        using Superclass = Newton;
+
+        ProgressivelyProjectedNewton(const bool sparse,
+                        const json &solver_params,
+                        const json &linear_solver_params,
+                        const double characteristic_length,
+                        spdlog::logger &logger);
+
+        std::string name() const override { return internal_name() + "ProgressivelyProjectedNewton"; }
+
+        void reset(const int ndof) override;
+        bool handle_error() override;
+        void handle_success() override;
+
+    protected:
+        void compute_hessian(Problem &objFunc,
+                             const TVector &x,
+                             polysolve::StiffnessMatrix &hessian) override;
+
+        void compute_hessian(Problem &objFunc,
+                             const TVector &x,
+                             Eigen::MatrixXd &hessian) override;
+
+        bool compare_to_full = false;
+        double alpha = 0.5;
+        double beta = 2;
+        double d = std::numeric_limits<double>::infinity();
+    };
+
 
     class RegularizedNewton : public Newton
     {

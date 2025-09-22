@@ -130,9 +130,12 @@
             "reg_weight_max",
             "reg_weight_inc",
             "force_psd_projection",
+            "force_ppn",
             "use_psd_projection",
             "use_psd_projection_in_regularized",
-            "compare_to_full"
+            "compare_to_full",
+            "alpha",
+            "beta"
         ],
         "doc": "Options for Newton."
     },
@@ -153,6 +156,18 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to try negative eigen direction if linear solve fails."
+    },
+    {
+        "pointer": "/Newton/alpha",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Tightening factor for PPN."
+    },
+    {
+        "pointer": "/Newton/beta",
+        "default": 2,
+        "type": "float",
+        "doc": "Release factor for PPN."
     },
     {
         "pointer": "/Newton/reg_weight_min",
@@ -177,6 +192,12 @@
         "default": false,
         "type": "bool",
         "doc": "Force the Hessian to be PSD when using second order solvers (i.e., Newton's method)."
+    },
+    {
+        "pointer": "/Newton/force_ppn",
+        "default": false,
+        "type": "bool",
+        "doc": "Use progressively projected Newton."
     },
     {
         "pointer": "/Newton/use_psd_projection",
@@ -313,6 +334,21 @@
             "residual_tolerance",
             "try_neg_eig_dir",
             "compare_to_full"
+        ],
+        "doc": "Options for projected Newton."
+    },
+    {
+        "pointer": "/solver/*",
+        "type": "object",
+        "type_name": "ProgressivelyProjectedNewton",
+        "required": [
+            "type"
+        ],
+        "optional": [
+            "residual_tolerance",
+            "compare_to_full",
+            "alpha",
+            "beta"
         ],
         "doc": "Options for projected Newton."
     },
@@ -485,6 +521,7 @@
             "Newton",
             "DenseNewton",
             "ProjectedNewton",
+            "ProgressivelyProjected",
             "DenseProjectedNewton",
             "RegularizedNewton",
             "DenseRegularizedNewton",

@@ -30,6 +30,12 @@ namespace polysolve::nonlinear
         proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
         proj_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
 
+        json ppn_solver_params = R"({"ProjectedNewton": {}})"_json;
+        ppn_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        ppn_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
+        ppn_solver_params["ProjectedNewton"]["alpha"] = solver_params["Newton"]["alpha"];
+        ppn_solver_params["ProjectedNewton"]["beta"] = solver_params["Newton"]["beta"];
+
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
         reg_solver_params["RegularizedNewton"]["reg_weight_min"] = solver_params["Newton"]["reg_weight_min"];
@@ -38,6 +44,16 @@ namespace polysolve::nonlinear
         reg_solver_params["RegularizedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
 
         std::vector<std::shared_ptr<DescentStrategy>> res;
+
+        const bool force_ppn = solver_params["Newton"]["force_ppn"];
+        if (force_ppn) {
+            res.push_back(std::make_unique<ProgressivelyProjectedNewton>(
+                sparse, ppn_solver_params, linear_solver_params,
+                characteristic_length, logger));
+
+            return res;
+        }
+
         const bool force_psd_projection = solver_params["Newton"]["force_psd_projection"];
         if (!force_psd_projection)
             res.push_back(std::make_unique<Newton>(
@@ -103,6 +119,16 @@ namespace polysolve::nonlinear
     {
     }
 
+    ProgressivelyProjectedNewton::ProgressivelyProjectedNewton(
+        const bool sparse,
+        const json &solver_params,
+        const json &linear_solver_params,
+        const double characteristic_length,
+        spdlog::logger &logger)
+        : Superclass(sparse, extract_param("ProgressivelyProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProjectedNewton"]["compare_to_full"]), alpha(solver_params["ProjectedNewton"]["alpha"]), beta(solver_params["ProjectedNewton"]["beta"])
+    {
+    }
+
     RegularizedNewton::RegularizedNewton(
         const bool sparse,
         const bool project_to_psd,
@@ -141,6 +167,12 @@ namespace polysolve::nonlinear
     {
         Superclass::reset(ndof);
         reg_weight = reg_weight_min;
+    }
+
+    void ProgressivelyProjectedNewton::reset(const int ndof)
+    {
+        Superclass::reset(ndof);
+        double d = std::numeric_limits<double>::infinity();
     }
 
     // =======================================================================
@@ -239,7 +271,8 @@ namespace polysolve::nonlinear
             linear_solver->solve(-grad, direction); // H Δx = -g
         }
 
-        const double residual = (hessian * direction + grad).norm(); // H Δx + g = 0
+        last_residual = hessian * direction + grad;
+        const double residual = last_residual.norm(); // H Δx + g = 0
 
         json info;
         linear_solver->get_info(info);
@@ -339,6 +372,61 @@ namespace polysolve::nonlinear
         }
     }
 
+    void ProgressivelyProjectedNewton::compute_hessian(Problem &objFunc,
+                                          const TVector &x,
+                                          polysolve::StiffnessMatrix &hessian)
+    {
+        objFunc.set_project_to_psd(false);
+        if (last_residual.size() == 0)
+        {
+            objFunc.projection_setting = 0;
+        }
+        else {
+            if (std::isinf(d))
+            {
+                d = alpha * last_residual.cwiseAbs().maxCoeff();
+            }
+            objFunc.projection_setting = 3;
+            objFunc.dofs_to_project.clear();
+            for (int i = 0; i < last_residual.size(); ++i)
+            {
+                if (std::abs(last_residual(i)) > d) {
+                    objFunc.dofs_to_project.insert(i);
+                }
+            }
+        }
+        objFunc.hessian(x, hessian);
+
+        if (compare_to_full)
+        {
+            polysolve::StiffnessMatrix full_hessian;
+            objFunc.set_project_to_psd(false);
+            objFunc.projection_setting = 0;
+            objFunc.hessian(x, full_hessian);
+
+            polysolve::StiffnessMatrix diff_hessian = full_hessian - hessian;
+            Eigen::MatrixXd HTH = diff_hessian.transpose() * diff_hessian;
+
+            Spectra::DenseSymMatProd<double> op(HTH);
+            Spectra::SymEigsSolver<double, Spectra::LARGEST_MAGN, Spectra::DenseSymMatProd<double>> eigs(&op, 1, 6);
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+                eigenvalues = eigs.eigenvalues();
+
+            double largestSingularValue = eigenvalues(0); 
+
+            m_logger.trace("L2 Norm of Hessian - Proj(Hessian): {}", largestSingularValue);
+
+            Eigen::SimplicialLDLT<polysolve::StiffnessMatrix> chol_decomp(full_hessian);
+            bool spd = !(chol_decomp.info() == Eigen::NumericalIssue);
+            m_logger.trace("Hessian isSPD: {}", spd);
+
+        }
+    }
+
     void RegularizedNewton::compute_hessian(Problem &objFunc,
                                             const TVector &x,
                                             polysolve::StiffnessMatrix &hessian)
@@ -356,7 +444,7 @@ namespace polysolve::nonlinear
             hessian += reg_weight * sparse_identity(hessian.rows(), hessian.cols());
         }
 
-                if (compare_to_full)
+        if (compare_to_full)
         {
             polysolve::StiffnessMatrix full_hessian;
             objFunc.set_project_to_psd(false);
@@ -426,6 +514,38 @@ namespace polysolve::nonlinear
         }
     }
 
+    void ProgressivelyProjectedNewton::compute_hessian(Problem &objFunc,
+                                          const TVector &x,
+                                          Eigen::MatrixXd &hessian)
+    {
+        objFunc.projection_setting = 3;
+        objFunc.hessian(x, hessian);
+
+        if (compare_to_full)
+        {
+            Eigen::MatrixXd full_hessian;
+            objFunc.set_project_to_psd(false);
+            objFunc.projection_setting = 0;
+            objFunc.hessian(x, full_hessian);
+
+            Eigen::MatrixXd diff_hessian = full_hessian - hessian;
+            Eigen::MatrixXd HTH = diff_hessian.transpose() * diff_hessian;
+
+            Spectra::DenseSymMatProd<double> op(HTH);
+            Spectra::SymEigsSolver<double, Spectra::LARGEST_MAGN, Spectra::DenseSymMatProd<double>> eigs(&op, 1, 6);
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+                eigenvalues = eigs.eigenvalues();
+
+            double largestSingularValue = eigenvalues(0); 
+
+            m_logger.trace("L2 Norm of Hessian - Proj(Hessian): {}", largestSingularValue);
+        }
+    }
+
     void RegularizedNewton::compute_hessian(Problem &objFunc,
                                             const TVector &x,
                                             Eigen::MatrixXd &hessian)
@@ -453,6 +573,17 @@ namespace polysolve::nonlinear
         {
             reg_weight /= reg_weight_inc;
         }
+    }
+
+    bool ProgressivelyProjectedNewton::handle_error()
+    {
+        d *= alpha;
+        return d > 0;
+    }
+
+    void ProgressivelyProjectedNewton::handle_success()
+    {
+        d *= beta;
     }
     // =======================================================================
 

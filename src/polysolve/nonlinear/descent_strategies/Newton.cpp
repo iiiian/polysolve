@@ -378,15 +378,11 @@ namespace polysolve::nonlinear
                                           polysolve::StiffnessMatrix &hessian)
     {
         objFunc.set_project_to_psd(false);
-        if (last_residual.size() == 0)
+        if (std::isinf(d))
         {
             objFunc.projection_setting = 0;
         }
         else {
-            if (std::isinf(d))
-            {
-                d = alpha * last_residual.cwiseAbs().maxCoeff();
-            }
             objFunc.projection_setting = 3;
             objFunc.dofs_to_project.clear();
             for (int i = 0; i < last_residual.size(); ++i)
@@ -578,7 +574,14 @@ namespace polysolve::nonlinear
 
     bool ProgressivelyProjectedNewton::handle_error()
     {
-        d *= alpha;
+        if (std::isinf(d))
+        {
+            d = alpha * last_residual.cwiseAbs().maxCoeff();
+        }
+        else 
+        {
+            d *= alpha;
+        }
         return d > 0;
     }
 

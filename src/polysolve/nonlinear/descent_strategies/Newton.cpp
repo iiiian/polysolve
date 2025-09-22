@@ -30,11 +30,11 @@ namespace polysolve::nonlinear
         proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
         proj_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
 
-        json ppn_solver_params = R"({"ProjectedNewton": {}})"_json;
-        ppn_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
-        ppn_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
-        ppn_solver_params["ProjectedNewton"]["alpha"] = solver_params["Newton"]["alpha"];
-        ppn_solver_params["ProjectedNewton"]["beta"] = solver_params["Newton"]["beta"];
+        json ppn_solver_params = R"({"ProgressivelyProjectedNewton": {}})"_json;
+        ppn_solver_params["ProgressivelyProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        ppn_solver_params["ProgressivelyProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
+        ppn_solver_params["ProgressivelyProjectedNewton"]["alpha"] = solver_params["Newton"]["alpha"];
+        ppn_solver_params["ProgressivelyProjectedNewton"]["beta"] = solver_params["Newton"]["beta"];
 
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
@@ -125,7 +125,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Superclass(sparse, extract_param("ProgressivelyProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProjectedNewton"]["compare_to_full"]), alpha(solver_params["ProjectedNewton"]["alpha"]), beta(solver_params["ProjectedNewton"]["beta"])
+        : Superclass(sparse, extract_param("ProgressivelyProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProgressivelyProjectedNewton"]["compare_to_full"]), alpha(solver_params["ProgressivelyProjectedNewton"]["alpha"]), beta(solver_params["ProgressivelyProjectedNewton"]["beta"])
     {
     }
 
@@ -173,6 +173,7 @@ namespace polysolve::nonlinear
     {
         Superclass::reset(ndof);
         double d = std::numeric_limits<double>::infinity();
+        last_residual.resize(0);
     }
 
     // =======================================================================

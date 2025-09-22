@@ -118,7 +118,7 @@ namespace polysolve::nonlinear
                         const double characteristic_length,
                         spdlog::logger &logger);
 
-        std::string name() const override { return internal_name() + "ProgressivelyProjectedNewton"; }
+        std::string name() const override { return fmt::format("{}ProgressivelyProjectedNewton (d={:g})", internal_name(), d) }
 
         void reset(const int ndof) override;
         bool handle_error() override;

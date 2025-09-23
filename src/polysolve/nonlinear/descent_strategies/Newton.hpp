@@ -118,7 +118,7 @@ namespace polysolve::nonlinear
                         const double characteristic_length,
                         spdlog::logger &logger);
 
-        std::string name() const override { return fmt::format("{}ProgressivelyProjectedNewton (d={:g})", internal_name(), d); }
+        std::string name() const override { return fmt::format("{}ProgressivelyProjectedNewton (d={:g}, attempt={})", internal_name(), d, curr_attempts); }
 
         void reset(const int ndof) override;
         bool handle_error() override;
@@ -136,6 +136,8 @@ namespace polysolve::nonlinear
         bool compare_to_full = false;
         double alpha = 0.5;
         double beta = 2;
+        int max_attempts = 10;
+        int curr_attempts = 0;
         double d = std::numeric_limits<double>::infinity();
     };
 

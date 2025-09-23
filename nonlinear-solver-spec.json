@@ -135,7 +135,8 @@
             "use_psd_projection_in_regularized",
             "compare_to_full",
             "alpha",
-            "beta"
+            "beta",
+            "max_attempts"
         ],
         "doc": "Options for Newton."
     },
@@ -168,6 +169,12 @@
         "default": 2,
         "type": "float",
         "doc": "Release factor for PPN."
+    },
+    {
+        "pointer": "/Newton/max_attempts",
+        "default": 10,
+        "type": "int",
+        "doc": "Maximum number of retry attempts for PPN."
     },
     {
         "pointer": "/Newton/reg_weight_min",

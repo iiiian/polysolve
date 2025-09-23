@@ -35,6 +35,7 @@ namespace polysolve::nonlinear
         ppn_solver_params["ProgressivelyProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
         ppn_solver_params["ProgressivelyProjectedNewton"]["alpha"] = solver_params["Newton"]["alpha"];
         ppn_solver_params["ProgressivelyProjectedNewton"]["beta"] = solver_params["Newton"]["beta"];
+        ppn_solver_params["ProgressivelyProjectedNewton"]["max_attempts"] = solver_params["Newton"]["max_attempts"];
 
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
@@ -125,7 +126,7 @@ namespace polysolve::nonlinear
         const json &linear_solver_params,
         const double characteristic_length,
         spdlog::logger &logger)
-        : Superclass(sparse, extract_param("ProgressivelyProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProgressivelyProjectedNewton"]["compare_to_full"]), alpha(solver_params["ProgressivelyProjectedNewton"]["alpha"]), beta(solver_params["ProgressivelyProjectedNewton"]["beta"])
+        : Superclass(sparse, extract_param("ProgressivelyProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, false, logger), compare_to_full(solver_params["ProgressivelyProjectedNewton"]["compare_to_full"]), alpha(solver_params["ProgressivelyProjectedNewton"]["alpha"]), beta(solver_params["ProgressivelyProjectedNewton"]["beta"]), max_attempts(solver_params["ProgressivelyProjectedNewton"]["max_attempts"])
     {
     }
 
@@ -174,6 +175,7 @@ namespace polysolve::nonlinear
         Superclass::reset(ndof);
         double d = std::numeric_limits<double>::infinity();
         last_residual.resize(0);
+        curr_attempts = 0;
     }
 
     // =======================================================================
@@ -582,12 +584,15 @@ namespace polysolve::nonlinear
         {
             d *= alpha;
         }
-        return d > 0;
+
+        ++curr_attempts;
+        return curr_attempts < max_attempts && d > 0;
     }
 
     void ProgressivelyProjectedNewton::handle_success()
     {
         d *= beta;
+        --curr_attempts;
     }
     // =======================================================================
 

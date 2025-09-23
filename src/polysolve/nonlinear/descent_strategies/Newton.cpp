@@ -52,6 +52,13 @@ namespace polysolve::nonlinear
                 sparse, ppn_solver_params, linear_solver_params,
                 characteristic_length, logger));
 
+            const double reg_weight_min = solver_params["Newton"]["reg_weight_min"];
+            if (reg_weight_min > 0)
+                res.push_back(std::make_unique<RegularizedNewton>(
+                    sparse, solver_params["Newton"]["use_psd_projection_in_regularized"],
+                    reg_solver_params, linear_solver_params,
+                    characteristic_length, logger));
+
             return res;
         }
 

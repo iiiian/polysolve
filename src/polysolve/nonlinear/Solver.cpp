@@ -357,7 +357,7 @@ namespace polysolve::nonlinear
 
             if (update_direction_successful)
             {
-                m_strategies[m_descent_strategy]->handle_success();
+                //m_strategies[m_descent_strategy]->handle_success();
             }
 
             m_current.xDelta = delta_x.norm();

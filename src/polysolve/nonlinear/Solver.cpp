@@ -214,7 +214,6 @@ namespace polysolve::nonlinear
 
         // Make these relative to the characteristic length
         m_logger.trace("Using a characteristic length of {:g}", characteristic_length);
-        m_logger.trace("Using absolute convergence criteria {}", solver_params["use_absolute_convergence_criteria"]);
         if (!solver_params["use_absolute_convergence_criteria"])
         {
             m_stop.xDelta *= characteristic_length;
@@ -222,6 +221,10 @@ namespace polysolve::nonlinear
             m_stop.gradNorm *= characteristic_length;
             m_stop.firstGradNorm *= characteristic_length;
             // m_stop.xDeltaDotGrad *= characteristic_length;
+        } 
+        else
+        {
+            m_logger.trace("Using absolute convergence criteria");
         }
 
         m_stop.iterations = solver_params["max_iterations"];

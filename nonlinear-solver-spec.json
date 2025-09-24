@@ -18,7 +18,8 @@
             "StochasticADAM",
             "StochasticGradientDescent",
             "box_constraints",
-            "advanced"
+            "advanced",
+            "use_absolute_convergence_criteria"
         ],
         "doc": "Settings for nonlinear solver. Interior-loop linear solver settings are defined in the solver/linear section."
     },
@@ -59,6 +60,12 @@
         "default": 1e-10,
         "type": "float",
         "doc": "Minimal gradient norm for the iterations to not start, assume we already are at a minimum."
+    },
+    {
+        "pointer": "/use_absolute_convergence_criteria",
+        "default": false,
+        "type": "bool",
+        "doc": "If true, don't rescale given convergence criteria."
     },
     {
         "pointer": "/max_iterations",

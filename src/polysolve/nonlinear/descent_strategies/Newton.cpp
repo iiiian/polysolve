@@ -599,7 +599,11 @@ namespace polysolve::nonlinear
     void ProgressivelyProjectedNewton::handle_success()
     {
         d *= beta;
-        --curr_attempts;
+        if (curr_attempts > 0)
+        {
+            --curr_attempts;
+        }
+
     }
     // =======================================================================
 

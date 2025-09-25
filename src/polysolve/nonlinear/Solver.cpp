@@ -355,11 +355,6 @@ namespace polysolve::nonlinear
                 update_direction_successful = compute_update_direction(objFunc, x, grad, delta_x);
             }
 
-            if (update_direction_successful)
-            {
-                //m_strategies[m_descent_strategy]->handle_success();
-            }
-
             m_current.xDelta = delta_x.norm();
             if (!update_direction_successful || std::isnan(m_current.xDelta))
             {
@@ -455,6 +450,8 @@ namespace polysolve::nonlinear
                     objFunc.solution_changed(x1);
                 x = x1;
             }
+
+            m_strategies[m_descent_strategy]->handle_success();
 
             old_energy = energy;
 

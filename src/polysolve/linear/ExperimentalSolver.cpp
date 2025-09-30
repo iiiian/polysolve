@@ -595,6 +595,7 @@ namespace polysolve::linear
         #endif
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
 
+        /*
         Eigen::VectorXd test_u(remapped_rhs.size());
         Eigen::VectorXd test_v(remapped_rhs.size());
         test_u.setRandom();
@@ -624,7 +625,7 @@ namespace polysolve::linear
         logger->trace("Custom SPD check1: {}", sym_check6);
         logger->trace("Custom SPD check2: {}", sym_check7);
         logger->trace("Amax: {}, Amin: {}", sparse_A.coeffs().maxCoeff(), sparse_A.coeffs().minCoeff());
-
+        
 
         if (false)
         {
@@ -674,6 +675,7 @@ namespace polysolve::linear
             A_file.close();
             exit(1);
         }
+        */
 
         /* Now setup and solve! */
         {
@@ -1561,6 +1563,7 @@ namespace polysolve::linear
             
 
                 // check symmetry
+                /*
                 int rows = D.rows();
                 if (rows > 0)
                 {
@@ -1580,6 +1583,7 @@ namespace polysolve::linear
                     logger->trace("D Symmetry check3: {}", sym_check3);
                     logger->trace("Dmax: {}, Dmin: {}", D.coeffs().maxCoeff(), D.coeffs().minCoeff());
                 }
+                */
             }
         }
     }

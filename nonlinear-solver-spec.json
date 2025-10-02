@@ -19,7 +19,8 @@
             "StochasticGradientDescent",
             "box_constraints",
             "advanced",
-            "use_absolute_convergence_criteria"
+            "use_absolute_convergence_criteria",
+            "normalize_energy"
         ],
         "doc": "Settings for nonlinear solver. Interior-loop linear solver settings are defined in the solver/linear section."
     },
@@ -66,6 +67,12 @@
         "default": false,
         "type": "bool",
         "doc": "If true, don't rescale given convergence criteria."
+    },
+    {
+        "pointer": "/normalize_energy",
+        "default": false,
+        "type": "bool",
+        "doc": "If true, rescale energy terms by first energy."
     },
     {
         "pointer": "/max_iterations",

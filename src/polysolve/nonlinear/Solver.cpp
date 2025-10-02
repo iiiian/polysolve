@@ -212,6 +212,8 @@ namespace polysolve::nonlinear
         m_stop.firstGradNorm = solver_params["first_grad_norm_tol"];
         m_stop.xDeltaDotGrad = -solver_params["advanced"]["derivative_along_delta_x_tol"].get<double>();
 
+        normalize_energy = solver_params["normalize_energy"];
+
         // Make these relative to the characteristic length
         m_logger.trace("Using a characteristic length of {:g}", characteristic_length);
         if (!solver_params["use_absolute_convergence_criteria"])
@@ -292,11 +294,17 @@ namespace polysolve::nonlinear
         StopWatch stop_watch("nonlinear solver", total_time, m_logger);
         stop_watch.start();
 
+        if (normalize_energy)
+        {
+            objFunc.weight = objFunc(x);
+        }
+
         m_logger.debug(
             "Starting {} with {} solve f₀={:g} (stopping criteria: {})",
             descent_strategy_name(), m_line_search->name(), objFunc(x), m_stop.print_message());
 
         update_solver_info(objFunc(x));
+
         objFunc.post_step(PostStepData(m_current.iterations, solver_info, x, grad));
 
         do

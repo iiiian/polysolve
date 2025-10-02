@@ -131,5 +131,6 @@ namespace polysolve::nonlinear
 
         int projection_setting = 0;
         std::set<int> dofs_to_project;
+        double weight = 1;
     };
 } // namespace polysolve::nonlinear

@@ -204,6 +204,8 @@ namespace polysolve::nonlinear
         std::vector<int> dof_to_function;
         std::vector<std::set<int>> problematic_indices;
 
+        bool normalize_energy;
+
         // ====================================================================
         //                                 END
         // ====================================================================

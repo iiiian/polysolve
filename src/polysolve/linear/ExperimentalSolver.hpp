@@ -102,15 +102,15 @@ namespace polysolve::linear
         bool print_conditioning = false;
         bool use_incomplete_cholesky_precond = false;
         bool use_absolute_tol = false;
-        bool save_selection_criteria;
-        double bad_dof_threshold;
-        bool select_bad_dofs_from_rhs;
-        bool select_bad_dofs_from_row_norms;
-        bool select_bad_dofs_from_amg;
-        bool save_selected_indices;
-        bool save_problem;
-        bool use_gmres;
-        bool use_minres;
+        bool save_selection_criteria = false;
+        double bad_dof_threshold = 0.1;
+        bool select_bad_dofs_from_rhs = false;
+        bool select_bad_dofs_from_row_norms = false;
+        bool select_bad_dofs_from_amg = false;
+        bool save_selected_indices = false;
+        bool save_problem = false;
+        bool use_gmres = false;
+        bool use_minres = false;
         int m_ = 10;
         int amg_iters = 1;
 

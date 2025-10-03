@@ -771,6 +771,9 @@ namespace polysolve::linear
 
     void ExperimentalSolver::pcg_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)
     {
+#ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
         double pre_loop_time;
         double bi_prod, eps, gamma, old_gamma;
         Eigen::VectorXd r, p, z;
@@ -900,6 +903,9 @@ namespace polysolve::linear
 
             p = z + beta*p;
         }
+#ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
     }
 
     void ExperimentalSolver::minres_solve(Eigen::VectorXd &rhs, Eigen::VectorXd &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond)

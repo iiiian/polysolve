@@ -14,6 +14,8 @@
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 
+#define HYPRE_WITH_MPI 1
+
 #ifdef POLYSOLVE_WITH_ICHOL
 #include <boost/property_tree/ptree.hpp>
 namespace mschol {

@@ -608,6 +608,7 @@ namespace polysolve::linear
         else
         {
             MPI_Bcast(&num_subdomains, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            bad_indices_.clear();
             bad_indices_.resize(num_subdomains);
             for (int i = 0; i < num_subdomains; ++i)
             {

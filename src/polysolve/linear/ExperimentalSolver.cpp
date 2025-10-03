@@ -601,6 +601,7 @@ namespace polysolve::linear
                         subdomain_vec.push_back(index);
                     }
                     MPI_Bcast(subdomain_vec.data(), num_indices, MPI_INT, 0, MPI_COMM_WORLD);
+                    MPI_Barrier(MPI_COMM_WORLD);
                 }
             }
         } 
@@ -619,6 +620,7 @@ namespace polysolve::linear
                 {
                     bad_indices_[i].insert(index);
                 }
+                MPI_Barrier(MPI_COMM_WORLD);
             }
         }
 #endif
@@ -1641,6 +1643,7 @@ namespace polysolve::linear
     void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
     {
 #ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
         result.resize(x.size());
         result.setZero();
         
@@ -1650,6 +1653,7 @@ namespace polysolve::linear
         }
 
         MPI_Allreduce(MPI_IN_PLACE, result.data(), result.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
 #else
         result = A*x;
 #endif

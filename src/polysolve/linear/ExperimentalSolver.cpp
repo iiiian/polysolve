@@ -584,142 +584,25 @@ namespace polysolve::linear
         select_bad_indices(remapped_rhs);
 
 #ifdef HYPRE_WITH_MPI
-        int num_subdomains;
-        if (myid == 0)
+        if (myid == 0) 
         {
-            num_subdomains = bad_indices_.size();
-            MPI_Bcast(&num_subdomains, 1, MPI_INT, 0, MPI_COMM_WORLD);
-            if (bad_indices_.size() > 0)
+#endif
+            select_bad_indices(remapped_rhs);
+            factorize_submatrix();
+
+            if (print_conditioning)
             {
-                for (int i = 0; i < num_subdomains; ++i)
-                {
-                    int num_indices = bad_indices_[i].size();
-                    MPI_Bcast(&num_indices, 1, MPI_INT, 0, MPI_COMM_WORLD);
-                    std::vector<int> subdomain_vec;
-                    for (auto index : bad_indices_[i])
-                    {
-                        subdomain_vec.push_back(index);
-                    }
-                    MPI_Bcast(subdomain_vec.data(), num_indices, MPI_INT, 0, MPI_COMM_WORLD);
-                    MPI_Barrier(MPI_COMM_WORLD);
-                }
+                check_matrix_conditioning("Hessian", sparse_A);
+                check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
             }
-        } 
-        else
-        {
-            MPI_Bcast(&num_subdomains, 1, MPI_INT, 0, MPI_COMM_WORLD);
-            bad_indices_.clear();
-            bad_indices_.resize(num_subdomains);
-            for (int i = 0; i < num_subdomains; ++i)
-            {
-                int num_indices;
-                MPI_Bcast(&num_indices, 1, MPI_INT, 0, MPI_COMM_WORLD);
-                std::vector<int> subdomain_vec;
-                subdomain_vec.resize(num_indices);
-                MPI_Bcast(subdomain_vec.data(), num_indices, MPI_INT, 0, MPI_COMM_WORLD);
-                for (auto index : subdomain_vec)
-                {
-                    bad_indices_[i].insert(index);
-                }
-                MPI_Barrier(MPI_COMM_WORLD);
-            }
+#ifdef HYPRE_WITH_MPI
         }
 #endif
-
-        factorize_submatrix();
-
-        if (print_conditioning)
-        {
-            check_matrix_conditioning("Hessian", sparse_A);
-            check_matrix_conditioning("Preconditioned Hessian", bad_indices_[0]);
-        }
 
         #ifdef HYPRE_WITH_MPI
             MPI_Barrier(MPI_COMM_WORLD);
         #endif
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
-
-        /*
-        Eigen::VectorXd test_u(remapped_rhs.size());
-        Eigen::VectorXd test_v(remapped_rhs.size());
-        test_u.setRandom();
-        test_v.setRandom();
-        test_u /= test_u.norm();
-        test_v /= test_v.norm();
-        Eigen::VectorXd u_amg = test_u;
-        Eigen::VectorXd v_amg = test_v;
-        Eigen::VectorXd u_custom = test_u;
-        Eigen::VectorXd v_custom = test_v;
-        amg_precond_iter(precond, test_u, u_amg);
-        amg_precond_iter(precond, test_v, v_amg);
-        custom_mixed_precond_iter(precond, test_u, u_custom);
-        custom_mixed_precond_iter(precond, test_v, v_custom);
-        double sym_check = test_v.dot(sparse_A * test_u) - test_u.dot(sparse_A * test_v);
-        double sym_check2 = test_v.dot(u_amg) - test_u.dot(v_amg);
-        double sym_check3 = test_v.dot(v_amg);
-        double sym_check4 = test_u.dot(u_amg);
-        double sym_check5 = test_v.dot(u_custom) - test_u.dot(v_custom);
-        double sym_check6 = test_v.dot(v_custom);
-        double sym_check7 = test_u.dot(u_custom);
-        logger->trace("H Symmetry check: {}", sym_check);
-        logger->trace("AMG Symmetry check: {}", sym_check2);
-        logger->trace("AMG SPD check1: {}", sym_check3);
-        logger->trace("AMG SPD check2: {}", sym_check4);
-        logger->trace("Custom Symmetry check: {}", sym_check5);
-        logger->trace("Custom SPD check1: {}", sym_check6);
-        logger->trace("Custom SPD check2: {}", sym_check7);
-        logger->trace("Amax: {}, Amin: {}", sparse_A.coeffs().maxCoeff(), sparse_A.coeffs().minCoeff());
-        
-
-        if (false)
-        {
-            Eigen::VectorXd e(rhs.size());
-            Eigen::VectorXd out(rhs.size());
-            Eigen::MatrixXd M(rhs.size(), rhs.size());
-            for (int k = 0; k < rhs.size(); ++k)
-            {
-                e.setZero();
-                out.setZero();
-                e(k) = 1;
-                amg_precond_iter(precond, e, out);
-                M.col(k) = out;
-            }
-
-            std::ofstream M_file("fail_M.mat");
-            M_file << M;
-            M_file.close();
-
-            for (int k = 0; k < rhs.size(); ++k)
-            {
-                e.setZero();
-                out.setZero();
-                e(k) = 1;
-                custom_mixed_precond_iter(precond, e, out);
-                M.col(k) = out;
-            }
-
-            std::ofstream Mdss_file("fail_M_dss.mat");
-            Mdss_file << M;
-            Mdss_file.close();
-
-            HYPRE_Int cgrid[9120];
-            HYPRE_BoomerAMGGetGridHierarchy(precond, cgrid);
-
-            Eigen::VectorXi eigen_cgrid(9120);
-            for (int i = 0; i < 9120; ++i)
-            {
-                eigen_cgrid(i) = cgrid[i];
-            }
-            std::ofstream cgrid_file("fail_cgrid.mat");
-            cgrid_file << eigen_cgrid;
-            cgrid_file.close();
-
-            std::ofstream A_file("fail_A.mat");
-            A_file << sparse_A;
-            A_file.close();
-            exit(1);
-        }
-        */
 
         /* Now setup and solve! */
         {
@@ -1339,9 +1222,14 @@ namespace polysolve::linear
         {
             POLYSOLVE_SCOPED_STOPWATCH("dss step time: ", dss_step_time, *logger);
 
+            if (myid != 0)
+            {
+                MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
+                return;
+            }
+
             next_z = z;
         
-            #pragma omp parallel for
             for (int index = 0; index < bad_indices_.size(); ++index)
             {
                 auto &subdomain = bad_indices_[index];
@@ -1366,6 +1254,7 @@ namespace polysolve::linear
                     ++i_counter;
                 }
             }
+            MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
         }
     }
 
@@ -1533,7 +1422,6 @@ namespace polysolve::linear
 
             logger->trace("H symmetric: {}", sparse_A.isApprox(sparse_A.transpose()));
 
-            #pragma omp parallel for
             for (int i = 0; i < bad_indices_.size(); ++i)
             {
                 Eigen::SparseMatrix<double, Eigen::RowMajor> D;
@@ -1614,29 +1502,6 @@ namespace polysolve::linear
                     D_solvers[i].compute(D);
                 }
             
-
-                // check symmetry
-                /*
-                int rows = D.rows();
-                if (rows > 0)
-                {
-                    Eigen::VectorXd test_u(rows);
-                    Eigen::VectorXd test_v(rows);
-                    test_u.setRandom();
-                    test_v.setRandom();
-                    test_u /= test_u.norm();
-                    test_v /= test_v.norm();
-                    Eigen::VectorXd inverse_u = D_solvers[i].solve(test_u);
-                    Eigen::VectorXd inverse_v = D_solvers[i].solve(test_v);
-                    double sym_check = test_v.dot(inverse_u) - test_u.dot(inverse_v);
-                    double sym_check2 = test_u.dot(inverse_u);
-                    double sym_check3 = test_v.dot(inverse_v);
-                    logger->trace("D Symmetry check: {}", sym_check);
-                    logger->trace("D Symmetry check2: {}", sym_check2);
-                    logger->trace("D Symmetry check3: {}", sym_check3);
-                    logger->trace("Dmax: {}, Dmin: {}", D.coeffs().maxCoeff(), D.coeffs().minCoeff());
-                }
-                */
             }
         }
     }

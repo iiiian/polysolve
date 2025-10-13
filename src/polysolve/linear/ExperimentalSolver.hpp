@@ -8,6 +8,7 @@
 #include <vector>
 #include <deque>
 #include <Eigen/SparseCholesky>
+#include <Eigen/PardisoSupport>
 
 #include <HYPRE_utilities.h>
 #include <HYPRE.h>

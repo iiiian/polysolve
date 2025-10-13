@@ -1240,39 +1240,43 @@ namespace polysolve::linear
             if (myid != 0)
             {
                 MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-                return;
-            }
 
-            next_z = z;
-        
-            for (int index = 0; index < bad_indices_arrays.size(); ++index)
+            }
+            else
             {
-                auto &subdomain = bad_indices_arrays[index];
 
-                Eigen::VectorXd sub_rhs;
-                Eigen::VectorXd sub_result;
-                sub_rhs.resize(subdomain.size());
-                sub_result.resize(subdomain.size());
-
-                for (int i = 0; i < subdomain.size(); ++i)
+                next_z = z;
+            
+                for (int index = 0; index < bad_indices_arrays.size(); ++index)
                 {
-                    sub_rhs(index_mappings[index][subdomain[i]]) = r(subdomain[i]) - sparse_A.row(subdomain[i]).dot(z);
+                    auto &subdomain = bad_indices_arrays[index];
+
+                    Eigen::VectorXd sub_rhs;
+                    Eigen::VectorXd sub_result;
+                    sub_rhs.resize(subdomain.size());
+                    sub_result.resize(subdomain.size());
+
+                    for (int i = 0; i < subdomain.size(); ++i)
+                    {
+                        sub_rhs(index_mappings[index][subdomain[i]]) = r(subdomain[i]) - sparse_A.row(subdomain[i]).dot(z);
+                    }
+
+                    double d_solve_time;
+                    {
+                        POLYSOLVE_SCOPED_STOPWATCH("D solve time", d_solve_time, *logger);
+                        sub_result = D_solvers[index].solve(sub_rhs);
+                    }
+
+                    for (int i = 0; i < subdomain.size(); ++i)
+                    {
+                        next_z(subdomain[i]) += sub_result(index_mappings[index][subdomain[i]]);
+                    }
                 }
 
-                double d_solve_time;
-                {
-                    POLYSOLVE_SCOPED_STOPWATCH("D solve time", d_solve_time, *logger);
-                    sub_result = D_solvers[index].solve(sub_rhs);
-                }
-
-                for (int i = 0; i < subdomain.size(); ++i)
-                {
-                    next_z(subdomain[i]) += sub_result(index_mappings[index][subdomain[i]]);
-                }
+                MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
             }
-
-            MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
         }
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
 #ifdef POLYSOLVE_WITH_ICHOL
@@ -1551,6 +1555,7 @@ namespace polysolve::linear
         }
 
         MPI_Allreduce(MPI_IN_PLACE, result.data(), result.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
 #else
         result = A*x;
 #endif

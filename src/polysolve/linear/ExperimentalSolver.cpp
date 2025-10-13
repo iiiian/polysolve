@@ -1236,7 +1236,6 @@ namespace polysolve::linear
         double dss_step_time;
         {
             POLYSOLVE_SCOPED_STOPWATCH("dss step time: ", dss_step_time, *logger);
-            MPI_Barrier(MPI_COMM_WORLD);
 
             if (myid != 0)
             {
@@ -1542,6 +1541,7 @@ namespace polysolve::linear
     void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
     {
 #ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
         result.resize(x.size());
         result.setZero();
         

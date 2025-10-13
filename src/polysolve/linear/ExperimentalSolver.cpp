@@ -615,7 +615,7 @@ namespace polysolve::linear
 #endif
         double amg_setup_time;
         {
-            POLYSOLVE_SCOPED_STOPWATCH("AMG setup time", amg_setup_time;, *logger);
+            POLYSOLVE_SCOPED_STOPWATCH("AMG setup time", amg_setup_time, *logger);
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
         }
 

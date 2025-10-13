@@ -1267,8 +1267,10 @@ namespace polysolve::linear
 
                 for (int i = 0; i < subdomain.size(); ++i)
                 {
+                    logger->trace("subdomain z: {}", i);
                     next_z(subdomain[i]) += sub_result(index_mappings[index][subdomain[i]]);
                 }
+                logger->trace("DONE");
             }
 
             MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);

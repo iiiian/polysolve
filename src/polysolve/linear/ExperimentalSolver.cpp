@@ -610,10 +610,14 @@ namespace polysolve::linear
         }
 #endif
 
-        #ifdef HYPRE_WITH_MPI
-            MPI_Barrier(MPI_COMM_WORLD);
-        #endif
+#ifdef HYPRE_WITH_MPI
+        MPI_Barrier(MPI_COMM_WORLD);
+#endif
+        double amg_setup_time;
+        {
+            POLYSOLVE_SCOPED_STOPWATCH("AMG setup time", amg_setup_time;, *logger);
             HYPRE_BoomerAMGSetup(precond, parcsr_A, par_b, par_x);
+        }
 
         /* Now setup and solve! */
         {
@@ -1250,11 +1254,9 @@ namespace polysolve::linear
                 sub_rhs.resize(subdomain.size());
                 sub_result.resize(subdomain.size());
 
-                #pragma omp parallel for
                 for (int i = 0; i < subdomain.size(); ++i)
                 {
                     sub_rhs(index_mappings[index][subdomain[i]]) = r(subdomain[i]) - sparse_A.row(subdomain[i]).dot(z);
-
                 }
 
                 double d_solve_time;
@@ -1263,7 +1265,6 @@ namespace polysolve::linear
                     sub_result = D_solvers[index].solve(sub_rhs);
                 }
 
-                #pragma omp parallel for
                 for (int i = 0; i < subdomain.size(); ++i)
                 {
                     next_z(subdomain[i]) += sub_result(index_mappings[index][subdomain[i]]);

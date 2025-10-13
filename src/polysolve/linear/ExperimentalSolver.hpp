@@ -130,7 +130,7 @@ namespace polysolve::linear
         int start_i, end_i;
 
         Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
-        std::deque<Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>>> D_solvers;
+        std::deque<Eigen::PardisoLDLT<Eigen::SparseMatrix<double>>> D_solvers;
 
 #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; 

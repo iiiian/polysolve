@@ -15,6 +15,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <unordered_map>
+#include <omp.h>
 
 namespace polysolve::linear
 {
@@ -291,19 +292,21 @@ namespace polysolve::linear
         end_i = myid == (num_procs - 1) ? rows - 1 : start_i + local_size;
         logger->trace("World size: {}, myid: {}", num_procs, myid);
         logger->trace("start {}, end {}", start_i, end_i);
-#ifdef HYPRE_WITH_MPI
-        HYPRE_IJMatrixCreate(MPI_COMM_WORLD, start_i, end_i, start_i, end_i, &A);
-#else
-        HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
-#endif
-        // HYPRE_IJMatrixSetPrintLevel(A, 2);
-        HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
-        HYPRE_IJMatrixInitialize(A);
 
         // TODO: More efficient initialization of the Hypre matrix?
         double matrix_copy_time;
         {
             POLYSOLVE_SCOPED_STOPWATCH("copy matrix time", matrix_copy_time, *logger);
+
+#ifdef HYPRE_WITH_MPI
+            HYPRE_IJMatrixCreate(MPI_COMM_WORLD, start_i, end_i, start_i, end_i, &A);
+#else
+            HYPRE_IJMatrixCreate(0, 0, rows - 1, 0, cols - 1, &A);
+#endif
+            // HYPRE_IJMatrixSetPrintLevel(A, 2);
+            HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
+            HYPRE_IJMatrixInitialize(A);
+
             for (HYPRE_Int k = 0; k < sparse_A.outerSize(); ++k)
             {
                 HYPRE_Int row[1]; 
@@ -581,13 +584,21 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetMaxIter(precond, amg_iters);
         }
 
-        select_bad_indices(remapped_rhs);
-
 #ifdef HYPRE_WITH_MPI
         if (myid == 0) 
         {
 #endif
             select_bad_indices(remapped_rhs);
+            bad_indices_arrays.clear();
+            bad_indices_arrays.resize(bad_indices_.size());
+            for (int i = 0; i < bad_indices_.size(); ++i)
+            {
+                bad_indices_arrays[i].reserve(bad_indices_[i].size());
+                for (auto index : bad_indices_[i])
+                {
+                    bad_indices_arrays[i].push_back(index);
+                }
+            }
             factorize_submatrix();
 
             if (print_conditioning)
@@ -1230,30 +1241,35 @@ namespace polysolve::linear
 
             next_z = z;
         
-            for (int index = 0; index < bad_indices_.size(); ++index)
+            for (int index = 0; index < bad_indices_arrays.size(); ++index)
             {
-                auto &subdomain = bad_indices_[index];
+                auto &subdomain = bad_indices_arrays[index];
 
                 Eigen::VectorXd sub_rhs;
                 Eigen::VectorXd sub_result;
                 sub_rhs.resize(subdomain.size());
                 sub_result.resize(subdomain.size());
 
-                int i_counter = 0;
-                for (auto &i : subdomain)
+                #pragma omp parallel for
+                for (int i = 0; i < subdomain.size(); ++i)
                 {
-                    sub_rhs(i_counter) = r(i) - sparse_A.row(i).dot(z);
-                    ++i_counter;
+                    sub_rhs(index_mappings[index][subdomain[i]]) = r(subdomain[i]) - sparse_A.row(subdomain[i]).dot(z);
+
                 }
 
-                sub_result = D_solvers[index].solve(sub_rhs);
-                i_counter = 0;
-                for (auto &i : subdomain)
+                double d_solve_time;
                 {
-                    next_z(i) += sub_result(i_counter);
-                    ++i_counter;
+                    POLYSOLVE_SCOPED_STOPWATCH("D solve time", d_solve_time, *logger);
+                    sub_result = D_solvers[index].solve(sub_rhs);
+                }
+
+                #pragma omp parallel for
+                for (int i = 0; i < subdomain.size(); ++i)
+                {
+                    next_z(subdomain[i]) += sub_result(index_mappings[index][subdomain[i]]);
                 }
             }
+
             MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
         }
     }
@@ -1420,23 +1436,30 @@ namespace polysolve::linear
             D_solvers.clear();
             D_solvers.resize(bad_indices_.size());
 
-            logger->trace("H symmetric: {}", sparse_A.isApprox(sparse_A.transpose()));
+            //logger->trace("H symmetric: {}", sparse_A.isApprox(sparse_A.transpose()));
+
+            index_mappings.clear();
+            index_mappings.resize(bad_indices_.size());
 
             for (int i = 0; i < bad_indices_.size(); ++i)
             {
-                Eigen::SparseMatrix<double, Eigen::RowMajor> D;
-                D.resize(bad_indices_[i].size(), bad_indices_[i].size());
-                logger->trace("Subdomain size: {}", bad_indices_[i].size());
-                std::vector<Eigen::Triplet<double>> triplets;
-                std::unordered_map<int, int> index_mapping;
-
                 int j_counter = 0;
                 for (auto j : bad_indices_[i])
                 {
-                    index_mapping[j] = j_counter;
+                    index_mappings[i][j] = j_counter;
                     ++j_counter;
                 }
+            }
 
+            for (int i = 0; i < bad_indices_.size(); ++i)
+            {
+                Eigen::SparseMatrix<double> D;
+                D.resize(bad_indices_[i].size(), bad_indices_[i].size());
+                logger->trace("Subdomain size: {}", bad_indices_[i].size());
+                std::vector<std::vector<Eigen::Triplet<double>>> triplets_array;
+                triplets_array.resize(omp_get_max_threads());
+
+                #pragma omp parallel for
                 for (int k = 0; k < sparse_A.outerSize(); ++k)
                 {
                     if (bad_indices_[i].count(k) == 0)
@@ -1450,15 +1473,23 @@ namespace polysolve::linear
                         {
                             continue;
                         }
-                        triplets.push_back(Eigen::Triplet<double>(index_mapping[it.row()], index_mapping[it.col()], it.value()));
+                        triplets_array[omp_get_thread_num()].push_back(Eigen::Triplet<double>(index_mappings[i][it.row()], index_mappings[i][it.col()], it.value()));
                     }
+                }
+
+                std::vector<Eigen::Triplet<double>> triplets;
+                triplets.reserve(bad_indices_[i].size());
+
+                for (auto &sub_triplet_array : triplets_array)
+                {
+                    triplets.insert(triplets.end(), sub_triplet_array.begin(), sub_triplet_array.end());
                 }
 
                 double set_from_triplets_time;
                 {
                     POLYSOLVE_SCOPED_STOPWATCH("set D from triplets", set_from_triplets_time, *logger);
                     D.setFromTriplets(triplets.begin(), triplets.end());
-                    logger->trace("D symmetric: {}", D.isApprox(D.transpose()));
+                    // logger->trace("D symmetric: {}", D.isApprox(D.transpose()));
                 }
 
                 double d_projection_time;
@@ -1475,7 +1506,7 @@ namespace polysolve::linear
                     }
                     else if (project_d_option == 2 && D.rows() > 0)
                     {
-                        Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double, Eigen::RowMajor>>
+                        Eigen::SelfAdjointEigenSolver<Eigen::SparseMatrix<double>>
                             eigensolver(D);
                         if (eigensolver.info() != Eigen::Success) {
                             logger->trace("unable to project matrix onto positive definite cone");
@@ -1509,7 +1540,6 @@ namespace polysolve::linear
     void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
     {
 #ifdef HYPRE_WITH_MPI
-        MPI_Barrier(MPI_COMM_WORLD);
         result.resize(x.size());
         result.setZero();
         
@@ -1519,7 +1549,6 @@ namespace polysolve::linear
         }
 
         MPI_Allreduce(MPI_IN_PLACE, result.data(), result.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Barrier(MPI_COMM_WORLD);
 #else
         result = A*x;
 #endif

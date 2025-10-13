@@ -133,6 +133,9 @@ namespace polysolve::linear
         Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
         std::deque<Eigen::PardisoLDLT<Eigen::SparseMatrix<double>>> D_solvers;
 
+        std::vector<std::vector<int>> bad_indices_arrays;
+        std::vector<std::unordered_map<int, int>> index_mappings;
+
 #ifdef POLYSOLVE_WITH_ICHOL
         std::shared_ptr<mschol::ichol_precond> inc_chol_precond; 
         boost::property_tree::ptree pt;

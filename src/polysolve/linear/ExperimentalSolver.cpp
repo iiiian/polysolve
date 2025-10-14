@@ -1317,7 +1317,6 @@ namespace polysolve::linear
                 MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
             }
         }
-        MPI_Barrier(MPI_COMM_WORLD);
     }
 
 #ifdef POLYSOLVE_WITH_ICHOL
@@ -1586,7 +1585,6 @@ namespace polysolve::linear
     void ExperimentalSolver::matmul(Eigen::VectorXd &x, Eigen::SparseMatrix<double, Eigen::RowMajor> &A, Eigen::VectorXd &result)
     {
 #ifdef HYPRE_WITH_MPI
-        MPI_Barrier(MPI_COMM_WORLD);
         result.resize(x.size());
         result.setZero();
         
@@ -1596,7 +1594,6 @@ namespace polysolve::linear
         }
 
         MPI_Allreduce(MPI_IN_PLACE, result.data(), result.size(), MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Barrier(MPI_COMM_WORLD);
 #else
         result = A*x;
 #endif

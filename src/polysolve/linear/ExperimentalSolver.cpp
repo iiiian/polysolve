@@ -611,6 +611,49 @@ namespace polysolve::linear
 #endif
 
 #ifdef HYPRE_WITH_MPI
+        int num_subdomains;
+        if (myid == 0)
+        {
+            num_subdomains = bad_indices_.size();
+            MPI_Bcast(&num_subdomains, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            if (bad_indices_.size() > 0)
+            {
+                for (int i = 0; i < num_subdomains; ++i)
+                {
+                    int num_indices = bad_indices_[i].size();
+                    MPI_Bcast(&num_indices, 1, MPI_INT, 0, MPI_COMM_WORLD);
+                    std::vector<int> subdomain_vec;
+                    for (auto index : bad_indices_[i])
+                    {
+                        subdomain_vec.push_back(index);
+                    }
+                    MPI_Bcast(subdomain_vec.data(), num_indices, MPI_INT, 0, MPI_COMM_WORLD);
+                    MPI_Barrier(MPI_COMM_WORLD);
+                }
+            }
+        } 
+        else
+        {
+            MPI_Bcast(&num_subdomains, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            bad_indices_.clear();
+            bad_indices_.resize(num_subdomains);
+            for (int i = 0; i < num_subdomains; ++i)
+            {
+                int num_indices;
+                MPI_Bcast(&num_indices, 1, MPI_INT, 0, MPI_COMM_WORLD);
+                std::vector<int> subdomain_vec;
+                subdomain_vec.resize(num_indices);
+                MPI_Bcast(subdomain_vec.data(), num_indices, MPI_INT, 0, MPI_COMM_WORLD);
+                for (auto index : subdomain_vec)
+                {
+                    bad_indices_[i].insert(index);
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+        }
+#endif
+
+#ifdef HYPRE_WITH_MPI
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
         double amg_setup_time;
@@ -1240,11 +1283,9 @@ namespace polysolve::linear
             if (myid != 0)
             {
                 MPI_Bcast(next_z.data(), next_z.size(), MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
             }
             else
             {
-
                 next_z = z;
             
                 for (int index = 0; index < bad_indices_arrays.size(); ++index)

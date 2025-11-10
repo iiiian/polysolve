@@ -36,8 +36,8 @@ namespace polysolve::nonlinear
     }
     std::string Criteria::print_message() const {
         return fmt::format(
-            "iters={:d} Δf={:g} ‖∇f‖={:g} ‖Δx‖={:g} Δx⋅∇f(x)={:g} 1/2Δx^THΔx={:g}",
-            iterations, fDelta, gradNorm, xDelta, xDeltaDotGrad, newtonDecrement);
+            "iters={:d} Δf={:g} ‖∇f‖={:g} ‖∇f‖rel={:g} ‖Δx‖={:g} ‖Δx‖rel={:g} Δx⋅∇f(x)={:g} 1/2Δx^THΔx={:g}",
+            iterations, fDelta, gradNorm, relGradNorm, xDelta, relXDelta, xDeltaDotGrad, newtonDecrement);
     }
 
     Status checkConvergence(const Criteria &stop, const Criteria &current)

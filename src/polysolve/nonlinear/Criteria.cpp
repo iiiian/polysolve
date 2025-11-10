@@ -8,7 +8,7 @@ namespace polysolve::nonlinear
 {
     bool is_converged_status(const Status s)
     {
-        return s == Status::XDeltaTolerance || s == Status::FDeltaTolerance || s == Status::GradNormTolerance;
+        return s == Status::XDeltaTolerance || s == Status::FDeltaTolerance || s == Status::GradNormTolerance || s == Status::NewtonDecrementTolerance || s == Status::RelGradNormTolerance || s == Status::RelXDeltaTolerance;
     }
 
     Criteria::Criteria()
@@ -25,6 +25,9 @@ namespace polysolve::nonlinear
         firstGradNorm = 0;
         fDeltaCount = 0;
         xDeltaDotGrad = 0;
+        relGradNorm = 0;
+        relXDelta = 0;
+        newtonDecrement = 0;
     }
 
     void Criteria::print(std::ostream &os) const
@@ -33,8 +36,8 @@ namespace polysolve::nonlinear
     }
     std::string Criteria::print_message() const {
         return fmt::format(
-            "iters={:d} Δf={:g} ‖∇f‖={:g} ‖Δx‖={:g} Δx⋅∇f(x)={:g}",
-            iterations, fDelta, gradNorm, xDelta, xDeltaDotGrad);
+            "iters={:d} Δf={:g} ‖∇f‖={:g} ‖Δx‖={:g} Δx⋅∇f(x)={:g} 1/2Δx^THΔx={:g}",
+            iterations, fDelta, gradNorm, xDelta, xDeltaDotGrad, newtonDecrement);
     }
 
     Status checkConvergence(const Criteria &stop, const Criteria &current)
@@ -47,6 +50,18 @@ namespace polysolve::nonlinear
         if (stopGradNorm > 0 && current.gradNorm < stopGradNorm)
         {
             return Status::GradNormTolerance;
+        }
+        if (stop.relXDelta > 0 && current.relXDelta < stop.relXDelta)
+        {
+            return Status::RelXDeltaTolerance;
+        }
+        if (stop.relGradNorm > 0 && current.relGradNorm < stop.relGradNorm)
+        {
+            return Status::RelGradNormTolerance;
+        }
+        if (stop.newtonDecrement > 0 && current.newtonDecrement < stop.newtonDecrement)
+        {
+            return Status::NewtonDecrementTolerance;
         }
         if (stop.xDelta > 0 && current.xDelta < stop.xDelta)
         {
@@ -79,6 +94,12 @@ namespace polysolve::nonlinear
             return "Change in cost function value too small";
         case Status::GradNormTolerance:
             return "Gradient vector norm too small";
+        case Status::RelGradNormTolerance:
+            return "Relative gradient vector too small";
+        case Status::RelXDeltaTolerance:
+            return "Relative change in parameter vector too small";
+        case Status::NewtonDecrementTolerance:
+            return "Newton decrement too small";
         case Status::ObjectiveCustomStop:
             return "Objective function specified to stop";
         case Status::NanEncountered:

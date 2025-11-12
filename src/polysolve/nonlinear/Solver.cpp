@@ -535,6 +535,9 @@ namespace polysolve::nonlinear
 
         log_times();
         update_solver_info(objFunc(x));
+
+        const auto &i = solver_info;
+        m_logger.error("BENCHMARK_LOG == Total iterations: {}, Total time: {}, f time {}, grad time {}, hess time {}", i["iterations"], i["total_time"], i["time_obj_fun"], i["time_grad"], i["time_assembly"]);
     }
 
     void Solver::reset(const int ndof)

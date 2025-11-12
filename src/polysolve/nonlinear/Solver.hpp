@@ -80,7 +80,6 @@ namespace polysolve::nonlinear
         /// @brief If true the solver will not throw an error if the maximum number of iterations is reached
         bool allow_out_of_iterations = false;
 
-
         /// @brief Get the line search object
         const std::shared_ptr<line_search::LineSearch> &line_search() const { return m_line_search; };
 
@@ -90,7 +89,7 @@ namespace polysolve::nonlinear
         }
 
     protected:
-        /// @brief Compute direction in which the argument should be updated 
+        /// @brief Compute direction in which the argument should be updated
         /// @param objFunc Problem to be minimized
         /// @param x Current input (n x 1)
         /// @param grad Gradient at current step (n x 1)
@@ -116,7 +115,7 @@ namespace polysolve::nonlinear
             m_stop_rescaled.xDeltaDotGrad = m_stop.xDeltaDotGrad * objFunc.grad_norm_rescaling(norm_type) * objFunc.step_norm_rescaling(norm_type);
             m_stop_rescaled.relGradNorm = m_stop.relGradNorm;
             m_stop_rescaled.relXDelta = m_stop.relXDelta;
-            m_stop_rescaled.newtonDecrement = m_stop.newtonDecrement * objFunc.newton_dec_norm_rescaling(norm_type);
+            m_stop_rescaled.newtonDecrement = m_stop.newtonDecrement * objFunc.energy_norm_rescaling(norm_type);
         }
 
         /// @brief Stopping criteria
@@ -135,7 +134,7 @@ namespace polysolve::nonlinear
 
         /// @brief Logger to use
         spdlog::logger &m_logger;
-        
+
         std::string norm_type_;
 
         // ====================================================================
@@ -160,7 +159,7 @@ namespace polysolve::nonlinear
         // ====================================================================
         //                           Solver state
         // ====================================================================
-        
+
         /// @brief Reset the solver at the start of a minimization
         /// @param ndof number of degrees of freedom
         void reset(const int ndof);
@@ -177,7 +176,7 @@ namespace polysolve::nonlinear
         // ====================================================================
 
         /// @brief Update solver info JSON object
-        /// @param energy 
+        /// @param energy
         void update_solver_info(const double energy);
 
         /// @brief Reset timing members to 0

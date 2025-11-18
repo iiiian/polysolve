@@ -17,6 +17,9 @@
 #include <unordered_map>
 #include <omp.h>
 
+#include <SymEigsSolver.h>
+#include <MatOp/SparseSymMatProd.h>
+
 namespace polysolve::linear
 {
 
@@ -589,6 +592,20 @@ namespace polysolve::linear
         {
 #endif
             select_bad_indices(remapped_rhs);
+            if (save_selected_indices)
+            {
+                std::ofstream file;
+                file.open("selected_indices.txt", std::io_base::app);
+                if (bad_indices_.size() > 0)
+                {
+                    for (auto i : bad_indices_[0])
+                    {
+                        file << i << " ";
+                    }
+                }
+                file << std::endl;;
+                file.close();
+            }
             bad_indices_arrays.clear();
             bad_indices_arrays.resize(bad_indices_.size());
             for (int i = 0; i < bad_indices_.size(); ++i)
@@ -792,6 +809,39 @@ namespace polysolve::linear
             if (alpha <= 0.0)
             {
                 logger->debug("Experimental solver error: negative or zero alpha value. gamma: {}, sdotp: {}", gamma, sdotp);
+                
+                if (myid == 0 && bad_indices_.size() > 0 && bad_indices_[0].size() > 0)
+                {
+                    polysolve::StiffnessMatrix A_copy = sparse_A;
+                    Spectra::SparseSymMatProd<double> op(A_copy);
+                    Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
+
+                    eigs.init();
+                    int nconv = eigs.compute();
+                    Eigen::VectorXd eigenvalues;
+                    Eigen::MatrixXd eigenvectors;
+                    if (eigs.info() == Spectra::SUCCESSFUL)
+                    {
+                        eigenvalues = eigs.eigenvalues();
+                        eigenvectors = eigs.eigenvectors();
+
+                        Eigen::VectorXd bad_evec = eigenvectors.col(0);
+                        Eigen::VectorXd projected_bad_evec = bad_evec;
+                        for (int i = 0; i < projected_bad_evec.size(); ++i)
+                        {
+                            if (bad_indices_[0].count(i) == 0)
+                            {
+                                projected_bad_evec(i) = 0;
+                            }
+                        }
+                        logger->debug("eigenvalue found: {}, evec norm: {}, projected evec norm: {}", eigenvalues(0), bad_evec.norm(), projected_bad_evec.norm()); 
+                    }
+                    else
+                    {
+                        logger->debug("could not find eigenvalue");
+                    }
+                }
+                
                 break;
             } 
             else if (alpha < __DBL_MIN__)

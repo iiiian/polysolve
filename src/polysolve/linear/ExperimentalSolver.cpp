@@ -595,7 +595,7 @@ namespace polysolve::linear
             if (save_selected_indices)
             {
                 std::ofstream file;
-                file.open("selected_indices.txt", std::io_base::app);
+                file.open("selected_indices.txt", std::ios_base::app);
                 if (bad_indices_.size() > 0)
                 {
                     for (auto i : bad_indices_[0])

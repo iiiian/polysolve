@@ -52,7 +52,7 @@ namespace polysolve::nonlinear::line_search
                 continue;
             }
 
-            m_logger.trace("ls it: {} ΔE: {}", cur_iter, new_energy - old_energy);
+            m_logger.trace("ls it: {} ΔE: {}, Δx: {}", cur_iter, new_energy - old_energy, delta_x.norm());
 
             if (criteria(delta_x, objFunc, use_grad_norm, old_energy, old_grad, new_x, new_energy, step_size))
             {

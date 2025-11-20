@@ -305,9 +305,11 @@ endif()
 
 # cuSolver solvers
 if(POLYSOLVE_WITH_CUSOLVER)
+    set(cudss_DIR "/home/ian/local_code/ids/polyfem/patched/libcudss/lib/cmake/cudss")
+    find_package(cudss REQUIRED)
     include(cusolverdn)
     if(TARGET CUDA::cusolver)
-        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
+        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver cudss)
         target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
     else()
         message(WARNING "cuSOLVER not found, solver will not be available.")

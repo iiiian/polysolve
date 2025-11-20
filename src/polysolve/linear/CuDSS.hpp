@@ -26,10 +26,6 @@ namespace polysolve::linear
         POLYSOLVE_DELETE_MOVE_COPY(CuDSS)
 
     public:
-        //////////////////////
-        // Public interface //
-        //////////////////////
-
         // Analyze sparsity pattern and perform symbolic factorization
         void analyze_pattern(const StiffnessMatrix &A, const int precond_num) override;
 
@@ -43,7 +39,7 @@ namespace polysolve::linear
         std::string name() const override { return "cuDSS"; }
 
     private:
-        void allocate_matrix(const StiffnessMatrix &A);
+        void to_device_CSR(const StiffnessMatrix &A);
         void free_matrix();
         void ensure_dense_wrappers(int64_t nrows, int nrhs);
 

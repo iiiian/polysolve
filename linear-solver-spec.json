@@ -21,6 +21,13 @@
         "doc": "Settings for the linear solver."
     },
     {
+        "pointer": "/cuDSS",
+        "default": null,
+        "type": "object",
+        "optional": [],
+        "doc": "Settings for the cuDSS sparse direct solver."
+    },
+    {
         "pointer": "/enable_overwrite_solver",
         "default": false,
         "type": "bool",

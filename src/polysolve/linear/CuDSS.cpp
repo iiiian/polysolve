@@ -14,7 +14,7 @@ namespace polysolve::linear
 {
 
 #ifdef POLYSOLVE_LARGE_INDEX
-    using EigenIndexType = std::ptrptrdiff_t;
+    using EigenIndexType = std::ptrdiff_t;
     constexpr cudaDataType_t CudaIndexType = CUDA_R_64I;
 #else
     using EigenIndexType = int;
@@ -107,21 +107,12 @@ namespace polysolve::linear
             A_csr_ = nullptr;
         }
 
-        if (d_rowOffsets_ != nullptr)
-        {
-            check_cuda(cudaFree(d_rowOffsets_), "cudaFree d_rowOffsets_");
-            d_rowOffsets_ = nullptr;
-        }
-        if (d_colIndices_ != nullptr)
-        {
-            check_cuda(cudaFree(d_colIndices_), "cudaFree d_colIndices_");
-            d_colIndices_ = nullptr;
-        }
-        if (d_values_ != nullptr)
-        {
-            check_cuda(cudaFree(d_values_), "cudaFree d_values_");
-            d_values_ = nullptr;
-        }
+        check_cuda(cudaFree(d_rowOffsets_), "cudaFree d_rowOffsets_");
+        d_rowOffsets_ = nullptr;
+        check_cuda(cudaFree(d_colIndices_), "cudaFree d_colIndices_");
+        d_colIndices_ = nullptr;
+        check_cuda(cudaFree(d_values_), "cudaFree d_values_");
+        d_values_ = nullptr;
 
         nrows_ = 0;
         ncols_ = 0;
@@ -130,47 +121,30 @@ namespace polysolve::linear
         factorized_ = false;
     }
 
-    void CuDSS::allocate_matrix(const StiffnessMatrix &A)
+    void CuDSS::to_device_CSR(const StiffnessMatrix &A)
     {
-        // Convert to row-major CSR
-        Eigen::SparseMatrix<double, Eigen::RowMajor, EigenIndexType> A_row = A;
-        A_row.makeCompressed();
+        // Convert to CSR (row-major)
+        Eigen::SparseMatrix<double, Eigen::RowMajor, EigenIndexType> A_csr = A;
+        A_csr.makeCompressed();
 
-        const int64_t nrows = static_cast<int64_t>(A_row.rows());
-        const int64_t ncols = static_cast<int64_t>(A_row.cols());
-        const int64_t nnz = static_cast<int64_t>(A_row.nonZeros());
+        const int64_t nrows = static_cast<int64_t>(A_csr.rows());
+        const int64_t ncols = static_cast<int64_t>(A_csr.cols());
+        const int64_t nnz = static_cast<int64_t>(A_csr.nonZeros());
 
-        // If dimensions changed, free and reallocate
-        if (A_csr_ != nullptr && (nrows != nrows_ || ncols != ncols_ || nnz != nnz_))
+        // (Re)allocate matrix storage and wrapper if this is the first call
+        // or if the matrix dimensions / nnz have changed.
+        if (A_csr_ == nullptr || nrows != nrows_ || ncols != ncols_ || nnz != nnz_)
         {
             free_matrix();
-        }
 
-        nrows_ = nrows;
-        ncols_ = ncols;
-        nnz_ = nnz;
+            nrows_ = nrows;
+            ncols_ = ncols;
+            nnz_ = nnz;
 
-        if (d_rowOffsets_ == nullptr)
-        {
             check_cuda(cudaMalloc(&d_rowOffsets_, sizeof(EigenIndexType) * (nrows_ + 1)), "cudaMalloc d_rowOffsets_");
-        }
-        if (d_colIndices_ == nullptr)
-        {
             check_cuda(cudaMalloc(&d_colIndices_, sizeof(EigenIndexType) * nnz_), "cudaMalloc d_colIndices_");
-        }
-        if (d_values_ == nullptr)
-        {
             check_cuda(cudaMalloc(&d_values_, sizeof(double) * nnz_), "cudaMalloc d_values_");
-        }
 
-        // Upload structure and values
-        check_cuda(cudaMemcpy(d_rowOffsets_, A_row.outerIndexPtr(), sizeof(EigenIndexType) * (nrows_ + 1), cudaMemcpyHostToDevice), "cudaMemcpy rowOffsets");
-        check_cuda(cudaMemcpy(d_colIndices_, A_row.innerIndexPtr(), sizeof(EigenIndexType) * nnz_, cudaMemcpyHostToDevice), "cudaMemcpy colIndices");
-        check_cuda(cudaMemcpy(d_values_, A_row.valuePtr(), sizeof(double) * nnz_, cudaMemcpyHostToDevice), "cudaMemcpy values");
-
-        // Create matrix wrapper if needed
-        if (A_csr_ == nullptr)
-        {
             cudssMatrixType_t mtype = CUDSS_MTYPE_GENERAL;
             cudssMatrixViewType_t mview = CUDSS_MVIEW_FULL;
             cudssIndexBase_t base = CUDSS_BASE_ZERO;
@@ -184,6 +158,11 @@ namespace polysolve::linear
                     mtype, mview, base),
                 "cudssMatrixCreateCsr");
         }
+
+        // Upload structure and values
+        check_cuda(cudaMemcpy(d_rowOffsets_, A_csr.outerIndexPtr(), sizeof(EigenIndexType) * (nrows_ + 1), cudaMemcpyHostToDevice), "cudaMemcpy rowOffsets");
+        check_cuda(cudaMemcpy(d_colIndices_, A_csr.innerIndexPtr(), sizeof(EigenIndexType) * nnz_, cudaMemcpyHostToDevice), "cudaMemcpy colIndices");
+        check_cuda(cudaMemcpy(d_values_, A_csr.valuePtr(), sizeof(double) * nnz_, cudaMemcpyHostToDevice), "cudaMemcpy values");
     }
 
     void CuDSS::upload_values(const StiffnessMatrix &A)
@@ -194,9 +173,7 @@ namespace polysolve::linear
         const int64_t nnz = static_cast<int64_t>(A_row.nonZeros());
         if (nnz != nnz_ || A_row.rows() != nrows_ || A_row.cols() != ncols_)
         {
-            // Pattern changed: reallocate
-            allocate_matrix(A);
-            return;
+            throw std::runtime_error("[CuDSS] Matrix size changed after analysis; call analyze_pattern again.");
         }
 
         check_cuda(cudaMemcpy(d_values_, A_row.valuePtr(), sizeof(double) * nnz_, cudaMemcpyHostToDevice), "cudaMemcpy values (update)");
@@ -251,9 +228,7 @@ namespace polysolve::linear
 
     void CuDSS::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
     {
-        (void)precond_num;
-
-        allocate_matrix(A);
+        to_device_CSR(A);
 
         // For analysis, we do not need actual RHS/solution values, but cuDSS expects
         // valid matrix objects. Create 1-column dense wrappers with dummy data.
@@ -275,8 +250,7 @@ namespace polysolve::linear
     {
         if (!analyzed_)
         {
-            analyze_pattern(A, static_cast<int>(A.rows()));
-            return;
+            throw std::runtime_error("not analyzed");
         }
 
         upload_values(A);
@@ -305,7 +279,7 @@ namespace polysolve::linear
 
         if (x.size() != b.size())
         {
-            x.resize(b.size());
+            throw std::runtime_error("x b size mismatched");
         }
 
         const int nrhs = 1;

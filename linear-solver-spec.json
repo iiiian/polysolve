@@ -15,7 +15,8 @@
             "Eigen::MINRES",
             "Pardiso",
             "Hypre",
-            "AMGCL"
+            "AMGCL",
+            "cuDSS"
         ],
         "doc": "Settings for the linear solver."
     },
@@ -47,7 +48,8 @@
             "Eigen::ConjugateGradient",
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
-            "Eigen::MINRES"
+            "Eigen::MINRES",
+            "cuDSS"
         ]
     },
     {

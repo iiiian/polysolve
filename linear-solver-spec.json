@@ -15,9 +15,17 @@
             "Eigen::MINRES",
             "Pardiso",
             "Hypre",
-            "AMGCL"
+            "AMGCL",
+            "cuDSS"
         ],
         "doc": "Settings for the linear solver."
+    },
+    {
+        "pointer": "/cuDSS",
+        "default": null,
+        "type": "object",
+        "optional": [],
+        "doc": "Settings for the cuDSS sparse direct solver."
     },
     {
         "pointer": "/enable_overwrite_solver",
@@ -47,7 +55,8 @@
             "Eigen::ConjugateGradient",
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
-            "Eigen::MINRES"
+            "Eigen::MINRES",
+            "cuDSS"
         ]
     },
     {

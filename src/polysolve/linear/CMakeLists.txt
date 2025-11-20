@@ -7,6 +7,8 @@ set(SOURCES
     AMGCL.hpp
     CuSolverDN.cu
     CuSolverDN.cuh
+    CuDSS.cpp
+    CuDSS.hpp
     EigenSolver.hpp
     EigenSolver.tpp
     HypreSolver.cpp

@@ -241,31 +241,6 @@ namespace polysolve::nonlinear
                 return true;
             }
 
-            if (!try_neg_eig_dir)
-            {
-                return false;
-            }
-
-            polysolve::StiffnessMatrix hessian;
-            compute_hessian(objFunc, x, hessian);
-            Spectra::SparseSymMatProd<double> op(hessian);
-            Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
-
-            eigs.init();
-            int nconv = eigs.compute();
-            Eigen::VectorXd eigenvalues;
-            Eigen::MatrixXd eigenvectors;
-            if (eigs.info() == Spectra::SUCCESSFUL)
-            {
-                eigenvalues = eigs.eigenvalues();
-                eigenvectors = eigs.eigenvectors();
-
-                m_logger.debug("eigenvalue found: {}", eigenvalues(0)); 
-                direction = eigenvectors.col(0);
-
-                return true;
-            }
-
             return false;
         }
         else

@@ -28,6 +28,7 @@ namespace polysolve::nonlinear
         // Copies stuff from main newton
         json proj_solver_params = R"({"ProjectedNewton": {}})"_json;
         proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        proj_solver_params["Newton"]["use_adaptive_residual_tolerance"] = solver_params["Newton"]["use_adaptive_residual_tolerance"];
         proj_solver_params["ProjectedNewton"]["compare_to_full"] = solver_params["Newton"]["compare_to_full"];
 
         json ppn_solver_params = R"({"ProgressivelyProjectedNewton": {}})"_json;
@@ -39,6 +40,7 @@ namespace polysolve::nonlinear
 
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        reg_solver_params["Newton"]["use_adaptive_residual_tolerance"] = solver_params["Newton"]["use_adaptive_residual_tolerance"];
         reg_solver_params["RegularizedNewton"]["reg_weight_min"] = solver_params["Newton"]["reg_weight_min"];
         reg_solver_params["RegularizedNewton"]["reg_weight_max"] = solver_params["Newton"]["reg_weight_max"];
         reg_solver_params["RegularizedNewton"]["reg_weight_inc"] = solver_params["Newton"]["reg_weight_inc"];
@@ -100,6 +102,7 @@ namespace polysolve::nonlinear
           is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance), try_neg_eig_dir(try_neg_eig_dir)
     {
         linear_solver = polysolve::linear::Solver::create(linear_solver_params, logger);
+        use_adaptive_residual_tolerance = solver_params["Newton"]["use_adaptive_residual_tolerance"];
         if (linear_solver->is_dense() == sparse)
             log_and_throw_error(logger, "Newton linear solver must be {}, instead got {}", sparse ? "sparse" : "dense", linear_solver->name());
 
@@ -197,10 +200,46 @@ namespace polysolve::nonlinear
             is_sparse ? solve_sparse_linear_system(objFunc, x, grad, direction)
                       : solve_dense_linear_system(objFunc, x, grad, direction);
 
-        if (std::isnan(residual) || residual > residual_tolerance * characteristic_length)
+        double current_residual_tolerance;
+        if (use_adaptive_residual_tolerance)
+        {
+            current_residual_tolerance = std::max(objFunc.grad_norm(grad, "L2") / 10, objFunc.grad_norm_rescaling("L2") * residual_tolerance);
+        }
+        else
+        {
+            current_residual_tolerance = objFunc.grad_norm_rescaling("L2") * residual_tolerance;
+        }
+
+
+        if (std::isnan(residual) || residual > current_residual_tolerance)
         {
             m_logger.debug("[{}] large (or nan) linear solve residual {}>{} (‖∇f‖={})",
-                           name(), residual, residual_tolerance * characteristic_length, grad.norm());
+                           name(), residual, current_residual_tolerance, objFunc.grad_norm(grad, "L2"));
+
+            if (!try_neg_eig_dir)
+            {
+                return false;
+            }
+
+            polysolve::StiffnessMatrix hessian;
+            compute_hessian(objFunc, x, hessian);
+            Spectra::SparseSymMatProd<double> op(hessian);
+            Spectra::SymEigsSolver<double, Spectra::SMALLEST_ALGE, Spectra::SparseSymMatProd<double>> eigs(&op, 1, 6);
+
+            eigs.init();
+            int nconv = eigs.compute();
+            Eigen::VectorXd eigenvalues;
+            Eigen::MatrixXd eigenvectors;
+            if (eigs.info() == Spectra::SUCCESSFUL)
+            {
+                eigenvalues = eigs.eigenvalues();
+                eigenvectors = eigs.eigenvectors();
+
+                m_logger.debug("eigenvalue found: {}", eigenvalues(0)); 
+                direction = eigenvectors.col(0);
+
+                return true;
+            }
 
             if (!try_neg_eig_dir)
             {
@@ -263,6 +302,10 @@ namespace polysolve::nonlinear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
+            if (use_adaptive_residual_tolerance)
+            {
+                linear_solver->set_tolerance(std::max(objFunc.grad_norm(grad, "L2") / 10, objFunc.grad_norm_rescaling("L2") * residual_tolerance));
+            }
             // TODO: get the correct size
             linear_solver->analyze_pattern(hessian, hessian.rows());
 
@@ -281,8 +324,7 @@ namespace polysolve::nonlinear
             linear_solver->solve(-grad, direction); // H Δx = -g
         }
 
-        last_residual = hessian * direction + grad;
-        const double residual = last_residual.norm(); // H Δx + g = 0
+        const double residual = objFunc.grad_norm(hessian * direction + grad, "L2"); // H Δx + g = 0
 
         json info;
         linear_solver->get_info(info);

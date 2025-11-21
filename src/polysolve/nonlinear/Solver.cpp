@@ -206,28 +206,14 @@ namespace polysolve::nonlinear
     {
         m_current.reset();
 
-        m_stop.xDelta = solver_params["x_delta"];
-        m_stop.fDelta = solver_params["advanced"]["f_delta"];
-        m_stop.gradNorm = solver_params["grad_norm"];
+        m_stop.xDelta = solver_params["x_delta_tol"];
+        m_stop.fDelta = solver_params["advanced"]["f_delta_tol"];
+        m_stop.gradNorm = solver_params["grad_norm_tol"];
         m_stop.firstGradNorm = solver_params["first_grad_norm_tol"];
         m_stop.xDeltaDotGrad = -solver_params["advanced"]["derivative_along_delta_x_tol"].get<double>();
-
-        normalize_energy = solver_params["normalize_energy"];
-
-        // Make these relative to the characteristic length
-        m_logger.trace("Using a characteristic length of {:g}", characteristic_length);
-        if (!solver_params["use_absolute_convergence_criteria"])
-        {
-            m_stop.xDelta *= characteristic_length;
-            m_stop.fDelta *= characteristic_length;
-            m_stop.gradNorm *= characteristic_length;
-            m_stop.firstGradNorm *= characteristic_length;
-            // m_stop.xDeltaDotGrad *= characteristic_length;
-        } 
-        else
-        {
-            m_logger.trace("Using absolute convergence criteria");
-        }
+        m_stop.relGradNorm = solver_params["rel_grad_norm_tol"];
+        m_stop.relXDelta = solver_params["rel_x_delta_tol"];
+        m_stop.newtonDecrement = solver_params["newton_decrement_tol"];
 
         m_stop.iterations = solver_params["max_iterations"];
         allow_out_of_iterations = solver_params["allow_out_of_iterations"];
@@ -235,6 +221,8 @@ namespace polysolve::nonlinear
         m_stop.fDeltaCount = solver_params["advanced"]["f_delta_step_tol"];
 
         m_descent_strategy = 0;
+
+        norm_type_ = solver_params["norm_type"];
 
         set_line_search(solver_params);
 
@@ -257,22 +245,22 @@ namespace polysolve::nonlinear
             m_iter_per_strategy.assign(m_strategies.size() + 1, solver_params["iterations_per_strategy"].get<int>());
     }
 
-    double Solver::compute_grad_norm(const TVector &x, const TVector &grad) const
-    {
-        return grad.norm();
-    }
-
     void Solver::set_line_search(const json &params)
     {
         m_line_search = line_search::LineSearch::create(params, m_logger);
         solver_info["line_search"] = params["line_search"]["method"];
         m_line_search->use_grad_norm_tol = params["line_search"]["use_grad_norm_tol"];
         m_line_search->use_grad_norm_tol *= characteristic_length;
+        m_line_search->rel_interpolation_accuracy_tol = params["rel_grad_norm_tol"];
+        m_line_search->rel_interpolation_accuracy_tol *= 1e2;
+        m_line_search->norm_type = params["norm_type"];
     }
 
     void Solver::minimize(Problem &objFunc, TVector &x)
     {
         constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+
+        reset_stopping_criteria(objFunc, norm_type_);
 
         int previous_strategy = m_descent_strategy;
         int current_strategy_iter = 0;
@@ -301,11 +289,14 @@ namespace polysolve::nonlinear
 
         m_logger.debug(
             "Starting {} with {} solve f₀={:g} (stopping criteria: {})",
-            descent_strategy_name(), m_line_search->name(), objFunc(x), m_stop.print_message());
+            descent_strategy_name(), m_line_search->name(), objFunc(x), m_stop_rescaled.print_message());
 
         update_solver_info(objFunc(x));
 
         objFunc.post_step(PostStepData(m_current.iterations, solver_info, x, grad));
+
+        double initial_grad_norm;
+        double initial_delta_x_norm;
 
         do
         {
@@ -341,7 +332,19 @@ namespace polysolve::nonlinear
 
             objFunc.get_problematic_indices(problematic_indices);
 
-            m_current.gradNorm = compute_grad_norm(x, grad);
+            objFunc.get_problematic_indices(problematic_indices);
+
+            m_current.gradNorm = compute_grad_norm(objFunc, x, grad);
+            if (m_current.iterations == 0)
+            {
+                initial_grad_norm = m_current.gradNorm;
+                m_current.relGradNorm = NaN;
+            }
+            else
+            {
+                m_current.relGradNorm = m_current.gradNorm / initial_grad_norm;
+            }
+
             if (std::isnan(m_current.gradNorm))
             {
                 m_status = Status::NanEncountered;
@@ -351,7 +354,9 @@ namespace polysolve::nonlinear
             // Check convergence without these values to avoid impossible linear solves.
             m_current.xDelta = NaN;
             m_current.xDeltaDotGrad = NaN;
-            m_status = checkConvergence(m_stop, m_current);
+            m_current.relXDelta = NaN;
+            m_current.newtonDecrement = NaN;
+            m_status = checkConvergence(m_stop_rescaled, m_current);
             if (m_status != Status::Continue)
                 break;
 
@@ -363,7 +368,17 @@ namespace polysolve::nonlinear
                 update_direction_successful = compute_update_direction(objFunc, x, grad, delta_x);
             }
 
-            m_current.xDelta = delta_x.norm();
+            m_current.xDelta = objFunc.step_norm(delta_x, norm_type_);
+            if (m_current.iterations == 0)
+            {
+                initial_delta_x_norm = m_current.xDelta;
+                m_current.relXDelta = NaN;
+            }
+            else
+            {
+                m_current.relXDelta = m_current.xDelta / initial_delta_x_norm;
+            }
+
             if (!update_direction_successful || std::isnan(m_current.xDelta))
             {
                 const auto current_name = descent_strategy_name();
@@ -386,6 +401,7 @@ namespace polysolve::nonlinear
             }
 
             m_current.xDeltaDotGrad = delta_x.dot(grad);
+            m_current.newtonDecrement = -1 * m_current.xDeltaDotGrad;
 
             if (m_strategies[m_descent_strategy]->is_direction_descent() && m_current.gradNorm != 0 && m_current.xDeltaDotGrad >= 0)
             {
@@ -399,7 +415,7 @@ namespace polysolve::nonlinear
                     m_status = Status::NotDescentDirection;
                     log_and_throw_error(
                         m_logger, "[{}][{}] {} on last strategy (‖Δx‖={:g}; ‖g‖={:g}; Δx⋅g={:g}≥0); stopping",
-                        current_name, m_line_search->name(), status_message(m_status), delta_x.norm(), compute_grad_norm(x, grad),
+                        current_name, m_line_search->name(), status_message(m_status), objFunc.step_norm(delta_x, norm_type_), compute_grad_norm(objFunc, x, grad),
                         m_current.xDeltaDotGrad);
                 }
                 else
@@ -408,7 +424,7 @@ namespace polysolve::nonlinear
                     m_logger.debug(
                         "[{}][{}] {} (‖Δx‖={:g}; ‖g‖={:g}; Δx⋅g={:g}≥0); reverting to {}",
                         current_name, m_line_search->name(), status_message(Status::NotDescentDirection),
-                        delta_x.norm(), compute_grad_norm(x, grad), m_current.xDeltaDotGrad,
+                        objFunc.step_norm(delta_x, norm_type_), compute_grad_norm(objFunc, x, grad), m_current.xDeltaDotGrad,
                         descent_strategy_name());
                 }
                 continue;
@@ -416,7 +432,7 @@ namespace polysolve::nonlinear
 
             // --- Check convergence -------------------------------------------
 
-            m_status = checkConvergence(m_stop, m_current);
+            m_status = checkConvergence(m_stop_rescaled, m_current);
 
             if (m_status != Status::Continue)
                 break;
@@ -502,13 +518,13 @@ namespace polysolve::nonlinear
                 m_logger.debug("[{}][{}] Objective decided to stop", descent_strategy_name(), m_line_search->name());
             }
 
-            m_current.fDeltaCount = (m_current.fDelta < m_stop.fDelta) ? (m_current.fDeltaCount + 1) : 0;
+            m_current.fDeltaCount = (m_current.fDelta < m_stop_rescaled.fDelta) ? (m_current.fDeltaCount + 1) : 0;
 
             m_logger.debug(
                 "[{}][{}] {} (stopping criteria: {})",
-                descent_strategy_name(), m_line_search->name(), m_current.print_message(), m_stop.print_message());
+                descent_strategy_name(), m_line_search->name(), m_current.print_message(), m_stop_rescaled.print_message());
 
-            if (++m_current.iterations >= m_stop.iterations)
+            if (++m_current.iterations >= m_stop_rescaled.iterations)
                 m_status = Status::IterationLimit;
         } while (objFunc.callback(m_current, x) && (m_status == Status::Continue));
 
@@ -519,7 +535,7 @@ namespace polysolve::nonlinear
         // -----------
 
         if (!allow_out_of_iterations && m_status == Status::IterationLimit)
-            log_and_throw_error(m_logger, "[{}][{}] Reached iteration limit (limit={})", descent_strategy_name(), m_line_search->name(), m_stop.iterations);
+            log_and_throw_error(m_logger, "[{}][{}] Reached iteration limit (limit={})", descent_strategy_name(), m_line_search->name(), m_stop_rescaled.iterations);
         if (m_status == Status::NanEncountered)
             log_and_throw_error(m_logger, "[{}][{}] Failed to find minimizer", descent_strategy_name(), m_line_search->name());
 
@@ -529,7 +545,7 @@ namespace polysolve::nonlinear
             succeeded ? spdlog::level::info : spdlog::level::err,
             "[{}][{}] Finished: {} took {:g}s ({}) (stopping criteria: {})",
             descent_strategy_name(), m_line_search->name(), status_message(m_status), tot_time,
-            m_current.print_message(), m_stop.print_message());
+            m_current.print_message(), m_stop_rescaled.print_message());
 
         log_times();
         update_solver_info(objFunc(x));

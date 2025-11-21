@@ -104,6 +104,13 @@ namespace polysolve::nonlinear
         /// @return True if the solver should stop, false otherwise.
         virtual bool stop(const TVector &x) { return false; }
 
+        virtual double grad_norm_rescaling(const std::string &norm_type) const {return 1;}
+        virtual double step_norm_rescaling(const std::string &norm_type) const {return 1;}
+        virtual double energy_norm_rescaling(const std::string &norm_type) const {return 1;}
+
+        virtual double grad_norm(const TVector &x, const std::string &norm_type) const {return x.norm();}
+        virtual double step_norm(const TVector &x, const std::string &norm_type) const {return x.norm();}
+
         virtual void get_problematic_indices(std::vector<std::set<int>> &bad_indices) {};
         virtual void get_dof_to_func_mapping(std::vector<int> &dof_to_func_mapping_out) {};
         std::function<Eigen::VectorXd(const Eigen::VectorXd&)> reduced_to_full_func;

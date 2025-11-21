@@ -50,6 +50,7 @@ namespace polysolve::nonlinear
 
         const bool is_sparse;
         const double characteristic_length;
+        bool use_adaptive_residual_tolerance;
         double residual_tolerance;
 
         bool try_neg_eig_dir;

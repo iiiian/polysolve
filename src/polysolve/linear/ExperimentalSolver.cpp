@@ -537,7 +537,7 @@ namespace polysolve::linear
         }
 #endif
 
-        if (save_problem)
+        if (save_problem && myid == 0)
         {
             std::ofstream file("rhs.mat", std::ios_base::app);
             file << remapped_rhs.transpose();

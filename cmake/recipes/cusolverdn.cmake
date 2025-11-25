@@ -39,10 +39,10 @@ if(CMAKE_CUDA_COMPILER)
         # Nvidia V100 -> compute_70
         # Nvidia 1080/1080Ti -> compute_61
         # Nvidia 3080Ti -> compute_86
-        if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-            set(CMAKE_CUDA_ARCHITECTURES 70 75 86)
-        endif()
-        set_target_properties(polysolve PROPERTIES CUDA_ARCHITECTURES "70;75;86")
+        # if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        #     set(CMAKE_CUDA_ARCHITECTURES 70 75 86)
+        # endif()
+        # set_target_properties(polysolve PROPERTIES CUDA_ARCHITECTURES "70;75;86")
 
         if(APPLE)
             # We need to add the path to the driver (libcuda.dylib) as an rpath,

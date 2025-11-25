@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-#ifdef POLYSOLVE_WITH_CUSOLVER
+#ifdef POLYSOLVE_WITH_CUDSS
 
 ////////////////////////////////////////////////////////////////////////////////
 #include "Solver.hpp"

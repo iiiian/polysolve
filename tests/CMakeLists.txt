@@ -17,7 +17,7 @@ add_executable(unit_tests ${test_sources})
 include(catch2)
 target_link_libraries(unit_tests PUBLIC Catch2::Catch2)
 
-target_link_libraries(unit_tests PUBLIC polysolve::polysolve)
+target_link_libraries(unit_tests PUBLIC polysolve::linear polysolve::polysolve)
 
 include(polysolve_warnings)
 target_link_libraries(unit_tests PRIVATE polysolve::warnings)

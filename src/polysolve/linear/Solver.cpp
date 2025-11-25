@@ -11,11 +11,13 @@
 #include <fstream>
 
 // -----------------------------------------------------------------------------
-// 
+//
 // Subsequent macros assume a single template parameter and SparseQR fails due to requiring 2 parameters. this is because the OrderingType is not filled in.
 // SparseLU has a default declaration of _OrderingType to use COLAMDOrdering but SparseQR doesn't - so this just mimics that behavior. If Eigen adds such a default in the future this line will need to be guarded to avoid multiple defaults
-namespace Eigen {
-template <typename _MatrixType, typename _OrderingType = COLAMDOrdering<typename _MatrixType::StorageIndex> > class SparseQR;
+namespace Eigen
+{
+    template <typename _MatrixType, typename _OrderingType = COLAMDOrdering<typename _MatrixType::StorageIndex>>
+    class SparseQR;
 }
 #include <Eigen/Sparse>
 #ifdef POLYSOLVE_WITH_ACCELERATE
@@ -29,9 +31,11 @@ template <typename _MatrixType, typename _OrderingType = COLAMDOrdering<typename
 #endif
 #ifdef POLYSOLVE_WITH_SPQR
 #include <Eigen/SPQRSupport>
-namespace polysolve::linear {
+namespace polysolve::linear
+{
     template <>
-    void EigenDirect<Eigen::SPQR<StiffnessMatrix>>::analyze_pattern(const StiffnessMatrix& A, const int precond_num) {
+    void EigenDirect<Eigen::SPQR<StiffnessMatrix>>::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
+    {
         m_Solver.compute(A);
     }
     template <>
@@ -43,7 +47,7 @@ namespace polysolve::linear {
             throw std::runtime_error("[EigenDirect] NumericalIssue encountered.");
         }
     }
-}
+} // namespace polysolve::linear
 #endif
 #ifdef POLYSOLVE_WITH_SUPERLU
 #include <Eigen/SuperLUSupport>
@@ -62,7 +66,12 @@ namespace polysolve::linear {
 #endif
 #ifdef POLYSOLVE_WITH_CUSOLVER
 #include "CuSolverDN.cuh"
+#endif
+#ifdef POLYSOLVE_WITH_CUDSS
 #include "CuDSS.hpp"
+#endif
+#ifdef POLYSOLVE_WITH_CUDA_PCG
+#include "PCGSolver.hpp"
 #endif
 #include <unsupported/Eigen/IterativeSolvers>
 
@@ -399,10 +408,18 @@ namespace polysolve::linear
         else if (solver == "cuSolverDN_float")
         {
             return std::make_unique<CuSolverDN<float>>();
+#endif
+#ifdef POLYSOLVE_WITH_CUDSS
         }
         else if (solver == "cuDSS")
         {
             return std::make_unique<CuDSS>();
+#endif
+#ifdef POLYSOLVE_WITH_CUDA_PCG
+        }
+        else if (solver == "CUDA_PCG")
+        {
+            return std::make_unique<CudaPCG>();
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
         }
@@ -535,7 +552,12 @@ namespace polysolve::linear
 #ifdef POLYSOLVE_WITH_CUSOLVER
             "cuSolverDN",
             "cuSolverDN_float",
+#endif
+#ifdef POLYSOLVE_WITH_CUDSS
             "cuDSS",
+#endif
+#ifdef POLYSOLVE_WITH_CUDA_PCG
+            "CUDA_PCG",
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
             "Hypre",

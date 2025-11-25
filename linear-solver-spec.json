@@ -16,7 +16,8 @@
             "Pardiso",
             "Hypre",
             "AMGCL",
-            "cuDSS"
+            "cuDSS",
+            "CUDA_PCG"
         ],
         "doc": "Settings for the linear solver."
     },
@@ -26,6 +27,49 @@
         "type": "object",
         "optional": [],
         "doc": "Settings for the cuDSS sparse direct solver."
+    },
+    {
+        "pointer": "/CUDA_PCG",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "max_iter",
+            "relative_tolerance",
+            "absolute_tolerance",
+            "true_residual_period",
+            "use_preconditioned_residual_norm"
+        ],
+        "doc": "Settings for the CUDA PCG solver."
+    },
+    {
+        "pointer": "/CUDA_PCG/max_iter",
+        "default": 100000,
+        "type": "int",
+        "doc": "Maximum number of iterations."
+    },
+    {
+        "pointer": "/CUDA_PCG/relative_tolerance",
+        "default": 1e-3,
+        "type": "float",
+        "doc": "Relative convergence tolerance."
+    },
+    {
+        "pointer": "/CUDA_PCG/absolute_tolerance",
+        "default": 1e-10,
+        "type": "float",
+        "doc": "Absolute convergence tolerance."
+    },
+    {
+        "pointer": "/CUDA_PCG/true_residual_period",
+        "default": 50,
+        "type": "int",
+        "doc": "Period to recompute the true residual."
+    },
+    {
+        "pointer": "/CUDA_PCG/use_preconditioned_residual_norm",
+        "default": true,
+        "type": "bool",
+        "doc": "Use preconditioned residual norm for termination check."
     },
     {
         "pointer": "/enable_overwrite_solver",
@@ -56,7 +100,8 @@
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
             "Eigen::MINRES",
-            "cuDSS"
+            "cuDSS",
+            "CUDA_PCG"
         ]
     },
     {

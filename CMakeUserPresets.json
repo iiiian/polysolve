@@ -1,0 +1,41 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fuse-ld=mold",
+        "CMAKE_CUDA_ARCHITECTURES": "89",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+      }
+    },
+    {
+      "name": "profile",
+      "inherits": "base",
+      "displayName": "Profile",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CUDA_ARCHITECTURES": "89",
+        "CMAKE_CXX_FLAGS": "-g"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CUDA_ARCHITECTURES": "89",
+        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+      }
+    }
+  ]
+}

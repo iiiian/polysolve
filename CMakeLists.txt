@@ -62,7 +62,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0135 NEW) # Set the timestamps of all extracted cont
 
 project(PolySolve
         DESCRIPTION "Easy-to-use wrapper for linear solver"
-        LANGUAGES CXX)
+        LANGUAGES C CXX)
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND APPLE)
     set(POLYSOLVE_NOT_ON_APPLE_SILICON OFF)
@@ -83,6 +83,8 @@ option(POLYSOLVE_WITH_SUPERLU       "Enable SuperLU library"                    
 option(POLYSOLVE_WITH_SPQR          "Enable SPQR library"                                ON)
 option(POLYSOLVE_WITH_MKL           "Enable MKL library"  ${POLYSOLVE_NOT_ON_APPLE_SILICON})
 option(POLYSOLVE_WITH_CUSOLVER      "Enable cuSOLVER library"                           OFF)
+option(POLYSOLVE_WITH_CUDSS         "Enable cuDSS library"                              OFF)
+option(POLYSOLVE_WITH_CUDA_PCG      "Enable CUDA PCG solver"                            OFF)
 option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                            OFF)
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
@@ -160,6 +162,12 @@ add_subdirectory(src/polysolve/linear)
 add_library(polysolve)
 add_library(polysolve::polysolve ALIAS polysolve)
 add_subdirectory(src/polysolve/nonlinear)
+
+# Ensure that changes in the CUDA linear library
+# trigger relinking of the aggregate polysolve
+# static library (and its CUDA device-link step).
+set_property(TARGET polysolve APPEND PROPERTY LINK_DEPENDS
+    "$<TARGET_FILE:polysolve_linear>")
 
 target_link_libraries(polysolve_linear PUBLIC polysolve_coverage_config)
 target_link_libraries(polysolve PUBLIC polysolve_coverage_config)
@@ -303,17 +311,49 @@ if(POLYSOLVE_WITH_SPECTRA)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_SPECTRA)
 endif()
 
-# cuSolver solvers
+set(POLYSOLVE_WITH_CUDA_BACKEND OFF)
+if(POLYSOLVE_WITH_CUSOLVER OR POLYSOLVE_WITH_CUDSS OR POLYSOLVE_WITH_CUDA_PCG)
+    set(POLYSOLVE_WITH_CUDA_BACKEND ON)
+endif()
+
+if(POLYSOLVE_WITH_CUDA_BACKEND)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    find_package(CUDAToolkit REQUIRED)
+    set_target_properties(polysolve_linear PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    set_target_properties(polysolve PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    target_link_libraries(polysolve_linear PRIVATE CUDA::cudart)
+endif()
+
 if(POLYSOLVE_WITH_CUSOLVER)
-    set(cudss_DIR "/home/ian/local_code/ids/polyfem/patched/libcudss/lib/cmake/cudss")
-    find_package(cudss REQUIRED)
     include(cusolverdn)
     if(TARGET CUDA::cusolver)
-        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver cudss)
+        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
         target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
     else()
         message(WARNING "cuSOLVER not found, solver will not be available.")
     endif()
+endif()
+
+set(POLYSOLVE_CUDSS_DIR "" CACHE PATH "Path to cuDSS CMake package directory")
+if(POLYSOLVE_WITH_CUDSS)
+    if(POLYSOLVE_CUDSS_DIR)
+        set(cudss_DIR "${POLYSOLVE_CUDSS_DIR}")
+    endif()
+    find_package(cudss REQUIRED)
+    target_link_libraries(polysolve_linear PUBLIC cudss)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUDSS)
+endif()
+
+if(POLYSOLVE_WITH_CUDA_PCG)
+    find_package(CCCL REQUIRED)
+    target_link_libraries(polysolve_linear PRIVATE CCCL::CCCL)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUDA_PCG)
 endif()
 
 # Sanitizers

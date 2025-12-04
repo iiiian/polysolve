@@ -342,9 +342,27 @@ namespace polysolve::nonlinear
     {
         Superclass::update_solver_info(solver_info, per_iteration);
 
+        double total_linear_iters = 0;
+        for (const auto &info : internal_solver_info)
+        {
+            if (info.contains("solver_iter"))
+            {
+                total_linear_iters += info["solver_iter"].get<double>();
+            }
+            else if (info.contains("num_iterations"))
+            {
+                total_linear_iters += info["num_iterations"].get<double>();
+            }
+            else
+            {
+                total_linear_iters += 1.0;
+            }
+        }
+
         solver_info["internal_solver"] = internal_solver_info;
         solver_info["time_assembly"] = assembly_time / per_iteration;
         solver_info["time_inverting"] = inverting_time / per_iteration;
+        solver_info["linear_solver_iter"] = total_linear_iters / per_iteration;
     }
 
     void Newton::reset_times()

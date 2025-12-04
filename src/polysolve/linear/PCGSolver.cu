@@ -28,7 +28,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
-#include <iostream>
+// #include <iostream>
 
 using RMatrix3d = Eigen::Matrix<double, 3, 3, Eigen::RowMajor>;
 using Index = polysolve::StiffnessMatrix::StorageIndex;
@@ -862,7 +862,7 @@ namespace polysolve::linear
                 status_ = CudaPCGStatus::ReachMaxIterations;
             }
 
-            std::cout << "PCG: iter " << iterations_ << ", err " << residual_norm_ << ", stat " << pcg_status_to_string(status_) << std::endl;
+            // std::cout << "PCG: iter " << iterations_ << ", err " << residual_norm_ << ", stat " << pcg_status_to_string(status_) << std::endl;
         }
     };
 

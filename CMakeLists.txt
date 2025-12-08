@@ -62,7 +62,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0135 NEW) # Set the timestamps of all extracted cont
 
 project(PolySolve
         DESCRIPTION "Easy-to-use wrapper for linear solver"
-        LANGUAGES CXX)
+        LANGUAGES C CXX)
 
 if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND APPLE)
     set(POLYSOLVE_NOT_ON_APPLE_SILICON OFF)
@@ -301,15 +301,47 @@ if(POLYSOLVE_WITH_SPECTRA)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_SPECTRA)
 endif()
 
-# cuSolver solvers
-if(POLYSOLVE_WITH_CUSOLVER)
-    include(cusolverdn)
-    if(TARGET CUDA::cusolver)
-        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
-        target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
-    else()
-        message(WARNING "cuSOLVER not found, solver will not be available.")
+set(POLYSOLVE_WITH_CUDA_BACKEND OFF)
+if(POLYSOLVE_WITH_CUSOLVER OR POLYSOLVE_WITH_CUDA_PCG)
+    set(POLYSOLVE_WITH_CUDA_BACKEND ON)
+endif()
+
+if(POLYSOLVE_WITH_CUDA_BACKEND)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+    if(APPLE)
+        # We need to add the path to the driver (libcuda.dylib) as an rpath,
+        # so that the static cuda runtime can find it at runtime.
+        set_property(TARGET polysolve
+                    PROPERTY
+                    BUILD_RPATH ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
     endif()
+
+    find_package(CUDAToolkit REQUIRED)
+
+    set_target_properties(polysolve_linear PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    target_compile_options(polysolve_linear PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:
+        # Enable __device__ lambda.
+        --extended-lambda
+        # Prevent error from Eigen header.
+        --expt-relaxed-constexpr
+        >
+    )
+    target_link_libraries(polysolve_linear PRIVATE CUDA::cudart)
+
+    set_target_properties(polysolve PROPERTIES
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+endif()
+
+if(POLYSOLVE_WITH_CUSOLVER)
+    target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
 endif()
 
 # Sanitizers

@@ -5,8 +5,6 @@ set(SOURCES
     Solver.hpp
     AMGCL.cpp
     AMGCL.hpp
-    CuSolverDN.cu
-    CuSolverDN.cuh
     EigenSolver.hpp
     EigenSolver.tpp
     HypreSolver.cpp
@@ -16,6 +14,13 @@ set(SOURCES
     SaddlePointSolver.cpp
     SaddlePointSolver.hpp
 )
+
+if(POLYSOLVE_WITH_CUSOLVER)
+    list(APPEND SOURCES
+        CuSolverDN.cu
+        CuSolverDN.cuh
+    )
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})
 target_sources(polysolve_linear PRIVATE ${SOURCES})

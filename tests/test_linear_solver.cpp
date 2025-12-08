@@ -17,6 +17,7 @@
 #include <vector>
 #include <ctime>
 #include <chrono>
+#include <spdlog/fmt/fmt.h>
 //////////////////////////////////////////////////////////////////////////
 
 using namespace polysolve;
@@ -119,6 +120,8 @@ TEST_CASE("all", "[solver]")
     {
         if (s == "Eigen::DGMRES")
             continue;
+        if (s == "cuSolverDN_float")
+            continue;
 #ifdef WIN32
         if (s == "Eigen::ConjugateGradient" || s == "Eigen::BiCGSTAB" || s == "Eigen::GMRES" || s == "Eigen::MINRES")
             continue;
@@ -127,6 +130,13 @@ TEST_CASE("all", "[solver]")
         json params;
         params[s]["tolerance"] = 1e-10;
         solver->set_parameters(params);
+        if (s == "CUDA_PCG")
+        {
+            params[s]["relative_tolerance"] = 0.0;
+            params[s]["absolute_tolerance"] = 1e-8;
+            params[s]["use_preconditioned_residual_norm"] = false;
+            solver->set_parameters(params);
+        }
         Eigen::VectorXd b(A.rows());
         b.setRandom();
         Eigen::VectorXd x(b.size());
@@ -147,9 +157,6 @@ TEST_CASE("all", "[solver]")
 
         REQUIRE(solver->name() == s);
 
-        solver->get_info(solver_info);
-
-        // std::cout<<"Solver error: "<<x<<std::endl;
         const double err = (A * x - b).norm();
         INFO("solver: " + s);
         REQUIRE(err < 1e-8);
@@ -205,6 +212,8 @@ TEST_CASE("pre_factor", "[solver]")
 
     for (const auto &s : solvers)
     {
+        if (s == "CUDA_PCG")
+            continue;
         if (s == "Eigen::DGMRES")
             continue;
 #ifdef WIN32

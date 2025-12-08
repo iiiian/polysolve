@@ -76,13 +76,14 @@ endif()
 option(POLYSOLVE_WITH_SANITIZERS    "Enable sanitizers in compilation targets"          OFF)
 
 # Polysolve options for enabling/disabling optional libraries
-option(POLYSOLVE_WITH_ACCELERATE    "Enable Apple Accelerate" ${POLYSOLVE_ON_APPLE_SILICON})
+option(POLYSOLVE_WITH_ACCELERATE    "Enable Apple Accelerate"                           OFF)
 option(POLYSOLVE_WITH_CHOLMOD       "Enable Cholmod library"                             ON)
 option(POLYSOLVE_WITH_UMFPACK       "Enable UmfPack library"                             ON)
 option(POLYSOLVE_WITH_SUPERLU       "Enable SuperLU library"                             ON)
 option(POLYSOLVE_WITH_SPQR          "Enable SPQR library"                                ON)
 option(POLYSOLVE_WITH_MKL           "Enable MKL library"  ${POLYSOLVE_NOT_ON_APPLE_SILICON})
 option(POLYSOLVE_WITH_CUSOLVER      "Enable cuSOLVER library"                           OFF)
+option(POLYSOLVE_WITH_CUDA_PCG      "Enable CUDA PCG solver"                            OFF)
 option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                            OFF)
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
@@ -342,6 +343,12 @@ endif()
 if(POLYSOLVE_WITH_CUSOLVER)
     target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
+endif()
+
+if(POLYSOLVE_WITH_CUDA_PCG)
+    find_package(CCCL REQUIRED)
+    target_link_libraries(polysolve_linear PRIVATE CCCL::CCCL)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUDA_PCG)
 endif()
 
 # Sanitizers

@@ -21,9 +21,11 @@ namespace polysolve::nonlinear
         // Copies stuff from main newton
         json proj_solver_params = R"({"ProjectedNewton": {}})"_json;
         proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        proj_solver_params["Newton"]["use_adaptive_residual_tolerance"] = solver_params["Newton"]["use_adaptive_residual_tolerance"];
 
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
         reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+        reg_solver_params["Newton"]["use_adaptive_residual_tolerance"] = solver_params["Newton"]["use_adaptive_residual_tolerance"];
         reg_solver_params["RegularizedNewton"]["reg_weight_min"] = solver_params["Newton"]["reg_weight_min"];
         reg_solver_params["RegularizedNewton"]["reg_weight_max"] = solver_params["Newton"]["reg_weight_max"];
         reg_solver_params["RegularizedNewton"]["reg_weight_inc"] = solver_params["Newton"]["reg_weight_inc"];
@@ -66,6 +68,7 @@ namespace polysolve::nonlinear
           is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance)
     {
         linear_solver = polysolve::linear::Solver::create(linear_solver_params, logger);
+        use_adaptive_residual_tolerance = solver_params["Newton"]["use_adaptive_residual_tolerance"];
         if (linear_solver->is_dense() == sparse)
             log_and_throw_error(logger, "Newton linear solver must be {}, instead got {}", sparse ? "sparse" : "dense", linear_solver->name());
 
@@ -145,10 +148,20 @@ namespace polysolve::nonlinear
             is_sparse ? solve_sparse_linear_system(objFunc, x, grad, direction)
                       : solve_dense_linear_system(objFunc, x, grad, direction);
 
-        if (std::isnan(residual) || residual > residual_tolerance * characteristic_length)
+        double current_residual_tolerance;
+        if (use_adaptive_residual_tolerance)
+        {
+            current_residual_tolerance = std::max(objFunc.grad_norm(grad, "L2") / 10, objFunc.grad_norm_rescaling("L2") * residual_tolerance);
+        }
+        else
+        {
+            current_residual_tolerance = objFunc.grad_norm_rescaling("L2") * residual_tolerance;
+        }
+
+        if (std::isnan(residual) || residual > current_residual_tolerance)
         {
             m_logger.debug("[{}] large (or nan) linear solve residual {}>{} (‖∇f‖={})",
-                           name(), residual, residual_tolerance * characteristic_length, grad.norm());
+                           name(), residual, current_residual_tolerance, objFunc.grad_norm(grad, "L2"));
 
             return false;
         }
@@ -176,6 +189,10 @@ namespace polysolve::nonlinear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
+            if (use_adaptive_residual_tolerance)
+            {
+                linear_solver->set_tolerance(std::max(objFunc.grad_norm(grad, "L2") / 10, objFunc.grad_norm_rescaling("L2") * residual_tolerance));
+            }
             // TODO: get the correct size
             linear_solver->analyze_pattern(hessian, hessian.rows());
 
@@ -195,7 +212,7 @@ namespace polysolve::nonlinear
             linear_solver->solve(-grad, direction); // H Δx = -g
         }
 
-        const double residual = (hessian * direction + grad).norm(); // H Δx + g = 0
+        const double residual = objFunc.grad_norm(hessian * direction + grad, "L2"); // H Δx + g = 0
 
         json info;
         linear_solver->get_info(info);
@@ -325,9 +342,27 @@ namespace polysolve::nonlinear
     {
         Superclass::update_solver_info(solver_info, per_iteration);
 
+        double total_linear_iters = 0;
+        for (const auto &info : internal_solver_info)
+        {
+            if (info.contains("solver_iter"))
+            {
+                total_linear_iters += info["solver_iter"].get<double>();
+            }
+            else if (info.contains("num_iterations"))
+            {
+                total_linear_iters += info["num_iterations"].get<double>();
+            }
+            else
+            {
+                total_linear_iters += 1.0;
+            }
+        }
+
         solver_info["internal_solver"] = internal_solver_info;
         solver_info["time_assembly"] = assembly_time / per_iteration;
         solver_info["time_inverting"] = inverting_time / per_iteration;
+        solver_info["linear_solver_iter"] = total_linear_iters / per_iteration;
     }
 
     void Newton::reset_times()

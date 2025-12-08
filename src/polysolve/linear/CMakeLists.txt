@@ -34,12 +34,6 @@ if(POLYSOLVE_WITH_CUDA_PCG)
         PCGSolver.cu
         PCGSolver.hpp
     )
-    target_compile_options(polysolve_linear PRIVATE
-        # enable __device__ lambda
-        $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>
-        # prevent error from Eigen header
-        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-    )
 endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

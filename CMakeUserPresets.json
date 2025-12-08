@@ -11,7 +11,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_FLAGS": "-fuse-ld=mold",
         "CMAKE_CUDA_ARCHITECTURES": "89",
-        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+        "POLYSOLVE_WITH_CUDA_PCG": "ON",
+        "POLYSOLVE_WITH_CUSOLVER": "ON"
       }
     },
     {
@@ -33,8 +34,10 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_FLAGS": "-fuse-ld=mold",
         "CMAKE_CUDA_ARCHITECTURES": "89",
-        "POLYSOLVE_WITH_CUDA_PCG": "ON"
+        "POLYSOLVE_WITH_CUDA_PCG": "ON",
+        "POLYSOLVE_WITH_CUSOLVER": "ON"
       }
     }
   ]

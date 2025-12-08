@@ -163,12 +163,6 @@ add_library(polysolve)
 add_library(polysolve::polysolve ALIAS polysolve)
 add_subdirectory(src/polysolve/nonlinear)
 
-# Ensure that changes in the CUDA linear library
-# trigger relinking of the aggregate polysolve
-# static library (and its CUDA device-link step).
-set_property(TARGET polysolve APPEND PROPERTY LINK_DEPENDS
-    "$<TARGET_FILE:polysolve_linear>")
-
 target_link_libraries(polysolve_linear PUBLIC polysolve_coverage_config)
 target_link_libraries(polysolve PUBLIC polysolve_coverage_config)
 
@@ -320,24 +314,38 @@ if(POLYSOLVE_WITH_CUDA_BACKEND)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
+    if(APPLE)
+        # We need to add the path to the driver (libcuda.dylib) as an rpath,
+        # so that the static cuda runtime can find it at runtime.
+        set_property(TARGET polysolve
+                    PROPERTY
+                    BUILD_RPATH ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+    endif()
+
     find_package(CUDAToolkit REQUIRED)
+
     set_target_properties(polysolve_linear PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
     )
+    target_compile_options(polysolve_linear PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:
+        # Enable __device__ lambda.
+        --extended-lambda
+        # Prevent error from Eigen header.
+        --expt-relaxed-constexpr
+        >
+    )
+    target_link_libraries(polysolve_linear PRIVATE CUDA::cudart)
+
     set_target_properties(polysolve PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
     )
-    target_link_libraries(polysolve_linear PRIVATE CUDA::cudart)
 endif()
 
 if(POLYSOLVE_WITH_CUSOLVER)
-    include(cusolverdn)
-    if(TARGET CUDA::cusolver)
-        target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
-        target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
-    else()
-        message(WARNING "cuSOLVER not found, solver will not be available.")
-    endif()
+    target_link_libraries(polysolve_linear PUBLIC CUDA::cusolver)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUSOLVER)
 endif()
 
 set(POLYSOLVE_CUDSS_DIR "" CACHE PATH "Path to cuDSS CMake package directory")

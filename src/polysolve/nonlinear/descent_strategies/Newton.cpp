@@ -342,6 +342,9 @@ namespace polysolve::nonlinear
     {
         Superclass::update_solver_info(solver_info, per_iteration);
 
+        if (internal_solver_info.empty())
+            return;
+
         double total_linear_iters = 0;
         for (const auto &info : internal_solver_info)
         {

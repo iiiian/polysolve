@@ -284,10 +284,12 @@ namespace polysolve::nonlinear
 
         double initial_grad_norm;
         double initial_delta_x_norm;
+        int loop_iter = 0;
 
         do
         {
             m_line_search->set_is_final_strategy(m_descent_strategy == m_strategies.size() - 1);
+            ++loop_iter;
 
             // --- Energy ------------------------------------------------------
 
@@ -341,7 +343,47 @@ namespace polysolve::nonlinear
             m_current.newtonDecrement = NaN;
             m_status = checkConvergence(m_stop_rescaled, m_current);
             if (m_status != Status::Continue)
+            {
+                const auto status_enum_name = [](const Status s) -> std::string_view {
+                    switch (s)
+                    {
+                    case Status::NotStarted:
+                        return "NotStarted";
+                    case Status::Continue:
+                        return "Continue";
+                    case Status::IterationLimit:
+                        return "IterationLimit";
+                    case Status::XDeltaTolerance:
+                        return "XDeltaTolerance";
+                    case Status::RelXDeltaTolerance:
+                        return "RelXDeltaTolerance";
+                    case Status::FDeltaTolerance:
+                        return "FDeltaTolerance";
+                    case Status::GradNormTolerance:
+                        return "GradNormTolerance";
+                    case Status::RelGradNormTolerance:
+                        return "RelGradNormTolerance";
+                    case Status::NewtonDecrementTolerance:
+                        return "NewtonDecrementTolerance";
+                    case Status::ObjectiveCustomStop:
+                        return "ObjectiveCustomStop";
+                    case Status::NanEncountered:
+                        return "NanEncountered";
+                    case Status::NotDescentDirection:
+                        return "NotDescentDirection";
+                    case Status::LineSearchFailed:
+                        return "LineSearchFailed";
+                    case Status::UpdateDirectionFailed:
+                        return "UpdateDirectionFailed";
+                    }
+                    return "Unknown";
+                };
+                m_logger.debug(
+                    "[{}][{}] Stopping before linear solve (loop_iter={}, status={}, message={})",
+                    descent_strategy_name(), m_line_search->name(),
+                    loop_iter, status_enum_name(m_status), status_message(m_status));
                 break;
+            }
 
             // --- Update direction --------------------------------------------
 
@@ -531,9 +573,9 @@ namespace polysolve::nonlinear
         const bool succeeded = m_status == Status::GradNormTolerance;
         m_logger.log(
             succeeded ? spdlog::level::info : spdlog::level::err,
-            "[{}][{}] Finished: {} took {:g}s ({}) (stopping criteria: {})",
+            "[{}][{}] Finished: {} took {:g}s (loop_iter={} {}) (stopping criteria: {})",
             descent_strategy_name(), m_line_search->name(), status_message(m_status), tot_time,
-            m_current.print_message(), m_stop_rescaled.print_message());
+            loop_iter, m_current.print_message(), m_stop_rescaled.print_message());
 
         log_times();
         update_solver_info(objFunc(x));

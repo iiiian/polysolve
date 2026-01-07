@@ -409,15 +409,12 @@ namespace polysolve::linear
         {
             return std::make_unique<CuSolverDN<float>>();
 #endif
-            <<<<<<< HEAD
-=======
 #ifdef POLYSOLVE_WITH_CUDSS
         }
         else if (solver == "cuDSS")
         {
             return std::make_unique<CuDSS>();
 #endif
-            >>>>>>> local-dev
 #ifdef POLYSOLVE_WITH_CUDA_PCG
         }
         else if (solver == "CUDA_PCG")
@@ -556,12 +553,9 @@ namespace polysolve::linear
             "cuSolverDN",
             "cuSolverDN_float",
 #endif
-            <<<<<<< HEAD
-=======
 #ifdef POLYSOLVE_WITH_CUDSS
             "cuDSS",
 #endif
-            >>>>>>> local-dev
 #ifdef POLYSOLVE_WITH_CUDA_PCG
             "CUDA_PCG",
 #endif

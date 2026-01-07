@@ -227,9 +227,7 @@ target_link_libraries(polysolve_linear PUBLIC jse::jse)
 
 # Hypre (GNU Lesser General Public License)
 if(POLYSOLVE_WITH_HYPRE)
-    # use system hypre
-    # include(hypre)
-    find_package(HYPRE REQUIRED)
+    include(hypre)
     target_link_libraries(polysolve_linear PUBLIC HYPRE::HYPRE)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_HYPRE)
     if(HYPRE_WITH_MPI)

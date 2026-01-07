@@ -359,8 +359,8 @@ if(POLYSOLVE_WITH_CUDSS)
 endif()
 
 if(POLYSOLVE_WITH_CUDA_PCG)
-    find_package(CCCL REQUIRED)
-    target_link_libraries(polysolve_linear PRIVATE CCCL::CCCL)
+    # find_package(CCCL REQUIRED)
+    # target_link_libraries(polysolve_linear PRIVATE CCCL::CCCL)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUDA_PCG)
 endif()
 

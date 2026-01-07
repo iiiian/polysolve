@@ -194,6 +194,8 @@ target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_JSON_SPEC_DIR="${PR
 # Linear
 # ------
 
+find_package(Boost REQUIRED)
+
 # Accelerate solver (Include before Eigen)
 if(POLYSOLVE_WITH_ACCELERATE)
     include(CPM)

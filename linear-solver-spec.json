@@ -16,9 +16,17 @@
             "Pardiso",
             "Hypre",
             "AMGCL",
+            "cuDSS",
             "CUDA_PCG"
         ],
         "doc": "Settings for the linear solver."
+    },
+    {
+        "pointer": "/cuDSS",
+        "default": null,
+        "type": "object",
+        "optional": [],
+        "doc": "Settings for the cuDSS sparse direct solver."
     },
     {
         "pointer": "/CUDA_PCG",
@@ -92,6 +100,7 @@
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
             "Eigen::MINRES",
+            "cuDSS",
             "CUDA_PCG"
         ]
     },

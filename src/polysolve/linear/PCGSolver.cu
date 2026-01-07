@@ -862,7 +862,7 @@ namespace polysolve::linear
                 status_ = CudaPCGStatus::ReachMaxIterations;
             }
 
-            // std::cout << "PCG: iter " << iterations_ << ", err " << residual_norm_ << ", stat " << pcg_status_to_string(status_) << std::endl;
+            std::cout << "PCG: iter " << iterations_ << ", err " << residual_norm_ << ", stat " << pcg_status_to_string(status_) << std::endl;
         }
     };
 

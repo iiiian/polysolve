@@ -22,6 +22,13 @@ if(POLYSOLVE_WITH_CUSOLVER)
     )
 endif()
 
+if(POLYSOLVE_WITH_CUDSS)
+    list(APPEND SOURCES
+        CuDSS.cpp
+        CuDSS.hpp
+    )
+endif()
+
 if(POLYSOLVE_WITH_CUDA_PCG)
     list(APPEND SOURCES
         PCGSolver.cu

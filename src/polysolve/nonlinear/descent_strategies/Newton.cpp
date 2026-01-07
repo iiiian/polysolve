@@ -363,9 +363,9 @@ namespace polysolve::nonlinear
         }
 
         solver_info["internal_solver"] = internal_solver_info;
-        solver_info["time_assembly"] = assembly_time / per_iteration;
-        solver_info["time_inverting"] = inverting_time / per_iteration;
-        solver_info["linear_solver_iter"] = total_linear_iters / per_iteration;
+        solver_info["time_assembly"] = assembly_time;
+        solver_info["time_inverting"] = inverting_time;
+        solver_info["linear_solver_iter"] = total_linear_iters;
     }
 
     void Newton::reset_times()

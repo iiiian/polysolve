@@ -120,7 +120,7 @@ TEST_CASE("all", "[solver]")
     {
         if (s == "Eigen::DGMRES")
             continue;
-        if (s == "cuSolverDN_float")
+        if (s == "cuSolverDN_float" || s == "cuDSS")
             continue;
 #ifdef WIN32
         if (s == "Eigen::ConjugateGradient" || s == "Eigen::BiCGSTAB" || s == "Eigen::GMRES" || s == "Eigen::MINRES")

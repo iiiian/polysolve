@@ -299,9 +299,11 @@ int main(int argc, char **argv)
 
     auto solver = polysolve::linear::Solver::create(config, *logger);
 
-    if (solver->name() != "CUDA_PCG" && solver->name() != "Hypre" && solver->name() != "Eigen::PardisoLDLT")
+    if (solver->name() != "CUDA_PCG" && solver->name() != "Hypre" && solver->name() != "Experimental"
+        && solver->name() != "Eigen::PardisoLDLT")
     {
-        throw std::runtime_error("CLI only supports solvers: CUDA_PCG, Hypre, Eigen::PardisoLDLT (selected: " + solver->name() + ")");
+        throw std::runtime_error(
+            "CLI only supports solvers: CUDA_PCG, Hypre, Experimental, Eigen::PardisoLDLT (selected: " + solver->name() + ")");
     }
 
     Eigen::VectorXd x(b.size());
@@ -399,14 +401,20 @@ int main(int argc, char **argv)
     }
     if (solver_info.contains("iteration_residual_norm") && solver_info.contains("iteration_time_s"))
     {
+        if (!solver_info.contains("solver_iter"))
+        {
+            throw std::runtime_error("solver_info missing required key: solver_iter");
+        }
         auto &res = solver_info["iteration_residual_norm"];
         auto &ts = solver_info["iteration_time_s"];
-        if (res.is_array() && ts.is_array() && res.size() == ts.size())
+        const size_t expected = static_cast<size_t>(solver_info["solver_iter"].get<int>()) + 1;
+        if (!res.is_array() || !ts.is_array() || res.size() != expected || ts.size() != expected)
         {
-            for (size_t i = 0; i < res.size(); ++i)
-            {
-                logger->info("iter {} residual {} dt_s {}", static_cast<int>(i + 1), res[i].get<double>(), ts[i].get<double>());
-            }
+            throw std::runtime_error("iteration stats must be arrays sized solver_iter+1");
+        }
+        for (size_t i = 0; i < res.size(); ++i)
+        {
+            logger->info("iter {} residual {} dt_s {}", static_cast<int>(i), res[i].get<double>(), ts[i].get<double>());
         }
     }
 

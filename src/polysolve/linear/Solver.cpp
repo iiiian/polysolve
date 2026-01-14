@@ -60,6 +60,7 @@ namespace polysolve::linear
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
 #include "HypreSolver.hpp"
+#include "ExperimentalSolver.hpp"
 #endif
 #ifdef POLYSOLVE_WITH_AMGCL
 #include "AMGCL.hpp"
@@ -170,6 +171,12 @@ namespace polysolve::linear
         params = jse.inject_defaults(params, rules);
 
         auto res = create(params["solver"], params["precond"]);
+#ifdef POLYSOLVE_WITH_HYPRE
+        if (auto *exp = dynamic_cast<ExperimentalSolver *>(res.get()))
+        {
+            exp->set_logger(&logger);
+        }
+#endif
         res->set_parameters(params);
 
         return res;
@@ -426,6 +433,10 @@ namespace polysolve::linear
         else if (solver == "Hypre")
         {
             return std::make_unique<HypreSolver>();
+        }
+        else if (solver == "Experimental")
+        {
+            return std::make_unique<ExperimentalSolver>();
 #endif
 #ifdef POLYSOLVE_WITH_AMGCL
         }
@@ -561,6 +572,7 @@ namespace polysolve::linear
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
             "Hypre",
+            "Experimental",
 #endif
 #ifdef POLYSOLVE_WITH_AMGCL
             "AMGCL",

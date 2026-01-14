@@ -661,6 +661,7 @@ namespace polysolve::linear
                    Eigen::Ref<Eigen::VectorXd> x)
         {
             status_ = CudaPCGStatus::Running;
+            iterations_ = 0;
             iteration_residual_norm_.clear();
             iteration_time_s_.clear();
 
@@ -792,12 +793,12 @@ namespace polysolve::linear
             }
 
             // Compute rr = r^T r.
-            double rr0 = 0.0;
-            if (!use_preconditioned_residual_norm_)
-            {
-                CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
-                rr0 = scalar_rr_[0];
-            }
+            CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
+            const double rr0 = scalar_rr_[0];
+
+            // Record iteration 0 statistics (||r0||, dt=0).
+            iteration_residual_norm_.push_back(std::sqrt(rr0));
+            iteration_time_s_.push_back(0.0);
 
             for (int k = 1; k <= max_iter_; ++k)
             {
@@ -844,10 +845,13 @@ namespace polysolve::linear
                         converged = true;
                     }
                 }
-                else
+                // Always compute ||r|| for per-iteration statistics.
+                CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
+                const double rr = scalar_rr_[0];
+                iteration_residual_norm_.push_back(std::sqrt(rr));
+
+                if (!use_preconditioned_residual_norm_)
                 {
-                    CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
-                    const double rr = scalar_rr_[0];
                     residual_norm_ = std::sqrt(rr);
                     if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_)
                     {
@@ -856,21 +860,26 @@ namespace polysolve::linear
                     }
                 }
 
-                iteration_residual_norm_.push_back(residual_norm_);
+                if (converged)
+                {
+                    CHECK_CUDA(cudaEventRecord(iter_stop));
+                    CHECK_CUDA(cudaEventSynchronize(iter_stop));
+                    float ms = 0.0f;
+                    CHECK_CUDA(cudaEventElapsedTime(&ms, iter_start, iter_stop));
+                    iteration_time_s_.push_back(static_cast<double>(ms) / 1000.0);
+                    break;
+                }
+
+                // Compute beta = rz / rz_old.
+                CHECK_CUDA(scalar_division(scalar_rz_, scalar_rz_old_, scalar_beta_));
+                // Compute direction update p' = M^-1 r + beta p.
+                CHECK_CUDA(axpby(1.0, nullptr, 1.0, get_raw(scalar_beta_), z_, p_));
 
                 CHECK_CUDA(cudaEventRecord(iter_stop));
                 CHECK_CUDA(cudaEventSynchronize(iter_stop));
                 float ms = 0.0f;
                 CHECK_CUDA(cudaEventElapsedTime(&ms, iter_start, iter_stop));
                 iteration_time_s_.push_back(static_cast<double>(ms) / 1000.0);
-
-                if (converged)
-                    break;
-
-                // Compute beta = rz / rz_old.
-                CHECK_CUDA(scalar_division(scalar_rz_, scalar_rz_old_, scalar_beta_));
-                // Compute direction update p' = M^-1 r + beta p.
-                CHECK_CUDA(axpby(1.0, nullptr, 1.0, get_raw(scalar_beta_), z_, p_));
             }
 
             if (iterations_ == max_iter_)

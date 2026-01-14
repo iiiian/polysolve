@@ -15,11 +15,41 @@
             "Eigen::MINRES",
             "Pardiso",
             "Hypre",
+            "Experimental",
             "AMGCL",
             "cuDSS",
             "CUDA_PCG"
         ],
         "doc": "Settings for the linear solver."
+    },
+    {
+        "pointer": "/Experimental",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "max_iter",
+            "pre_max_iter",
+            "tolerance",
+            "theta",
+            "nodal_coarsening",
+            "interp_rbms",
+            "dimension",
+            "do_mixed_precond",
+            "print_conditioning",
+            "save_problem",
+            "save_selection_criteria",
+            "save_selected_indices",
+            "dss_in_middle",
+            "use_absolute_tol",
+            "select_bad_dofs_from_row_norms",
+            "select_bad_dofs_from_amg",
+            "select_bad_dofs_from_rhs",
+            "bad_dof_threshold",
+            "project_d_option",
+            "jacobi_precond",
+            "decompose_subdomains"
+        ],
+        "doc": "Settings for the Experimental solver."
     },
     {
         "pointer": "/cuDSS",
@@ -313,6 +343,132 @@
         "default": 1e-10,
         "type": "float",
         "doc": "Convergence tolerance."
+    },
+    {
+        "pointer": "/Experimental/max_iter",
+        "default": 1000,
+        "type": "int",
+        "doc": "Maximum number of iterations."
+    },
+    {
+        "pointer": "/Experimental/pre_max_iter",
+        "default": 1,
+        "type": "int",
+        "doc": "Maximum number of preconditioner iterations."
+    },
+    {
+        "pointer": "/Experimental/tolerance",
+        "default": 1e-10,
+        "type": "float",
+        "doc": "Convergence tolerance."
+    },
+    {
+        "pointer": "/Experimental/theta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "AMG strong threshold."
+    },
+    {
+        "pointer": "/Experimental/nodal_coarsening",
+        "default": false,
+        "type": "bool",
+        "doc": "Enable nodal coarsening (elasticity)."
+    },
+    {
+        "pointer": "/Experimental/interp_rbms",
+        "default": false,
+        "type": "bool",
+        "doc": "Interpolate rigid body modes (not supported in polysolve_cli)."
+    },
+    {
+        "pointer": "/Experimental/dimension",
+        "default": 1,
+        "type": "int",
+        "doc": "Problem dimension (1 scalar; 2/3 vector)."
+    },
+    {
+        "pointer": "/Experimental/do_mixed_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Enable mixed preconditioner."
+    },
+    {
+        "pointer": "/Experimental/print_conditioning",
+        "default": false,
+        "type": "bool",
+        "doc": "Print conditioning diagnostics."
+    },
+    {
+        "pointer": "/Experimental/save_problem",
+        "default": false,
+        "type": "bool",
+        "doc": "Save the problem (debug)."
+    },
+    {
+        "pointer": "/Experimental/save_selection_criteria",
+        "default": false,
+        "type": "bool",
+        "doc": "Save selection criteria (debug)."
+    },
+    {
+        "pointer": "/Experimental/save_selected_indices",
+        "default": false,
+        "type": "bool",
+        "doc": "Save selected indices (debug)."
+    },
+    {
+        "pointer": "/Experimental/dss_in_middle",
+        "default": true,
+        "type": "bool",
+        "doc": "Place DSS in the middle of mixed preconditioner."
+    },
+    {
+        "pointer": "/Experimental/use_absolute_tol",
+        "default": false,
+        "type": "bool",
+        "doc": "Use absolute tolerance instead of relative."
+    },
+    {
+        "pointer": "/Experimental/select_bad_dofs_from_row_norms",
+        "default": false,
+        "type": "bool",
+        "doc": "Select bad dofs from row norms."
+    },
+    {
+        "pointer": "/Experimental/select_bad_dofs_from_amg",
+        "default": false,
+        "type": "bool",
+        "doc": "Select bad dofs from AMG."
+    },
+    {
+        "pointer": "/Experimental/select_bad_dofs_from_rhs",
+        "default": false,
+        "type": "bool",
+        "doc": "Select bad dofs from RHS."
+    },
+    {
+        "pointer": "/Experimental/bad_dof_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "Fraction threshold for bad dof selection."
+    },
+    {
+        "pointer": "/Experimental/project_d_option",
+        "default": 0,
+        "type": "int",
+        "doc": "Option to project D submatrices (0 none)."
+    },
+    {
+        "pointer": "/Experimental/jacobi_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Use Jacobi preconditioner."
+    },
+    {
+        "pointer": "/Experimental/decompose_subdomains",
+        "default": false,
+        "type": "bool",
+        "doc": "Decompose subdomains into connected components."
     },
     {
         "pointer": "/AMGCL/solver",

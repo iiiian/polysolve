@@ -1,0 +1,28 @@
+{
+  "enable_overwrite_solver": false,
+  "solver": "Experimental",
+  "precond": "Eigen::DiagonalPreconditioner",
+  "Experimental": {
+    "max_iter": 100000,
+    "pre_max_iter": 1,
+    "tolerance": 1e-7,
+    "theta": 0.5,
+    "nodal_coarsening": false,
+    "interp_rbms": false,
+    "dimension": 3,
+    "do_mixed_precond": true,
+    "print_conditioning": false,
+    "save_problem": false,
+    "save_selection_criteria": false,
+    "save_selected_indices": false,
+    "dss_in_middle": true,
+    "use_absolute_tol": false,
+    "select_bad_dofs_from_row_norms": true,
+    "select_bad_dofs_from_amg": false,
+    "select_bad_dofs_from_rhs": false,
+    "bad_dof_threshold": 0.01,
+    "project_d_option": 0,
+    "jacobi_precond": false,
+    "decompose_subdomains": true
+  }
+}

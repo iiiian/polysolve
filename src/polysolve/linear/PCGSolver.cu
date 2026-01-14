@@ -23,6 +23,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -626,6 +627,8 @@ namespace polysolve::linear
             params["solver_iter"] = iterations_;
             params["solver_error"] = residual_norm_;
             params["solver_status"] = pcg_status_to_string(status_);
+            params["iteration_residual_norm"] = iteration_residual_norm_;
+            params["iteration_time_s"] = iteration_time_s_;
         }
 
         void analyze_pattern(const StiffnessMatrix &, const int) {}
@@ -658,6 +661,8 @@ namespace polysolve::linear
                    Eigen::Ref<Eigen::VectorXd> x)
         {
             status_ = CudaPCGStatus::Running;
+            iteration_residual_norm_.clear();
+            iteration_time_s_.clear();
 
             if (b.size() != x.size() || !check_buffer_size(static_cast<Index>(b.size())))
             {
@@ -697,6 +702,9 @@ namespace polysolve::linear
         int iterations_ = 0;
         double residual_norm_ = 0.0;
         CudaPCGStatus status_;
+
+        std::vector<double> iteration_residual_norm_;
+        std::vector<double> iteration_time_s_;
 
         BlockCOOMatrix A_;
         thrust::device_vector<double> diag_inv_;
@@ -761,6 +769,10 @@ namespace polysolve::linear
 
         void pcg_solve()
         {
+            cudaEvent_t iter_start;
+            cudaEvent_t iter_stop;
+            CHECK_CUDA(cudaEventCreate(&iter_start));
+            CHECK_CUDA(cudaEventCreate(&iter_stop));
 
             // Compute initial residual r = b-Ax.
             CHECK_CUDA(spmv(A_, x_, r_));
@@ -789,6 +801,8 @@ namespace polysolve::linear
 
             for (int k = 1; k <= max_iter_; ++k)
             {
+                CHECK_CUDA(cudaEventRecord(iter_start));
+
                 // Compute Ap = A p.
                 CHECK_CUDA(spmv(A_, p_, Ap_));
                 // Compute pAp = p^T * A * p.
@@ -820,36 +834,38 @@ namespace polysolve::linear
                 iterations_ = k;
                 bool converged = false;
 
-                // Check convergence every 10 iterations.
-                if (k % 10 == 0)
+                if (use_preconditioned_residual_norm_)
                 {
-                    if (use_preconditioned_residual_norm_)
+                    const double rz_new = scalar_rz_[0];
+                    residual_norm_ = std::sqrt(rz_new);
+                    if (rz_new <= rel_tol_ * rel_tol_ * rz0 || rz_new <= abs_tol_ * abs_tol_)
                     {
-                        double rz_new = scalar_rz_[0];
-                        residual_norm_ = std::sqrt(rz_new);
-                        if (rz_new <= rel_tol_ * rel_tol_ * rz0 || rz_new <= abs_tol_ * abs_tol_)
-                        {
-                            status_ = (rz_new <= abs_tol_ * abs_tol_) ? CudaPCGStatus::ReachAbsoluteTolerance : CudaPCGStatus::ReachRelativeTolerance;
-                            converged = true;
-                        }
+                        status_ = (rz_new <= abs_tol_ * abs_tol_) ? CudaPCGStatus::ReachAbsoluteTolerance : CudaPCGStatus::ReachRelativeTolerance;
+                        converged = true;
                     }
-                    else
+                }
+                else
+                {
+                    CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
+                    const double rr = scalar_rr_[0];
+                    residual_norm_ = std::sqrt(rr);
+                    if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_)
                     {
-                        CHECK_CUDA(inner_product(r_, r_, reduction_storage_, scalar_rr_));
-                        double rr = scalar_rr_[0];
-                        residual_norm_ = std::sqrt(rr);
-                        if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_)
-                        {
-                            status_ = (rr <= abs_tol_ * abs_tol_) ? CudaPCGStatus::ReachAbsoluteTolerance : CudaPCGStatus::ReachRelativeTolerance;
-                            converged = true;
-                        }
+                        status_ = (rr <= abs_tol_ * abs_tol_) ? CudaPCGStatus::ReachAbsoluteTolerance : CudaPCGStatus::ReachRelativeTolerance;
+                        converged = true;
                     }
                 }
 
+                iteration_residual_norm_.push_back(residual_norm_);
+
+                CHECK_CUDA(cudaEventRecord(iter_stop));
+                CHECK_CUDA(cudaEventSynchronize(iter_stop));
+                float ms = 0.0f;
+                CHECK_CUDA(cudaEventElapsedTime(&ms, iter_start, iter_stop));
+                iteration_time_s_.push_back(static_cast<double>(ms) / 1000.0);
+
                 if (converged)
-                {
                     break;
-                }
 
                 // Compute beta = rz / rz_old.
                 CHECK_CUDA(scalar_division(scalar_rz_, scalar_rz_old_, scalar_beta_));
@@ -862,7 +878,8 @@ namespace polysolve::linear
                 status_ = CudaPCGStatus::ReachMaxIterations;
             }
 
-            std::cout << "PCG: iter " << iterations_ << ", err " << residual_norm_ << ", stat " << pcg_status_to_string(status_) << std::endl;
+            CHECK_CUDA(cudaEventDestroy(iter_start));
+            CHECK_CUDA(cudaEventDestroy(iter_stop));
         }
     };
 

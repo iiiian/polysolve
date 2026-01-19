@@ -37,7 +37,9 @@
         "CMAKE_CXX_FLAGS": "-fuse-ld=mold",
         "CMAKE_CUDA_ARCHITECTURES": "89",
         "POLYSOLVE_WITH_CUDA_PCG": "ON",
-        "POLYSOLVE_WITH_CUSOLVER": "ON"
+        "POLYSOLVE_WITH_CUSOLVER": "ON",
+        "CMAKE_C_COMMPILER": "mpicc",
+        "CMAKE_CXX_COMPILER": "mpicxx"
       }
     }
   ]

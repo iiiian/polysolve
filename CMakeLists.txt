@@ -228,12 +228,14 @@ target_link_libraries(polysolve_linear PUBLIC jse::jse)
 
 # Hypre
 if(POLYSOLVE_WITH_HYPRE)
-    set(HYPRE_BUILD_EXAMPLES OFF CACHE BOOL "Build hypre examples" FORCE)
-    set(HYPRE_BUILD_TESTS OFF CACHE BOOL "Build hypre tests" FORCE)
-    set(HYPRE_ENABLE_MPI ON CACHE BOOL "Enable hypre MPI support" FORCE)
-    add_subdirectory(patched/hypre/src)
+    # use system hypre
+    # include(hypre)
+    find_package(HYPRE REQUIRED)
     target_link_libraries(polysolve_linear PUBLIC HYPRE::HYPRE)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_HYPRE)
+    if(HYPRE_WITH_MPI)
+        target_compile_definitions(polysolve_linear PUBLIC HYPRE_WITH_MPI)
+    endif()
 endif()
 
 # CHOLMOD solver

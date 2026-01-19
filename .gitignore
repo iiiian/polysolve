@@ -7,3 +7,7 @@ tests/data
 *.code-workspace
 PolySolveOptions.cmake
 .vs
+cli_data/octopus_stack
+cli_data/mat_twist.tar.gz
+cli_data/octopus_stack.tar.gz
+src/tags

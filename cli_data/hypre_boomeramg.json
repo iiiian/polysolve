@@ -1,0 +1,8 @@
+{
+  "solver": "Hypre",
+  "Hypre": {
+    "max_iter": 10000,
+    "pre_max_iter": 1,
+    "tolerance": 1e-5
+  }
+}

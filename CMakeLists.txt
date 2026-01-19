@@ -89,6 +89,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
+option(POLYSOLVE_WITH_CLI           "Build polysolve CLI frontend"                       ON)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)
@@ -227,7 +228,7 @@ target_link_libraries(polysolve_linear PUBLIC nlohmann_json::nlohmann_json)
 include(jse)
 target_link_libraries(polysolve_linear PUBLIC jse::jse)
 
-# Hypre (GNU Lesser General Public License)
+# Hypre
 if(POLYSOLVE_WITH_HYPRE)
     include(hypre)
     target_link_libraries(polysolve_linear PUBLIC HYPRE::HYPRE)
@@ -421,4 +422,12 @@ if(POLYSOLVE_WITH_TESTS)
     include("${catch2_SOURCE_DIR}/contrib/Catch.cmake")
 
     add_subdirectory(tests)
+endif()
+
+################################################################################
+# CLI
+################################################################################
+
+if(POLYSOLVE_WITH_CLI)
+    add_subdirectory(src/cli)
 endif()

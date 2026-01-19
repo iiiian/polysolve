@@ -15,6 +15,13 @@ set(SOURCES
     SaddlePointSolver.hpp
 )
 
+if(POLYSOLVE_WITH_HYPRE)
+    list(APPEND SOURCES
+        ExperimentalSolver.cpp
+        ExperimentalSolver.hpp
+    )
+endif()
+
 if(POLYSOLVE_WITH_CUSOLVER)
     list(APPEND SOURCES
         CuSolverDN.cu

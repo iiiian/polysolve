@@ -1,0 +1,165 @@
+#include <polysolve/linear/mas_utils/BCOOMatrix.hpp>
+
+#include <cuda/buffer>
+#include <cuda/std/span>
+#include <cuda/algorithm>
+#include <Eigen/SparseCore>
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <stdexcept>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <polysolve/linear/mas_utils/CudaUtils.cuh>
+
+// Hashable and comparable key for 2D int32_t matrix index (i, j).
+// Pack two index into one uint64_t where the first 32 bits is i and the last 32bit is j.
+// Can be easily sorted in row major order.
+class IndexKey
+{
+public:
+    uint64_t val = 0;
+
+    IndexKey() = default;
+    IndexKey(int32_t i, int32_t j)
+    {
+        uint64_t a = static_cast<uint64_t>(i) << 32;
+        uint64_t b = static_cast<uint64_t>(j);
+        val = a | b;
+    }
+
+    std::pair<int32_t, int32_t> get_index() const
+    {
+        int32_t i = static_cast<int32_t>(val >> 32);
+        int32_t j = static_cast<int32_t>(val & 0xFFFFFFFFULL);
+        return std::make_pair(i, j);
+    }
+
+    friend bool operator==(const IndexKey &a,
+                           const IndexKey &b) noexcept
+    {
+        return a.val == b.val;
+    }
+
+    friend bool operator<(const IndexKey &a,
+                          const IndexKey &b) noexcept
+    {
+        return a.val < b.val;
+    }
+};
+
+namespace std
+{
+    template <>
+    struct hash<IndexKey>
+    {
+        size_t operator()(IndexKey index) const noexcept
+        {
+            return hash<uint64_t>{}(index.val);
+        }
+    };
+} // namespace std
+
+namespace polysolve::linear::mas
+{
+
+    BCOOMatrix::BCOOMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt)
+    {
+        if (A.cols() != A.rows() || A.cols() == 0 || A.rows() == 0 || A.nonZeros() == 0)
+        {
+            throw std::runtime_error("[CudaPcg] Factorization failed due to invalid A");
+        }
+        if (A.cols() > std::numeric_limits<int>::max() || A.rows() > std::numeric_limits<int>::max())
+        {
+            throw std::runtime_error("[CudaPcg] A is too large. Row/Col number exceeding int32 max.");
+        }
+
+        block_dim_ = block_dim;
+        // Pad dimension if neccessary.
+        dim_ = (A.rows() + block_dim_ - 1) / block_dim_;
+
+        using Block = Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+        std::unordered_map<IndexKey, Block> block_map;
+
+        // Accumulated non-zero blocks.
+        using Iter = StiffnessMatrix::InnerIterator;
+        for (int k = 0; k < A.outerSize(); ++k)
+        {
+            for (Iter it(A, k); it; ++it)
+            {
+                // Block index (bi, bj).
+                int bi = it.row() / block_dim_;
+                int bj = it.col() / block_dim_;
+                // Block local index (li, lj).
+                int li = it.row() - block_dim_ * bi;
+                int lj = it.col() - block_dim_ * bj;
+
+                auto key = IndexKey(bi, bj);
+                auto block_iter = block_map.try_emplace(key, Block::Zero(block_dim_, block_dim_)).first;
+                block_iter->second(li, lj) = it.value();
+            }
+        }
+
+        // Sort blocks in row major order.
+        using BlockTriplet = std::pair<IndexKey, Block>;
+        std::vector<BlockTriplet> h_blocks;
+        for (auto &[k, v] : block_map)
+        {
+            h_blocks.emplace_back(k, v);
+        }
+        std::sort(h_blocks.begin(), h_blocks.end(), [](const BlockTriplet &a, const BlockTriplet &b) {
+            return a.first < b.first;
+        });
+
+        // Prepare host Block COO matrix.
+        non_zeros_ = h_blocks.size();
+        int block_size = block_dim_ * block_dim_;
+        std::vector<int> h_rows(non_zeros_);
+        std::vector<int> h_cols(non_zeros_);
+        std::vector<int> h_diag_index(dim_, -1);
+        std::vector<double> h_vals(block_size * non_zeros_);
+        for (int idx = 0; idx < non_zeros_; ++idx)
+        {
+            auto &[key, mat] = h_blocks[idx];
+            auto [bi, bj] = key.get_index();
+            h_rows[idx] = bi;
+            h_cols[idx] = bj;
+
+            if (bi == bj)
+            {
+                h_diag_index[bi] = idx;
+            }
+
+            memcpy(h_vals.data() + block_size * idx, mat.data(), block_size * sizeof(double));
+        }
+
+        // Pad trailing block.
+        if (h_rows[non_zeros_ - 1] == (dim_ - 1) && h_cols[non_zeros_ - 1] == (dim_ - 1))
+        {
+            int padded = block_dim_ * dim_ - A.rows();
+            if (padded > 0)
+            {
+                double *start = h_vals.data() + block_dim_ * block_dim_ * (non_zeros_ - 1);
+                for (int i = block_dim_ - padded; i < block_dim_; ++i)
+                {
+                    int diag_offset = block_dim_ * i + i;
+                    start[diag_offset] = 1.0;
+                }
+            }
+        }
+
+        // Copy host COO data to device.
+        rows_ = cu::make_buffer<int>(rt.stream, rt.mr, h_rows.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_rows, *rows_);
+        cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_cols, *cols_);
+        diag_index_ = cu::make_buffer<int>(rt.stream, rt.mr, h_diag_index.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_diag_index, *diag_index_);
+        vals_ = cu::make_buffer<double>(rt.stream, rt.mr, h_vals.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_vals, *vals_);
+    }
+
+} // namespace polysolve::linear::mas

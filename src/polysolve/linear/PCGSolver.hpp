@@ -61,7 +61,7 @@ namespace polysolve::linear
         void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) override;
 
         // Set solver tolerance
-        void set_tolerance(const double tol) override;
+        // void set_tolerance(const double tol) override;
 
         // Name of the solver type (for debugging purposes)
         std::string name() const override;

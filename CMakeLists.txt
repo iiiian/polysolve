@@ -176,6 +176,14 @@ if (POLYSOLVE_WITH_CUDA)
   set_target_properties(polysolve PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   set_target_properties(polysolve_linear PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
+  # Enable __device__ lambda
+  target_compile_options(polysolve PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>
+  )
+  target_compile_options(polysolve_linear PRIVATE
+      $<$<COMPILE_LANGUAGE:CUDA>:--extended-lambda>
+  )
+  # Relax device constexpr usage
   target_compile_options(polysolve PRIVATE
       $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
   )
@@ -200,6 +208,12 @@ add_subdirectory(src/polysolve)
 add_subdirectory(src/polysolve/linear)
 
 add_subdirectory(src/polysolve/nonlinear)
+
+# Ensure that changes in the CUDA linear library
+# trigger relinking of the aggregate polysolve
+# static library (and its CUDA device-link step).
+set_property(TARGET polysolve APPEND PROPERTY LINK_DEPENDS
+    "$<TARGET_FILE:polysolve_linear>")
 
 target_link_libraries(polysolve_linear PUBLIC polysolve_coverage_config)
 target_link_libraries(polysolve PUBLIC polysolve_coverage_config)

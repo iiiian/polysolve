@@ -374,6 +374,19 @@ if(POLYSOLVE_WITH_UNICODE)
     endif()
 endif()
 
+# CCCL
+if(POLYSOLVE_WITH_CUDA)
+  include(cccl)
+  target_link_libraries(polysolve_linear PUBLIC CCCL::CCCL)
+  target_link_libraries(polysolve PUBLIC CCCL::CCCL)
+endif()
+
+# METIS
+include(metis)
+  target_link_libraries(polysolve_linear PUBLIC metis::metis)
+  target_link_libraries(polysolve PUBLIC metis::metis)
+
+
 # ---------
 # Nonlinear
 # ---------

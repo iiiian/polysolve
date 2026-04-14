@@ -242,6 +242,13 @@ target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_JSON_SPEC_DIR="${PR
 # Dependencies
 ################################################################################
 
+# Cuda runtime
+if (POLYSOLVE_WITH_CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    target_link_libraries(polysolve PUBLIC CUDA::cudart)
+    target_link_libraries(polysolve_linear PUBLIC CUDA::cudart)
+endif()
+
 # ------
 # Linear
 # ------

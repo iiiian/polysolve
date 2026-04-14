@@ -18,12 +18,8 @@ namespace polysolve::linear::mas
             ctd::span<const double> a, ctd::span<const double> b, double *out)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x;
-            if (tid >= a.size())
-            {
-                return;
-            }
 
-            double c = a[tid] * b[tid];
+            double c = (tid < a.size()) ? a[tid] * b[tid] : 0.0;
 
             using BlockReduce = cub::BlockReduce<double, 128>;
             __shared__ typename BlockReduce::TempStorage tmp;

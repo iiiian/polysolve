@@ -6,7 +6,7 @@
 
 namespace polysolve::linear::mas
 {
-    // Compute y = Ax.
+    /// @brief Compute y = Ax. Does not sync implicitly.
     void spmv(BCOOView A, ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt);
 
 } // namespace polysolve::linear::mas

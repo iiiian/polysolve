@@ -24,7 +24,7 @@ namespace polysolve::linear::mas
     public:
         BCOOMatrix() = default;
 
-        // Build from host CSR matrix.
+        /// @brief Build from host CSR matrix. Sync stream before return.
         BCOOMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt);
 
         BCOOView view() const

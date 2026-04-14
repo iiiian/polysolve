@@ -174,6 +174,8 @@ namespace polysolve::linear
 
         void set_parameters(const json &params)
         {
+            if (params.contains("block_dim"))
+                block_dim_ = params["block_dim"];
             if (params.contains("max_iter"))
                 max_iter_ = params["max_iter"];
             if (params.contains("relative_tolerance"))

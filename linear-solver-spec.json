@@ -429,6 +429,7 @@
         "default": null,
         "type": "object",
         "optional": [
+            "block_dim",
             "max_iter",
             "relative_tolerance",
             "absolute_tolerance",
@@ -436,6 +437,17 @@
             "use_preconditioned_residual_norm"
         ],
         "doc": "Settings for the CUDA PCG solver."
+    },
+    {
+        "pointer": "/CUDA_PCG/block_dim",
+        "default": 1,
+        "type": "int",
+        "options": [
+            1,
+            2,
+            3
+        ],
+        "doc": "Block size used by the block COO CUDA PCG solver."
     },
     {
         "pointer": "/CUDA_PCG/max_iter",

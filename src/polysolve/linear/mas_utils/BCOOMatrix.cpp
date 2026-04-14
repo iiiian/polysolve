@@ -160,6 +160,8 @@ namespace polysolve::linear::mas
         cu::copy_bytes(rt.stream, h_diag_index, *diag_index_);
         vals_ = cu::make_buffer<double>(rt.stream, rt.mr, h_vals.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_vals, *vals_);
+
+        rt.stream.sync();
     }
 
 } // namespace polysolve::linear::mas

@@ -139,6 +139,13 @@ namespace polysolve::linear
         double residual_norm_ = 0.0;
         CudaPCGStatus status_ = CudaPCGStatus::Running;
 
+        // == IMPORTANT ==
+        // You must declare cu::stream and memory_pool before any device storage!
+        // Else stream and mem pool will be destroyed before cuda::buffer, causing segfault.
+        ctd::optional<cu::device_ref> default_device_;
+        ctd::optional<cu::stream> default_stream_;
+        ctd::optional<cu::device_memory_pool> default_mem_pool_;
+
         BCOOMatrix A_;
         Buf<double> diag_inv_;
         Buf<double> x_;
@@ -154,10 +161,6 @@ namespace polysolve::linear
         Buf<double> scalar_beta_;
         Buf<double> scalar_rz_old_;
         Buf<double> scalar_rr_;
-
-        ctd::optional<cu::device_ref> default_device_;
-        ctd::optional<cu::stream> default_stream_;
-        ctd::optional<cu::device_memory_pool> default_mem_pool_;
 
     public:
         CudaPCGImpl()

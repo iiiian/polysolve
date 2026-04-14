@@ -264,84 +264,6 @@ namespace polysolve::linear::mas
         }
     };
 
-    using Vec2f = Mat<float, 2, 1>;
-    using Vec3f = Mat<float, 3, 1>;
-    using Vec4f = Mat<float, 4, 1>;
-    using Mat22f = Mat<float, 2, 2>;
-    using Mat23f = Mat<float, 2, 3>;
-    using Mat32f = Mat<float, 3, 2>;
-    using Mat33f = Mat<float, 3, 3>;
-    using Mat24f = Mat<float, 2, 4>;
-    using Mat34f = Mat<float, 3, 4>;
-    using Mat42f = Mat<float, 4, 2>;
-    using Mat43f = Mat<float, 4, 3>;
-    using Mat44f = Mat<float, 4, 4>;
-
-    using Vec2fV = MatRef<const float, 2, 1>;
-    using Vec3fV = MatRef<const float, 3, 1>;
-    using Vec4fV = MatRef<const float, 4, 1>;
-    using Mat22fV = MatRef<const float, 2, 2>;
-    using Mat23fV = MatRef<const float, 2, 3>;
-    using Mat32fV = MatRef<const float, 3, 2>;
-    using Mat33fV = MatRef<const float, 3, 3>;
-    using Mat24fV = MatRef<const float, 2, 4>;
-    using Mat34fV = MatRef<const float, 3, 4>;
-    using Mat42fV = MatRef<const float, 4, 2>;
-    using Mat43fV = MatRef<const float, 4, 3>;
-    using Mat44fV = MatRef<const float, 4, 4>;
-
-    using Vec2i = Mat<int, 2, 1>;
-    using Vec3i = Mat<int, 3, 1>;
-    using Vec4i = Mat<int, 4, 1>;
-    using Mat22i = Mat<int, 2, 2>;
-    using Mat23i = Mat<int, 2, 3>;
-    using Mat32i = Mat<int, 3, 2>;
-    using Mat33i = Mat<int, 3, 3>;
-    using Mat24i = Mat<int, 2, 4>;
-    using Mat34i = Mat<int, 3, 4>;
-    using Mat42i = Mat<int, 4, 2>;
-    using Mat43i = Mat<int, 4, 3>;
-    using Mat44i = Mat<int, 4, 4>;
-
-    using Vec2iV = MatRef<const int, 2, 1>;
-    using Vec3iV = MatRef<const int, 3, 1>;
-    using Vec4iV = MatRef<const int, 4, 1>;
-    using Mat22iV = MatRef<const int, 2, 2>;
-    using Mat23iV = MatRef<const int, 2, 3>;
-    using Mat32iV = MatRef<const int, 3, 2>;
-    using Mat33iV = MatRef<const int, 3, 3>;
-    using Mat24iV = MatRef<const int, 2, 4>;
-    using Mat34iV = MatRef<const int, 3, 4>;
-    using Mat42iV = MatRef<const int, 4, 2>;
-    using Mat43iV = MatRef<const int, 4, 3>;
-    using Mat44iV = MatRef<const int, 4, 4>;
-
-    using Vec2u = Mat<uint32_t, 2, 1>;
-    using Vec3u = Mat<uint32_t, 3, 1>;
-    using Vec4u = Mat<uint32_t, 4, 1>;
-    using Mat22u = Mat<uint32_t, 2, 2>;
-    using Mat23u = Mat<uint32_t, 2, 3>;
-    using Mat32u = Mat<uint32_t, 3, 2>;
-    using Mat33u = Mat<uint32_t, 3, 3>;
-    using Mat24u = Mat<uint32_t, 2, 4>;
-    using Mat34u = Mat<uint32_t, 3, 4>;
-    using Mat42u = Mat<uint32_t, 4, 2>;
-    using Mat43u = Mat<uint32_t, 4, 3>;
-    using Mat44u = Mat<uint32_t, 4, 4>;
-
-    using Vec2uV = MatRef<const uint32_t, 2, 1>;
-    using Vec3uV = MatRef<const uint32_t, 3, 1>;
-    using Vec4uV = MatRef<const uint32_t, 4, 1>;
-    using Mat22uV = MatRef<const uint32_t, 2, 2>;
-    using Mat23uV = MatRef<const uint32_t, 2, 3>;
-    using Mat32uV = MatRef<const uint32_t, 3, 2>;
-    using Mat33uV = MatRef<const uint32_t, 3, 3>;
-    using Mat24uV = MatRef<const uint32_t, 2, 4>;
-    using Mat34uV = MatRef<const uint32_t, 3, 4>;
-    using Mat42uV = MatRef<const uint32_t, 4, 2>;
-    using Mat43uV = MatRef<const uint32_t, 4, 3>;
-    using Mat44uV = MatRef<const uint32_t, 4, 4>;
-
     template <typename Dst, typename Src>
     __both__ constexpr void assign(Dst &dst, const Src &src)
     {
@@ -422,7 +344,7 @@ namespace polysolve::linear::mas
                       "Matric type mismatch.");
         static_assert(X::M == Y::M && X::N == Y::N, "Matrix dim mismatch.");
 
-        float result = 0.0f;
+        double result = 0.0f;
 #pragma unroll
         for (int i = 0; i < X::M; ++i)
         {
@@ -438,7 +360,7 @@ namespace polysolve::linear::mas
     template <typename X>
     __both__ constexpr typename X::Scalar squared_norm(const X &x)
     {
-        float result = 0.0f;
+        double result = 0.0f;
 #pragma unroll
         for (int i = 0; i < X::M; ++i)
         {
@@ -454,7 +376,7 @@ namespace polysolve::linear::mas
     template <typename X>
     __both__ constexpr typename X::Scalar norm(const X &x)
     {
-        float result = 0.0f;
+        double result = 0.0f;
 #pragma unroll
         for (int i = 0; i < X::M; ++i)
         {
@@ -519,42 +441,42 @@ namespace polysolve::linear::mas
     __both__ constexpr auto vmin(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a > b ? b : a; });
+        return binary(x, y, [] __both__(double a, double b) { return a > b ? b : a; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr auto vmax(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a > b ? a : b; });
+        return binary(x, y, [] __both__(double a, double b) { return a > b ? a : b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr auto vadd(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a + b; });
+        return binary(x, y, [] __both__(double a, double b) { return a + b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr auto vsub(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a - b; });
+        return binary(x, y, [] __both__(double a, double b) { return a - b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr auto vmul(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a * b; });
+        return binary(x, y, [] __both__(double a, double b) { return a * b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr auto vdiv(const X &x, const Y &y)
         -> Mat<typename X::Scalar, X::M, X::N>
     {
-        return binary(x, y, [] __both__(float a, float b) { return a / b; });
+        return binary(x, y, [] __both__(double a, double b) { return a / b; });
     }
 
     template <typename X, typename Y, typename Pred>
@@ -580,25 +502,25 @@ namespace polysolve::linear::mas
     template <typename X, typename Y>
     __both__ constexpr bool any_gt(const X &x, const Y &y)
     {
-        return any(x, y, [] __both__(float a, float b) { return a > b; });
+        return any(x, y, [] __both__(double a, double b) { return a > b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool any_geq(const X &x, const Y &y)
     {
-        return any(x, y, [] __both__(float a, float b) { return a >= b; });
+        return any(x, y, [] __both__(double a, double b) { return a >= b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool any_lt(const X &x, const Y &y)
     {
-        return any(x, y, [] __both__(float a, float b) { return a < b; });
+        return any(x, y, [] __both__(double a, double b) { return a < b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool any_leq(const X &x, const Y &y)
     {
-        return any(x, y, [] __both__(float a, float b) { return a <= b; });
+        return any(x, y, [] __both__(double a, double b) { return a <= b; });
     }
 
     template <typename X, typename Y, typename Pred>
@@ -624,25 +546,25 @@ namespace polysolve::linear::mas
     template <typename X, typename Y>
     __both__ constexpr bool all_gt(const X &x, const Y &y)
     {
-        return all(x, y, [] __both__(float a, float b) { return a > b; });
+        return all(x, y, [] __both__(double a, double b) { return a > b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool all_geq(const X &x, const Y &y)
     {
-        return all(x, y, [] __both__(float a, float b) { return a >= b; });
+        return all(x, y, [] __both__(double a, double b) { return a >= b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool all_lt(const X &x, const Y &y)
     {
-        return all(x, y, [] __both__(float a, float b) { return a < b; });
+        return all(x, y, [] __both__(double a, double b) { return a < b; });
     }
 
     template <typename X, typename Y>
     __both__ constexpr bool all_leq(const X &x, const Y &y)
     {
-        return all(x, y, [] __both__(float a, float b) { return a <= b; });
+        return all(x, y, [] __both__(double a, double b) { return a <= b; });
     }
 
 } // namespace polysolve::linear::mas

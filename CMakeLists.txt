@@ -233,6 +233,11 @@ if(POLYSOLVE_LARGE_INDEX)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_LARGE_INDEX)
 endif()
 
+if(POLYSOLVE_WITH_CUDA)
+  target_compile_definitions(polysolve PUBLIC POLYSOLVE_WITH_CUDA)
+  target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_CUDA)
+endif()
+
 target_compile_definitions(polysolve_linear PRIVATE POLYSOLVE_LINEAR_SPEC="${PROJECT_SOURCE_DIR}/linear-solver-spec.json")
 target_compile_definitions(polysolve PRIVATE POLYSOLVE_NON_LINEAR_SPEC="${PROJECT_SOURCE_DIR}/nonlinear-solver-spec.json")
 target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_JSON_SPEC_DIR="${PROJECT_SOURCE_DIR}")

@@ -881,20 +881,14 @@ namespace polysolve::linear::mas
     }
 
     void MASPreconditioner::factorize(
-        const StiffnessMatrix &, BCOOView matrix, TopologyView topology, CudaRuntime rt)
+        const StiffnessMatrix &, const BCOOMatrix &A, CudaRuntime rt)
     {
-        rt.stream.sync();
-
         int old_block_dim = block_dim_;
-        block_dim_ = matrix.block_dim;
+        block_dim_ = A.block_dim;
 
-        std::vector<int> topology_row_ptr(topology.row_ptr.size());
-        std::vector<int> topology_cols(topology.cols.size());
-        cu::copy_bytes(rt.stream, topology.row_ptr, topology_row_ptr);
-        cu::copy_bytes(rt.stream, topology.cols, topology_cols);
-        rt.stream.sync();
+        TopologyView h_topo = A.host_topology_view();
 
-        if (old_block_dim != block_dim_ || !same_pattern(topology_row_ptr, topology_cols))
+        if (old_block_dim != block_dim_ || !same_pattern(h_topo.row_ptr, h_topo.cols))
         {
             std::vector<std::vector<int>> adjacency;
             build_undirected_adjacency(topology_row_ptr, topology_cols, adjacency);
@@ -913,7 +907,7 @@ namespace polysolve::linear::mas
             local_matrices_->size() * sizeof(double),
             rt.stream.get());
 
-        int matrix_grid = compute_grid_num(matrix.non_zeros, KERNEL_BLOCK_SIZE);
+        int matrix_grid = compute_grid_num(A.non_zeros, KERNEL_BLOCK_SIZE);
         for (int current_level = 0; current_level < level_count_; ++current_level)
         {
             auto &level = levels_[current_level];
@@ -980,7 +974,7 @@ namespace polysolve::linear::mas
         {
         case 1:
             assemble_all_levels_matrices_kernel<1><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
-                matrix,
+                A,
                 fine_ancestors_->data(),
                 MAX_LEVEL,
                 level_count_,
@@ -989,7 +983,7 @@ namespace polysolve::linear::mas
             break;
         case 2:
             assemble_all_levels_matrices_kernel<2><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
-                matrix,
+                A,
                 fine_ancestors_->data(),
                 MAX_LEVEL,
                 level_count_,
@@ -998,7 +992,7 @@ namespace polysolve::linear::mas
             break;
         case 3:
             assemble_all_levels_matrices_kernel<3><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
-                matrix,
+                A,
                 fine_ancestors_->data(),
                 MAX_LEVEL,
                 level_count_,

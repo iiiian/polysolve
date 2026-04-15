@@ -6,6 +6,8 @@
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/Types.hpp>
 
+#include <vector>
+
 namespace polysolve::linear::mas
 {
     struct BCOOView
@@ -19,13 +21,13 @@ namespace polysolve::linear::mas
         ctd::span<const double> vals;
     };
 
+    // CSR topology
     struct TopologyView
     {
         int dim;
         int non_zeros;
         ctd::span<const int> row_ptr;
         ctd::span<const int> cols;
-        ctd::span<const int> diag_index;
     };
 
     class BCOOMatrix
@@ -41,10 +43,24 @@ namespace polysolve::linear::mas
             return BCOOView{dim_, block_dim_, non_zeros_, *rows_, *cols_, *diag_index_, *vals_};
         }
 
-        TopologyView topology_view() const
+        TopologyView host_topology_view() const
         {
-            return TopologyView{dim_, non_zeros_, *topology_row_ptr_, *topology_cols_,
-                                *topology_diag_index_};
+            return TopologyView{
+                dim_,
+                non_zeros_,
+                h_csr_row_ptr_,
+                h_cols_,
+            };
+        }
+
+        TopologyView device_topology_view() const
+        {
+            return TopologyView{
+                dim_,
+                non_zeros_,
+                *csr_row_ptr_,
+                *cols_,
+            };
         }
 
     private:
@@ -55,9 +71,10 @@ namespace polysolve::linear::mas
         Buf<int> cols_;
         Buf<int> diag_index_;
         Buf<double> vals_;
-        Buf<int> topology_row_ptr_;
-        Buf<int> topology_cols_;
-        Buf<int> topology_diag_index_;
+
+        Buf<int> csr_row_ptr_;
+        std::vector<int> h_csr_row_ptr_;
+        std::vector<int> h_cols_;
     };
 
 } // namespace polysolve::linear::mas

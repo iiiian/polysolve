@@ -24,7 +24,7 @@ namespace
 
         BCOOMatrix M(A, block_dim, rt);
         BCOOView view = M.view();
-        TopologyView topology = M.topology_view();
+        TopologyView topology = M.host_topology_view();
 
         int expected_dim = (n + block_dim - 1) / block_dim;
         int padded_dim = expected_dim * block_dim;

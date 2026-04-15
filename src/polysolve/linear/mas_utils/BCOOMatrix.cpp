@@ -118,23 +118,22 @@ namespace polysolve::linear::mas
         non_zeros_ = h_blocks.size();
         int block_size = block_dim_ * block_dim_;
         std::vector<int> h_rows(non_zeros_);
-        std::vector<int> h_cols(non_zeros_);
         std::vector<int> h_diag_index(dim_, -1);
         std::vector<double> h_vals(block_size * non_zeros_);
-        std::vector<int> h_topology_row_ptr(dim_ + 1, 0);
-        std::vector<int> h_topology_diag_index(dim_, -1);
+        h_cols_.resize(non_zeros_);
+        h_csr_row_ptr_.resize(dim_ + 1, 0);
+
         for (int idx = 0; idx < non_zeros_; ++idx)
         {
             auto &[key, mat] = h_blocks[idx];
             auto [bi, bj] = key.get_index();
             h_rows[idx] = bi;
-            h_cols[idx] = bj;
-            h_topology_row_ptr[bi + 1]++;
+            h_cols_[idx] = bj;
+            h_csr_row_ptr_[bi + 1]++;
 
             if (bi == bj)
             {
                 h_diag_index[bi] = idx;
-                h_topology_diag_index[bi] = idx;
             }
 
             memcpy(h_vals.data() + block_size * idx, mat.data(), block_size * sizeof(double));
@@ -142,11 +141,11 @@ namespace polysolve::linear::mas
 
         for (int i = 0; i < dim_; ++i)
         {
-            h_topology_row_ptr[i + 1] += h_topology_row_ptr[i];
+            h_csr_row_ptr_[i + 1] += h_csr_row_ptr_[i];
         }
 
         // Pad trailing block.
-        if (h_rows[non_zeros_ - 1] == (dim_ - 1) && h_cols[non_zeros_ - 1] == (dim_ - 1))
+        if (h_rows[non_zeros_ - 1] == (dim_ - 1) && h_cols_[non_zeros_ - 1] == (dim_ - 1))
         {
             int padded = block_dim_ * dim_ - A.rows();
             if (padded > 0)
@@ -163,20 +162,14 @@ namespace polysolve::linear::mas
         // Copy host COO data to device.
         rows_ = cu::make_buffer<int>(rt.stream, rt.mr, h_rows.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_rows, *rows_);
-        cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_cols, *cols_);
+        cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols_.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_cols_, *cols_);
         diag_index_ = cu::make_buffer<int>(rt.stream, rt.mr, h_diag_index.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_diag_index, *diag_index_);
         vals_ = cu::make_buffer<double>(rt.stream, rt.mr, h_vals.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_vals, *vals_);
-        topology_row_ptr_ =
-            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_row_ptr.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_topology_row_ptr, *topology_row_ptr_);
-        topology_cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_cols, *topology_cols_);
-        topology_diag_index_ =
-            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_diag_index.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_topology_diag_index, *topology_diag_index_);
+        csr_row_ptr_ = cu::make_buffer<int>(rt.stream, rt.mr, h_csr_row_ptr_.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_csr_row_ptr_, *csr_row_ptr_);
 
         rt.stream.sync();
     }

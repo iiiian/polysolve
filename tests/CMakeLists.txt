@@ -7,8 +7,13 @@ set(test_sources
 	test_linear_solver.cpp
 	test_nonlinear_solver.cpp
 	test_json.cpp
+	../mmio/mmio.c
 )
 add_executable(unit_tests ${test_sources})
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/../mmio/mmio.c PROPERTIES LANGUAGE CXX)
+set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/../mmio/mmio.c
+    PROPERTIES COMPILE_OPTIONS "-Wno-write-strings;-Wno-unused-but-set-variable")
 
 ################################################################################
 # Required Libraries

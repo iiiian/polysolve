@@ -18,8 +18,7 @@
 #include <polysolve/linear/mas_utils/BCOOMatrix.hpp>
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
-#include <polysolve/linear/mas_utils/Inverse.cuh>
-#include <polysolve/linear/mas_utils/SimpleLinalg.cuh>
+#include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/Spmv.hpp>
 
 namespace polysolve::linear
@@ -39,70 +38,6 @@ namespace polysolve::linear
                 out[0] = (ctd::abs(denom[0]) < 1e-20) ? 0.0 : (num[0] / denom[0]);
             };
             cub::DeviceFor::Bulk(1, op, rt.stream.get());
-        }
-
-        template <int D>
-        void compute_diag_inv(BCOOView A, ctd::span<double> out, CudaRuntime rt)
-        {
-            auto diag_index = A.diag_index;
-            auto vals = A.vals;
-            auto op = [diag_index, vals, out] __device__(int row) {
-                int idx = diag_index[row];
-                auto inv_out = MatRef<double, D, D>::row_major(out.data() + row * D * D);
-
-                // no diag
-                if (idx == -1)
-                {
-                    assign(inv_out, Mat<double, D, D>::identity());
-                    return;
-                }
-
-                auto diag_block = MatRef<const double, D, D>::row_major(vals.data() + idx * D * D);
-                inverse<D>(diag_block, inv_out);
-            };
-
-            cub::DeviceFor::Bulk(diag_index.size(), op, rt.stream.get());
-        }
-
-        template <int D>
-        void apply_precond(
-            ctd::span<const double> diag_inv,
-            ctd::span<const double> x,
-            ctd::span<double> y,
-            CudaRuntime rt)
-        {
-            auto op = [diag_inv, x, y] __device__(int idx) {
-                auto inv_mat = MatRef<const double, D, D>::row_major(diag_inv.data() + idx * D * D);
-                auto x_in = MatRef<const double, D, 1>::row_major(x.data() + idx * D);
-                auto y_out = MatRef<double, D, 1>::row_major(y.data() + idx * D);
-
-                assign(y_out, mat_mul(inv_mat, x_in));
-            };
-
-            cub::DeviceFor::Bulk(static_cast<int>(x.size() / D), op, rt.stream.get());
-        }
-
-        void apply_precond_dispatch(
-            int block_dim,
-            ctd::span<const double> diag_inv,
-            ctd::span<const double> x,
-            ctd::span<double> y,
-            CudaRuntime rt)
-        {
-            switch (block_dim)
-            {
-            case 1:
-                apply_precond<1>(diag_inv, x, y, rt);
-                break;
-            case 2:
-                apply_precond<2>(diag_inv, x, y, rt);
-                break;
-            case 3:
-                apply_precond<3>(diag_inv, x, y, rt);
-                break;
-            default:
-                throw std::runtime_error("[CudaPCG] Unsupported block size.");
-            }
         }
 
         void axpby(
@@ -126,7 +61,7 @@ namespace polysolve::linear
     class CudaPCG::CudaPCGImpl
     {
     private:
-        int block_dim_ = 1;
+        int block_dim_ = 3;
         int max_iter_ = 1e5;
         int true_residual_period_ = 50;
         double abs_tol_ = 1e-20;
@@ -147,7 +82,7 @@ namespace polysolve::linear
         ctd::optional<cu::device_memory_pool> default_mem_pool_;
 
         BCOOMatrix A_;
-        Buf<double> diag_inv_;
+        MASPreconditioner mas_precond_;
         Buf<double> x_;
         Buf<double> b_;
         Buf<double> r_;
@@ -208,27 +143,7 @@ namespace polysolve::linear
             BCOOView view = A_.view();
             dim_ = A.rows();
             padded_dim_ = view.block_dim * view.dim;
-
-            diag_inv_ = cu::make_buffer<double>(
-                rt.stream,
-                rt.mr,
-                view.block_dim * view.block_dim * view.dim,
-                cu::no_init);
-
-            switch (view.block_dim)
-            {
-            case 1:
-                compute_diag_inv<1>(view, *diag_inv_, rt);
-                break;
-            case 2:
-                compute_diag_inv<2>(view, *diag_inv_, rt);
-                break;
-            case 3:
-                compute_diag_inv<3>(view, *diag_inv_, rt);
-                break;
-            default:
-                throw std::runtime_error("[CudaPCG] Unsupported block size.");
-            }
+            mas_precond_.factorize(A, view, A_.topology_view(), rt);
 
             x_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
             b_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
@@ -283,7 +198,7 @@ namespace polysolve::linear
 
         bool check_buffer_size(int n) const
         {
-            if (n <= 0 || !diag_inv_ || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
+            if (n <= 0 || mas_precond_.empty() || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
                 || !scalar_rz_ || !scalar_pAp_ || !scalar_alpha_ || !scalar_beta_
                 || !scalar_rz_old_ || !scalar_rr_)
             {
@@ -302,8 +217,7 @@ namespace polysolve::linear
             if (view.rows.size() != view.non_zeros
                 || view.cols.size() != view.non_zeros
                 || view.vals.size() != block_size * view.non_zeros
-                || view.diag_index.size() != view.dim
-                || diag_inv_->size() != block_size * view.dim)
+                || view.diag_index.size() != view.dim)
             {
                 return false;
             }
@@ -340,7 +254,7 @@ namespace polysolve::linear
             axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
 
             // Compute z = M^-1 r.
-            apply_precond_dispatch(view.block_dim, *diag_inv_, *r_, *z_, rt);
+            mas_precond_.apply(*r_, *z_, rt);
             // Initial search direction p = z;
             cu::copy_bytes(rt.stream, *z_, *p_);
 
@@ -385,8 +299,7 @@ namespace polysolve::linear
                 }
 
                 // Compute z = M^-1 r.
-                // TODO: MAS Precond
-                apply_precond_dispatch(view.block_dim, *diag_inv_, *r_, *z_, rt);
+                mas_precond_.apply(*r_, *z_, rt);
 
                 // Compute rz = r M^-1 r.
                 cu::copy_bytes(rt.stream, *scalar_rz_, *scalar_rz_old_);

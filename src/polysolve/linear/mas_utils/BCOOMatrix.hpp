@@ -19,6 +19,15 @@ namespace polysolve::linear::mas
         ctd::span<const double> vals;
     };
 
+    struct TopologyView
+    {
+        int dim;
+        int non_zeros;
+        ctd::span<const int> row_ptr;
+        ctd::span<const int> cols;
+        ctd::span<const int> diag_index;
+    };
+
     class BCOOMatrix
     {
     public:
@@ -32,6 +41,12 @@ namespace polysolve::linear::mas
             return BCOOView{dim_, block_dim_, non_zeros_, *rows_, *cols_, *diag_index_, *vals_};
         }
 
+        TopologyView topology_view() const
+        {
+            return TopologyView{dim_, non_zeros_, *topology_row_ptr_, *topology_cols_,
+                                *topology_diag_index_};
+        }
+
     private:
         int dim_ = 0;
         int block_dim_ = 0;
@@ -40,6 +55,9 @@ namespace polysolve::linear::mas
         Buf<int> cols_;
         Buf<int> diag_index_;
         Buf<double> vals_;
+        Buf<int> topology_row_ptr_;
+        Buf<int> topology_cols_;
+        Buf<int> topology_diag_index_;
     };
 
 } // namespace polysolve::linear::mas

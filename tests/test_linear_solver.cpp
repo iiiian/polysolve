@@ -17,6 +17,8 @@
 #include <vector>
 #include <ctime>
 #include <chrono>
+#include <cstdio>
+#include "../mmio/mmio.h"
 //////////////////////////////////////////////////////////////////////////
 
 using namespace polysolve;
@@ -48,6 +50,104 @@ void loadSymmetric(Eigen::SparseMatrix<double> &A, std::string PATH)
     fin.close();
     A.setFromTriplets(triple.begin(), triple.end());
 };
+
+bool load_matrix_market_sparse_mmio(
+    const std::string &path, Eigen::SparseMatrix<double> &A)
+{
+    FILE *file = fopen(path.c_str(), "r");
+    if (file == nullptr)
+    {
+        return false;
+    }
+
+    MM_typecode matcode;
+    if (mm_read_banner(file, &matcode) != 0 || !mm_is_matrix(matcode) || !mm_is_coordinate(matcode)
+        || !mm_is_real(matcode))
+    {
+        fclose(file);
+        return false;
+    }
+
+    int rows = 0;
+    int cols = 0;
+    int nnz = 0;
+    if (mm_read_mtx_crd_size(file, &rows, &cols, &nnz) != 0)
+    {
+        fclose(file);
+        return false;
+    }
+
+    std::vector<Eigen::Triplet<double>> triplets;
+    triplets.reserve(mm_is_symmetric(matcode) ? nnz * 2 : nnz);
+    for (int index = 0; index < nnz; ++index)
+    {
+        int row = 0;
+        int col = 0;
+        double value = 0.0;
+        if (fscanf(file, "%d %d %lg", &row, &col, &value) != 3)
+        {
+            fclose(file);
+            return false;
+        }
+
+        row--;
+        col--;
+        triplets.emplace_back(row, col, value);
+        if (mm_is_symmetric(matcode) && row != col)
+        {
+            triplets.emplace_back(col, row, value);
+        }
+    }
+
+    fclose(file);
+    A.resize(rows, cols);
+    A.setFromTriplets(triplets.begin(), triplets.end());
+    return true;
+}
+
+bool load_matrix_market_array_mmio(const std::string &path, Eigen::VectorXd &b)
+{
+    FILE *file = fopen(path.c_str(), "r");
+    if (file == nullptr)
+    {
+        return false;
+    }
+
+    MM_typecode matcode;
+    if (mm_read_banner(file, &matcode) != 0 || !mm_is_matrix(matcode) || !mm_is_array(matcode)
+        || !mm_is_real(matcode))
+    {
+        fclose(file);
+        return false;
+    }
+
+    int rows = 0;
+    int cols = 0;
+    if (mm_read_mtx_array_size(file, &rows, &cols) != 0)
+    {
+        fclose(file);
+        return false;
+    }
+
+    if (cols != 1)
+    {
+        fclose(file);
+        return false;
+    }
+
+    b.resize(rows);
+    for (int row = 0; row < rows; ++row)
+    {
+        if (fscanf(file, "%lg", &b[row]) != 1)
+        {
+            fclose(file);
+            return false;
+        }
+    }
+
+    fclose(file);
+    return true;
+}
 
 TEST_CASE("jse", "[solver]")
 {
@@ -201,6 +301,150 @@ TEST_CASE("eigen_params", "[solver]")
     }
 }
 
+TEST_CASE("cuda_pcg_block_dims", "[solver]")
+{
+    const std::string path = POLYFEM_DATA_DIR;
+    Eigen::SparseMatrix<double> A;
+    const bool ok = loadMarket(A, path + "/A_2.mat");
+    REQUIRE(ok);
+
+    for (int block_dim : {1, 2, 3})
+    {
+        auto solver = Solver::create("CUDA_PCG", "");
+        json params;
+        params["CUDA_PCG"]["block_dim"] = block_dim;
+        params["CUDA_PCG"]["relative_tolerance"] = 0.0;
+        params["CUDA_PCG"]["absolute_tolerance"] = 1e-8;
+        params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+        solver->set_parameters(params);
+
+        Eigen::VectorXd b(A.rows());
+        b.setRandom();
+        Eigen::VectorXd x(b.size());
+        x.setZero();
+
+        solver->analyze_pattern(A, A.rows());
+        solver->factorize(A);
+        solver->solve(b, x);
+
+        const double err = (A * x - b).norm();
+        INFO("block_dim: " + std::to_string(block_dim));
+        REQUIRE(err < 1e-8);
+    }
+}
+
+TEST_CASE("cuda_pcg_default_block_dim", "[solver]")
+{
+    auto solver = Solver::create("CUDA_PCG", "");
+    const std::string path = POLYFEM_DATA_DIR;
+    Eigen::SparseMatrix<double> A;
+    const bool ok = loadMarket(A, path + "/A_2.mat");
+    REQUIRE(ok);
+
+    json params;
+    params["CUDA_PCG"]["relative_tolerance"] = 0.0;
+    params["CUDA_PCG"]["absolute_tolerance"] = 1e-8;
+    params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+    solver->set_parameters(params);
+
+    Eigen::VectorXd b(A.rows());
+    b.setRandom();
+    Eigen::VectorXd x(b.size());
+    x.setZero();
+
+    solver->analyze_pattern(A, A.rows());
+    solver->factorize(A);
+    solver->solve(b, x);
+
+    const double err = (A * x - b).norm();
+    REQUIRE(err < 1e-8);
+}
+
+TEST_CASE("cuda_pcg_pre_factor", "[solver]")
+{
+    auto solver = Solver::create("CUDA_PCG", "");
+    const std::string path = POLYFEM_DATA_DIR;
+    Eigen::SparseMatrix<double> A;
+    const bool ok = loadMarket(A, path + "/A_2.mat");
+    REQUIRE(ok);
+
+    json params;
+    params["CUDA_PCG"]["relative_tolerance"] = 0.0;
+    params["CUDA_PCG"]["absolute_tolerance"] = 1e-8;
+    params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+    solver->set_parameters(params);
+    solver->analyze_pattern(A, A.rows());
+
+    std::default_random_engine eng{42};
+    std::uniform_real_distribution<double> urd(0.1, 5);
+
+    for (int iter = 0; iter < 3; ++iter)
+    {
+        std::vector<Eigen::Triplet<double>> triplet_list;
+        for (int k = 0; k < A.outerSize(); ++k)
+        {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+            {
+                if (it.row() == it.col())
+                {
+                    triplet_list.emplace_back(it.row(), it.col(), urd(eng) * 100);
+                }
+                else if (it.row() < it.col())
+                {
+                    double val = -urd(eng);
+                    triplet_list.emplace_back(it.row(), it.col(), val);
+                    triplet_list.emplace_back(it.col(), it.row(), val);
+                }
+            }
+        }
+
+        Eigen::SparseMatrix<double> Atmp(A.rows(), A.cols());
+        Atmp.setFromTriplets(triplet_list.begin(), triplet_list.end());
+
+        Eigen::VectorXd b(Atmp.rows());
+        b.setRandom();
+        Eigen::VectorXd x(b.size());
+        x.setZero();
+
+        solver->factorize(Atmp);
+        solver->solve(b, x);
+
+        const double err = (Atmp * x - b).norm();
+        REQUIRE(err < 1e-8);
+    }
+}
+
+TEST_CASE("cuda_pcg_some_ls_data_block3", "[solver]")
+{
+    constexpr auto matrix_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_A.mtx";
+    constexpr auto rhs_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_b.mtx";
+
+    Eigen::SparseMatrix<double> A;
+    Eigen::VectorXd b;
+    REQUIRE(load_matrix_market_sparse_mmio(matrix_path, A));
+    REQUIRE(load_matrix_market_array_mmio(rhs_path, b));
+    REQUIRE(A.rows() == b.size());
+
+    auto solver = Solver::create("CUDA_PCG", "");
+    json params;
+    params["CUDA_PCG"]["block_dim"] = 3;
+    params["CUDA_PCG"]["relative_tolerance"] = 1e-2;
+    params["CUDA_PCG"]["absolute_tolerance"] = 0.0;
+    params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+    solver->set_parameters(params);
+
+    Eigen::VectorXd x(b.size());
+    x.setZero();
+
+    solver->analyze_pattern(A, A.rows());
+    solver->factorize(A);
+    solver->solve(b, x);
+
+    const double err = (A * x - b).norm();
+    INFO("err: " + std::to_string(err));
+    REQUIRE(err < 1e-8);
+}
+
 TEST_CASE("pre_factor", "[solver]")
 {
     const std::string path = POLYFEM_DATA_DIR;
@@ -212,8 +456,6 @@ TEST_CASE("pre_factor", "[solver]")
 
     for (const auto &s : solvers)
     {
-        if (s == "CUDA_PCG")
-            continue;
         if (s == "Eigen::DGMRES")
             continue;
 #ifdef WIN32

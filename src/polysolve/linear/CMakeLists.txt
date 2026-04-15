@@ -28,10 +28,13 @@ if(POLYSOLVE_WITH_CUDA)
         mas_utils/InnerProduct.hpp
         mas_utils/Inverse.cu
         mas_utils/Inverse.cuh
+        mas_utils/MASPreconditioner.cu
+        mas_utils/MASPreconditioner.hpp
         mas_utils/SimpleLinalg.cuh
         mas_utils/Spmv.cu
         mas_utils/Spmv.hpp
     )
+
 endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Source Files" FILES ${SOURCES})

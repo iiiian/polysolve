@@ -4,6 +4,7 @@
 
 #include <cuda/std/span>
 
+#include <algorithm>
 #include <set>
 #include <utility>
 #include <vector>
@@ -24,7 +25,8 @@ namespace
 
         BCOOMatrix M(A, block_dim, rt);
         BCOOView view = M.view();
-        TopologyView topology = M.host_topology_view();
+        TopologyView host_topology = M.host_topology_view();
+        TopologyView device_topology = M.device_topology_view();
 
         int expected_dim = (n + block_dim - 1) / block_dim;
         int padded_dim = expected_dim * block_dim;
@@ -51,17 +53,19 @@ namespace
         std::vector<int> h_cols(view.non_zeros);
         std::vector<int> h_diag_index(view.dim);
         std::vector<double> h_vals(view.non_zeros * block_dim * block_dim);
-        std::vector<int> h_topology_row_ptr(topology.dim + 1);
-        std::vector<int> h_topology_cols(topology.non_zeros);
-        std::vector<int> h_topology_diag_index(topology.dim);
+        std::vector<int> h_topology_row_ptr(host_topology.dim + 1);
+        std::vector<int> h_topology_cols(host_topology.non_zeros);
+        std::vector<int> h_topology_row_ptr_from_device(device_topology.dim + 1);
+        std::vector<int> h_topology_cols_from_device(device_topology.non_zeros);
 
         cu::copy_bytes(rt.stream, view.rows, h_rows);
         cu::copy_bytes(rt.stream, view.cols, h_cols);
         cu::copy_bytes(rt.stream, view.diag_index, h_diag_index);
         cu::copy_bytes(rt.stream, view.vals, h_vals);
-        cu::copy_bytes(rt.stream, topology.row_ptr, h_topology_row_ptr);
-        cu::copy_bytes(rt.stream, topology.cols, h_topology_cols);
-        cu::copy_bytes(rt.stream, topology.diag_index, h_topology_diag_index);
+        std::copy(host_topology.row_ptr.begin(), host_topology.row_ptr.end(), h_topology_row_ptr.begin());
+        std::copy(host_topology.cols.begin(), host_topology.cols.end(), h_topology_cols.begin());
+        cu::copy_bytes(rt.stream, device_topology.row_ptr, h_topology_row_ptr_from_device);
+        cu::copy_bytes(rt.stream, device_topology.cols, h_topology_cols_from_device);
         rt.stream.sync();
 
         // Row-major sort check (strictly increasing composite key).
@@ -72,12 +76,34 @@ namespace
             REQUIRE(cur > prev);
         }
 
-        REQUIRE(topology.dim == expected_dim);
-        REQUIRE(topology.non_zeros == view.non_zeros);
+        REQUIRE(host_topology.dim == expected_dim);
         REQUIRE(h_topology_row_ptr.front() == 0);
-        REQUIRE(h_topology_row_ptr.back() == view.non_zeros);
-        REQUIRE(h_topology_cols == h_cols);
-        REQUIRE(h_topology_diag_index == h_diag_index);
+        REQUIRE(h_topology_row_ptr.back() == host_topology.non_zeros);
+        REQUIRE(h_topology_row_ptr_from_device == h_topology_row_ptr);
+        REQUIRE(h_topology_cols_from_device == h_topology_cols);
+
+        std::vector<int> expected_topology_row_ptr(expected_dim + 1, 0);
+        std::vector<int> expected_topology_cols;
+        expected_topology_cols.reserve(view.non_zeros);
+        for (int idx = 0; idx < view.non_zeros; ++idx)
+        {
+            int row = h_rows[idx];
+            int col = h_cols[idx];
+            if (row == col)
+            {
+                continue;
+            }
+            expected_topology_cols.push_back(col);
+            expected_topology_row_ptr[row + 1]++;
+        }
+        for (int row = 0; row < expected_dim; ++row)
+        {
+            expected_topology_row_ptr[row + 1] += expected_topology_row_ptr[row];
+        }
+
+        REQUIRE(host_topology.non_zeros == int(expected_topology_cols.size()));
+        REQUIRE(h_topology_row_ptr == expected_topology_row_ptr);
+        REQUIRE(h_topology_cols == expected_topology_cols);
 
         for (int row = 0; row < expected_dim; ++row)
         {
@@ -85,6 +111,10 @@ namespace
             for (int idx = h_topology_row_ptr[row] + 1; idx < h_topology_row_ptr[row + 1]; ++idx)
             {
                 REQUIRE(h_topology_cols[idx - 1] < h_topology_cols[idx]);
+            }
+            for (int idx = h_topology_row_ptr[row]; idx < h_topology_row_ptr[row + 1]; ++idx)
+            {
+                REQUIRE(h_topology_cols[idx] != row);
             }
         }
 

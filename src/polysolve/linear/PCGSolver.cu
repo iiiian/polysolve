@@ -143,7 +143,7 @@ namespace polysolve::linear
             BCOOView view = A_.view();
             dim_ = A.rows();
             padded_dim_ = view.block_dim * view.dim;
-            mas_precond_.factorize(A, view, A_.topology_view(), rt);
+            mas_precond_.factorize(A_, rt);
 
             x_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
             b_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);

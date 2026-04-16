@@ -121,7 +121,9 @@ namespace polysolve::linear::mas
         std::vector<int> h_diag_index(dim_, -1);
         std::vector<double> h_vals(block_size * non_zeros_);
         h_cols_.resize(non_zeros_);
-        h_csr_row_ptr_.resize(dim_ + 1, 0);
+        h_topology_row_ptr_.assign(dim_ + 1, 0);
+        h_topology_cols_.clear();
+        h_topology_cols_.reserve(std::max(0, non_zeros_ - dim_));
 
         for (int idx = 0; idx < non_zeros_; ++idx)
         {
@@ -129,7 +131,11 @@ namespace polysolve::linear::mas
             auto [bi, bj] = key.get_index();
             h_rows[idx] = bi;
             h_cols_[idx] = bj;
-            h_csr_row_ptr_[bi + 1]++;
+            if (bi != bj)
+            {
+                h_topology_cols_.push_back(bj);
+                h_topology_row_ptr_[bi + 1]++;
+            }
 
             if (bi == bj)
             {
@@ -141,7 +147,7 @@ namespace polysolve::linear::mas
 
         for (int i = 0; i < dim_; ++i)
         {
-            h_csr_row_ptr_[i + 1] += h_csr_row_ptr_[i];
+            h_topology_row_ptr_[i + 1] += h_topology_row_ptr_[i];
         }
 
         // Pad trailing block.
@@ -168,8 +174,13 @@ namespace polysolve::linear::mas
         cu::copy_bytes(rt.stream, h_diag_index, *diag_index_);
         vals_ = cu::make_buffer<double>(rt.stream, rt.mr, h_vals.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_vals, *vals_);
-        csr_row_ptr_ = cu::make_buffer<int>(rt.stream, rt.mr, h_csr_row_ptr_.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_csr_row_ptr_, *csr_row_ptr_);
+        topology_non_zeros_ = h_topology_cols_.size();
+        topology_row_ptr_ =
+            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_row_ptr_.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_topology_row_ptr_, *topology_row_ptr_);
+        topology_cols_ =
+            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_cols_.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_topology_cols_, *topology_cols_);
 
         rt.stream.sync();
     }

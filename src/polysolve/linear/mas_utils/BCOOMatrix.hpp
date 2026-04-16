@@ -47,9 +47,9 @@ namespace polysolve::linear::mas
         {
             return TopologyView{
                 dim_,
-                non_zeros_,
-                h_csr_row_ptr_,
-                h_cols_,
+                topology_non_zeros_,
+                h_topology_row_ptr_,
+                h_topology_cols_,
             };
         }
 
@@ -57,9 +57,9 @@ namespace polysolve::linear::mas
         {
             return TopologyView{
                 dim_,
-                non_zeros_,
-                *csr_row_ptr_,
-                *cols_,
+                topology_non_zeros_,
+                *topology_row_ptr_,
+                *topology_cols_,
             };
         }
 
@@ -67,13 +67,16 @@ namespace polysolve::linear::mas
         int dim_ = 0;
         int block_dim_ = 0;
         int non_zeros_ = 0;
+        int topology_non_zeros_ = 0;
         Buf<int> rows_;
         Buf<int> cols_;
         Buf<int> diag_index_;
         Buf<double> vals_;
 
-        Buf<int> csr_row_ptr_;
-        std::vector<int> h_csr_row_ptr_;
+        Buf<int> topology_row_ptr_;
+        Buf<int> topology_cols_;
+        std::vector<int> h_topology_row_ptr_;
+        std::vector<int> h_topology_cols_;
         std::vector<int> h_cols_;
     };
 

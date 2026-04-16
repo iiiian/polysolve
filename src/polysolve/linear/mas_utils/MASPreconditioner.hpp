@@ -14,18 +14,12 @@ namespace polysolve::linear::mas
     class MASPreconditioner
     {
     public:
-        void factorize(const StiffnessMatrix &A, BCOOView matrix, TopologyView topology, CudaRuntime rt);
+        void analyze_pattern(
+            const BCOOMatrix &A, CudaRuntime rt);
+
+        void factorize(const BCOOMatrix &A, CudaRuntime rt);
 
         void apply(ctd::span<const double> r, ctd::span<double> z, CudaRuntime rt);
-
-        bool empty() const
-        {
-            return !fine_ancestors_ || !level_node_offsets_device_ || !local_matrices_
-                   || !inverse_matrices_ || !multi_level_r_ || !multi_level_z_;
-        }
-
-        int block_dim() const { return block_dim_; }
-        int level_count() const { return level_count_; }
 
     private:
         struct LevelInfo
@@ -41,8 +35,6 @@ namespace polysolve::linear::mas
         int total_padded_nodes_ = 0;
         int max_bank_count_ = 0;
 
-        std::vector<int> cached_row_ptr_;
-        std::vector<int> cached_cols_;
         std::vector<LevelInfo> levels_;
         std::vector<int> level_node_offsets_;
         std::vector<int> level_matrix_offsets_;
@@ -50,8 +42,8 @@ namespace polysolve::linear::mas
         Buf<int> fine_ancestors_;
         Buf<int> level_node_offsets_device_;
         Buf<int> level_matrix_offsets_device_;
-        Buf<int> level0_map_;
-        Buf<int> level0_remap_;
+        Buf<int> fine_to_slot_;
+        Buf<int> slot_to_fine_;
         Buf<uint32_t> connect_masks_;
         Buf<int> component_counts_;
         Buf<int> bank_offsets_;
@@ -62,16 +54,6 @@ namespace polysolve::linear::mas
         Buf<double> inverse_matrices_;
         Buf<double> multi_level_r_;
         Buf<double> multi_level_z_;
-
-        void analyze_pattern(
-            TopologyView topology,
-            const std::vector<int> &row_ptr,
-            const std::vector<int> &cols,
-            const std::vector<int> &level0_map,
-            const std::vector<int> &level0_remap,
-            int level0_bank_count,
-            CudaRuntime rt);
-        bool same_pattern(const std::vector<int> &row_ptr, const std::vector<int> &cols) const;
     };
 
 } // namespace polysolve::linear::mas

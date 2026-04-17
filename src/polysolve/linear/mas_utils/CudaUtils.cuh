@@ -12,10 +12,10 @@ namespace ctd = ::cuda::std;
 
 namespace polysolve::linear::mas
 {
-    /// @brief Compute grid num given minimal thread num and a fixed block dim.
-    constexpr int compute_grid_num(int thread_num, int block_dim)
+    // @brief ceil(num/denom)
+    constexpr int div_round_upper(int num, int denom)
     {
-        return (thread_num + block_dim - 1) / block_dim;
+        return (num + denom - 1) / denom;
     }
 
     struct CudaRuntime

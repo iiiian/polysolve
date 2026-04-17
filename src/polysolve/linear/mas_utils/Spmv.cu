@@ -80,7 +80,7 @@ namespace polysolve::linear::mas
         cu::fill_bytes(rt.stream, y, 0);
 
         constexpr int BLOCK_SIZE = 128;
-        int grid_size = compute_grid_num(A.non_zeros, BLOCK_SIZE);
+        int grid_size = div_round_upper(A.non_zeros, BLOCK_SIZE);
 
         auto st = rt.stream.get();
 

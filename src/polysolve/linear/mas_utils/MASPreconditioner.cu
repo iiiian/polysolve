@@ -19,14 +19,30 @@ namespace polysolve::linear::mas
 {
     namespace
     {
-        constexpr int MAX_LEVEL = 6;
+        constexpr int MAX_COARSE_LEVEL = 6;
 
-        __global__ void coarsen_kernel1(ctd::span<int> row_ptr,
-                                        ctd::span<int> cols,
-                                        ctd::span<int> bank_cco_num,
-                                        ctd::span<int> cco_id)
+        /// @brief Get coarse space CCO id.
+        /// @param map Coarse space map.
+        /// @param vid Vertex id.
+        /// @param level Coarse space level. Start at lv 0.
+        /// @return CCO id.
+        __both__ int get_coarse_space_id(ctd::span<const int> map, int vid, int level)
         {
-            // Bank local neighbor mask
+            assert(level >= 0);
+            return map[vid * MAX_COARSE_LEVEL + level];
+        }
+
+        /// @brief Build local CCO mapping from input space -> coarse space lv 0 and collapse topology.
+        /// @param row_ptr CSR graph topology (does not include self).
+        /// @param cols CSR graph topology (does not include self).
+        /// @param cco_num_per_bank Independent CCO number per bank.
+        /// @param local_cco_ids Bank local CCO id at coarse space lv 0.
+        __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
+                                            ctd::span<int> cols,
+                                            ctd::span<int> cco_num_per_bank,
+                                            ctd::span<int> local_cco_ids)
+        {
+            // Bank local neighbor masks.
             __shared__ uint32_t neighbors[128];
 
             int btid = threadIdx.x;                   // block local thread id
@@ -41,27 +57,43 @@ namespace polysolve::linear::mas
                 return;
             }
 
-            // Build neighbor mask (including self).
+            // Build neighbor mask (including self) and collapse topology.
             uint32_t neighbor = (1u << lid);
-            for (int n : cols.subspan(row_ptr[tid], row_ptr[tid + 1] - row_ptr[tid]))
+            int out_of_bank_neighbor_count = 0;
+            for (int n = row_ptr[tid]; n < row_ptr[tid + 1]; ++n)
             {
-                int neighbor_bid = n / 32;
+                int neighbor_vid = cols[n];
+                int neighbor_bid = neighbor_vid / 32;
                 if (bid == neighbor_bid)
                 {
-                    neighbor |= (1u << (n % 32));
+                    neighbor |= (1u << (neighbor_vid % 32));
                 }
+                else
+                {
+                    // Compact topology to include out of bank neighbors exclusively. So we dont
+                    // need additional filtering when building future coarse spaces.
+                    cols[out_of_bank_neighbor_count] = neighbor_vid;
+                    ++out_of_bank_neighbor_count;
+                }
+            }
+            if (out_of_bank_neighbor_count != (row_ptr[tid + 1] - row_ptr[tid]))
+            {
+                // -1 denotes neighbor list ending.
+                cols[out_of_bank_neighbor_count] = -1;
             }
             neighbors[btid] = neighbor;
             __syncwarp();
 
             // Build connectivity mask (including self).
-            uint32_t connection = (1u << lid);
-            uint32_t to_visit = neighbor;
+            uint32_t connection = neighbor;
+            uint32_t visited = (1u << lid);
+            uint32_t to_visit = connection ^ visited;
             while (to_visit)
             {
-                int neighbor_lid = ctd::countr_one(to_visit);
-                connection |= neighbors[neighbor_lid + wid * 32];
-                to_visit ^= (1u << neighbor_lid);
+                int visiting = ctd::countr_one(to_visit);
+                connection |= neighbors[visiting + wid * 32];
+                visited |= (1u << visiting);
+                to_visit = connection ^ visited;
             }
 
             // Find bank (warp) local connected component (CCO).
@@ -69,74 +101,211 @@ namespace polysolve::linear::mas
             bool is_lead = (cco_lead_lid == lid);
             uint32_t lead_lanes = __ballot_sync(0xFFFFFFFFu, is_lead);
             uint32_t before_cco_lead_mask = static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
-            int this_cco_id = ctd::popcount(lead_lanes | before_cco_lead_mask);
-            cco_id[tid] = this_cco_id;
 
+            // Write cco info back.
+            local_cco_ids[tid] = ctd::popcount(lead_lanes | before_cco_lead_mask);
             if (lid == 0)
             {
-                int cco_num = ctd::popcount(lead_lanes);
-                bank_cco_num[bid] = cco_num;
+                int bank_cco_num = ctd::popcount(lead_lanes);
+                cco_num_per_bank[bid] = bank_cco_num;
             }
         }
 
-        __global__ void coarsen_kernel2(ctd::span<const int> bank_cco_start, ctd::span<int> cco_id)
+        /// @brief Build bank neighbor mask and collapse topology.
+        /// @param level Target coarse space level.
+        /// @param coarse_space_map Coarse space map.
+        /// @param row_ptr CSR graph topology (does not include self).
+        /// @param cols CSR graph topology (does not include self).
+        /// @param neighbors Bank local neighbor mask.
+        __global__ void build_neighbor_masks_lvx(int level,
+                                                 ctd::span<const int> coarse_space_map,
+                                                 ctd::span<const int> row_ptr,
+                                                 ctd::span<int> cols,
+                                                 ctd::span<uint32_t> neighbors)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x; // global thread id
-            int bid = tid / 32;                              // bank id
-
-            if (tid >= cco_id.size())
+            int node_num = row_ptr.size() - 1;
+            if (tid >= node_num)
             {
                 return;
             }
 
-            cco_id[tid] += bank_cco_start[bid];
+            // Build neighbor mask (including self) and collapse topology.
+            int cco_id = get_coarse_space_id(coarse_space_map, tid, level - 1);
+            uint32_t neighbor = (1u << (cco_id % 32));
+            int out_of_bank_neighbor_count = 0;
+            for (int n = row_ptr[tid]; n < row_ptr[tid + 1]; ++n)
+            {
+                int neighbor_vid = cols[n];
+                if (neighbor_vid == -1)
+                {
+                    break;
+                }
+
+                int neighbor_cco_id = get_coarse_space_id(coarse_space_map, tid, level - 1);
+                if (cco_id / 32 == neighbor_cco_id / 32)
+                {
+                    neighbor |= (1u << (neighbor_cco_id % 32));
+                }
+                else
+                {
+                    cols[out_of_bank_neighbor_count] = neighbor_vid;
+                    ++out_of_bank_neighbor_count;
+                }
+            }
+            if (out_of_bank_neighbor_count != (row_ptr[tid + 1] - row_ptr[tid]))
+            {
+                cols[out_of_bank_neighbor_count] = -1;
+            }
+
+            // TODO: maybe optimize?
+            // 1. write cco id to shared mem [128]
+            // 2. block sort
+            // 3. count block local cco id
+            // 4. atomic or to block local cco neighbor slot.
+            cu::atomic_ref<uint32_t> neighbor_out{neighbors[cco_id]};
+            neighbor_out.fetch_or(neighbor);
         }
 
-        void coarsen(ctd::span<int> row_ptr,
-                     ctd::span<int> cols,
-                     ctd::span<int> bank_cco_num,
-                     ctd::span<int> cco_id,
-                     cu::device_buffer<int> &int_tmp,
-                     cu::device_buffer<char> &char_tmp,
-                     CudaRuntime rt)
+        /// @brief Build local CCO mapping from coarse space level x-1 -> coarse space level x.
+        /// @param level Target coarse space lv x.
+        /// @param cco_num Total CCO number at coarse space lv x-1.
+        /// @param cco_num_per_bank Independent CCO number per bank at coarse space lv x.
+        /// @param local_cco_ids Bank local CCO id at coarse space lv x.
+        __global__ void build_local_cco_lvx(int level,
+                                            int cco_num,
+                                            ctd::span<const uint32_t> neighbors,
+                                            ctd::span<const int> coarse_space_map,
+                                            ctd::span<int> cco_num_per_bank,
+                                            ctd::span<int> local_cco_ids)
         {
-            assert(row_ptr.size() != 0);
 
-            int node_num = row_ptr.size() - 1;
-            int bank_num = (node_num + 32 - 1) / 32;
-
-            assert(cols.size() == node_num);
-            assert(bank_cco_num.size() >= bank_num);
-            assert(cco_id.size() >= node_num);
-
-            if (int_tmp.size() < 2 * bank_num)
+            int tid = blockDim.x * blockIdx.x + threadIdx.x; // global thread id
+            int bid = tid / 32;                              // bank id
+            int lid = tid % 32;                              // lane id
+            if (tid >= cco_num)
             {
-                int_tmp = cu::make_buffer<int>(rt.stream, rt.mr, 2 * bank_num, cu::no_init);
+                return;
             }
 
-            int grid_num = compute_grid_num(node_num, 128);
-            coarsen_kernel1<<<grid_num, 128, 0, rt.stream.get()>>>(row_ptr, cols, ctd::span<int>{int_tmp.data(), bank_num}, cco_id);
+            // Build connectivity mask (including self).
+            uint32_t connection = neighbors[tid];
+            uint32_t visited = (1u << lid);
+            uint32_t to_visit = connection ^ visited;
+            while (to_visit)
+            {
+                int visiting = ctd::countr_one(to_visit);
+                connection |= neighbors[visiting + bid * 32];
+                visited |= (1u << visiting);
+                to_visit = connection ^ visited;
+            }
+
+            // Find bank (warp) local connected component (CCO).
+            uint32_t cco_lead_lid = ctd::countr_one(connection);
+            bool is_lead = (cco_lead_lid == lid);
+            uint32_t lead_lanes = __ballot_sync(0xFFFFFFFFu, is_lead);
+            uint32_t before_cco_lead_mask = static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
+
+            // Write cco info back.
+            local_cco_ids[tid] = ctd::popcount(lead_lanes | before_cco_lead_mask);
+            if (lid == 0)
+            {
+                int bank_cco_num = ctd::popcount(lead_lanes);
+                cco_num_per_bank[bid] = bank_cco_num;
+            }
+        };
+
+        /// @brief Build global coarse space level x CCO id.
+        /// @param level Target coarse space lv x.
+        /// @param local_cco_ids Bank local CCO id at coarse space lv x.
+        /// @param cco_num_per_bank Independent CCO number per bank at coarse space lv x.
+        /// @param cco_num_per_bank_summed Inclusive sum of cco_num_per_bank.
+        /// @param coarse_space_map Global CCO id out.
+        __global__ void build_global_cco_lvx(
+            int level,
+            ctd::span<const int> local_cco_ids,
+            ctd::span<const int> cco_num_per_bank,
+            ctd::span<const int> cco_num_per_bank_summed,
+            ctd::span<int> coarse_space_map)
+        {
+            int tid = blockDim.x * blockIdx.x + threadIdx.x; // global thread id
+            int bid = tid / 32;                              // bank id
+
+            if (tid >= local_cco_ids.size())
+            {
+                return;
+            }
+
+            int cco_id = local_cco_ids[tid] + cco_num_per_bank_summed[bid] - cco_num_per_bank[bid];
+            coarse_space_map[tid * MAX_COARSE_LEVEL + level] = cco_id;
+        }
+
+        cu::device_buffer<int> build_coarse_space_map(ctd::span<const int> row_ptr, ctd::span<int> cols, CudaRuntime rt)
+        {
+            int node_num = row_ptr.size() - 1;
+            int max_bank_per_level = div_round_upper(node_num, 32);
+            auto local_cco_ids =
+                cu::make_buffer<int>(rt.stream, rt.mr, node_num, cu::no_init);
+            auto cco_num_per_bank =
+                cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init);
+            auto cco_num_per_bank_summed =
+                cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init);
+            auto coarse_space_map =
+                cu::make_buffer<int>(rt.stream, rt.mr, node_num * MAX_COARSE_LEVEL, cu::no_init);
+
+            // Build coarse map level 0.
+            int grid_num = div_round_upper(node_num, 128);
+            build_local_cco_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(
+                row_ptr, cols, cco_num_per_bank, local_cco_ids);
 
             size_t cub_tmp_size;
-            cub::DeviceScan::ExclusiveSum(nullptr,
+            cub::DeviceScan::InclusiveSum(nullptr,
                                           cub_tmp_size,
-                                          int_tmp.data(),
-                                          int_tmp.data() + bank_num,
-                                          bank_num,
+                                          cco_num_per_bank.data(),
+                                          cco_num_per_bank_summed.data(),
+                                          max_bank_per_level,
                                           rt.stream.get());
-            if (char_tmp.size() < cub_tmp_size)
-            {
-                char_tmp = cu::make_buffer<int>(rt.stream, rt.mr, cub_tmp_size, cu::no_init);
-            }
-            cub::DeviceScan::ExclusiveSum(char_tmp.data(),
+            auto cub_tmp =
+                cu::make_buffer<char>(rt.stream, rt.mr, cub_tmp_size, cu::no_init);
+            cub::DeviceScan::InclusiveSum(cub_tmp.data(),
                                           cub_tmp_size,
-                                          int_tmp.data(),
-                                          int_tmp.data() + bank_num,
-                                          bank_num,
+                                          cco_num_per_bank.data(),
+                                          cco_num_per_bank_summed.data(),
+                                          max_bank_per_level,
                                           rt.stream.get());
 
-            coarsen_kernel2<<<grid_num, 128, 0, rt.stream.get()>>>(
-                ctd::span<int>{int_tmp.data() + bank_num, bank_num}, cco_id);
+            build_global_cco<<<grid_num, 128, 0, rt.stream.get()>>>(
+                0, local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, coarse_space_map);
+
+            // Build coarse map level 1 ... MAX_COARSE_LEVEL-1 recursively.
+            int cco_num = device2host(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
+            auto neighbors = cu::make_buffer<uint32_t>(rt.stream, rt.mr, cco_num, cu::no_init);
+            for (int lv = 1; lv < MAX_COARSE_LEVEL; ++lv)
+            {
+                int grid_num = div_round_upper(node_num, 128);
+                build_neighbor_masks_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
+                    lv, coarse_space_map, row_ptr, cols, neighbors);
+
+                grid_num = div_round_upper(cco_num, 128);
+                build_local_cco_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
+                    lv, cco_num, neighbors, coarse_space_map, cco_num_per_bank, local_cco_ids);
+
+                int bank_num = div_round_upper(cco_num, 32);
+                cub::DeviceScan::InclusiveSum(cub_tmp.data(),
+                                              cub_tmp_size,
+                                              cco_num_per_bank.data(),
+                                              cco_num_per_bank_summed.data(),
+                                              bank_num,
+                                              rt.stream.get());
+                build_global_cco_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
+                    lv, local_cco_ids, cco_num_per_bank, cco_num_per_bank_summed, coarse_space_map);
+
+                cco_num = device2host(cco_num_per_bank_summed.data() + bank_num - 1, rt);
+            }
+
+            // This is redundant. It's placed here because of readability.
+            rt.stream.sync();
+            return coarse_space_map;
         }
 
         //     template <int D>
@@ -704,12 +873,12 @@ namespace polysolve::linear::mas
         //     cu::copy_bytes(rt.stream, slot_to_fine, slot_to_fine_);
         //
         //     int fine_num = A.view().dim;
-        //     fine_ancestors_ = cu::make_buffer<int>(rt.stream, rt.mr, fine_num * MAX_LEVEL, cu::no_init);
+        //     fine_ancestors_ = cu::make_buffer<int>(rt.stream, rt.mr, fine_num * MAX_COARSEN_LEVEL, cu::no_init);
         //     cu::fill_bytes(rt.stream, *fine_ancestors_, ctd::uint8_t{0xff});
 
-        // int fine_grid = compute_grid_num(fine_node_count_, KERNEL_BLOCK_SIZE);
+        // int fine_grid = div_round_upper(fine_node_count_, KERNEL_BLOCK_SIZE);
         // store_level0_mapping_kernel<<<fine_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
-        //     fine_to_slot_->data(), fine_ancestors_->data(), MAX_LEVEL, fine_node_count_);
+        //     fine_to_slot_->data(), fine_ancestors_->data(), MAX_COARSEN_LEVEL, fine_node_count_);
         //
         // connect_masks_ =
         //     cu::make_buffer<uint32_t>(rt.stream, rt.mr, level0_padded_count, cu::no_init);
@@ -739,7 +908,7 @@ namespace polysolve::linear::mas
         // int current_node_count = level0_padded_count;
         // int current_bank_count = lv0_bank_num;
         // int current_level = 0;
-        //     while (current_level + 1 < MAX_LEVEL && current_node_count > 1)
+        //     while (current_level + 1 < MAX_COARSEN_LEVEL && current_node_count > 1)
         //     {
         //         cudaMemsetAsync(
         //             connect_masks_->data(),
@@ -750,7 +919,7 @@ namespace polysolve::linear::mas
         //         build_local_connectivity_kernel<<<fine_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
         //             topology,
         //             fine_ancestors_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             current_level,
         //             connect_masks_->data());
         //
@@ -785,7 +954,7 @@ namespace polysolve::linear::mas
         //             current_to_next_->data());
         //         compose_fine_ancestors_kernel<<<fine_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
         //             fine_ancestors_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             current_level,
         //             current_to_next_->data(),
         //             fine_node_count_);
@@ -846,11 +1015,11 @@ namespace polysolve::linear::mas
         //         local_matrices_->size() * sizeof(double),
         //         rt.stream.get());
         //
-        //     int matrix_grid = compute_grid_num(matrix.non_zeros, KERNEL_BLOCK_SIZE);
+        //     int matrix_grid = div_round_upper(matrix.non_zeros, KERNEL_BLOCK_SIZE);
         //     for (int current_level = 0; current_level < level_count_; ++current_level)
         //     {
         //         auto &level = levels_[current_level];
-        //         int init_grid = compute_grid_num(level.padded_count, KERNEL_BLOCK_SIZE);
+        //         int init_grid = div_round_upper(level.padded_count, KERNEL_BLOCK_SIZE);
         //         switch (block_dim_)
         //         {
         //         case 1:
@@ -915,7 +1084,7 @@ namespace polysolve::linear::mas
         //         assemble_all_levels_matrices_kernel<1><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
         //             matrix,
         //             fine_ancestors_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             level_matrix_offsets_device_->data(),
         //             local_matrices_->data());
@@ -924,7 +1093,7 @@ namespace polysolve::linear::mas
         //         assemble_all_levels_matrices_kernel<2><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
         //             matrix,
         //             fine_ancestors_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             level_matrix_offsets_device_->data(),
         //             local_matrices_->data());
@@ -933,7 +1102,7 @@ namespace polysolve::linear::mas
         //         assemble_all_levels_matrices_kernel<3><<<matrix_grid, KERNEL_BLOCK_SIZE, 0, rt.stream.get()>>>(
         //             matrix,
         //             fine_ancestors_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             level_matrix_offsets_device_->data(),
         //             local_matrices_->data());
@@ -986,7 +1155,7 @@ namespace polysolve::linear::mas
         //     cudaMemsetAsync(
         //         multi_level_r_->data(), 0, multi_level_r_->size() * sizeof(double), rt.stream.get());
         //
-        //     int fine_grid = compute_grid_num(fine_node_count_, KERNEL_BLOCK_SIZE);
+        //     int fine_grid = div_round_upper(fine_node_count_, KERNEL_BLOCK_SIZE);
         //     switch (block_dim_)
         //     {
         //     case 1:
@@ -995,7 +1164,7 @@ namespace polysolve::linear::mas
         //             multi_level_r_->data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;
@@ -1005,7 +1174,7 @@ namespace polysolve::linear::mas
         //             multi_level_r_->data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;
@@ -1015,7 +1184,7 @@ namespace polysolve::linear::mas
         //             multi_level_r_->data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;
@@ -1069,7 +1238,7 @@ namespace polysolve::linear::mas
         //             z.data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;
@@ -1079,7 +1248,7 @@ namespace polysolve::linear::mas
         //             z.data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;
@@ -1089,7 +1258,7 @@ namespace polysolve::linear::mas
         //             z.data(),
         //             fine_ancestors_->data(),
         //             level_node_offsets_device_->data(),
-        //             MAX_LEVEL,
+        //             MAX_COARSEN_LEVEL,
         //             level_count_,
         //             fine_node_count_);
         //         break;

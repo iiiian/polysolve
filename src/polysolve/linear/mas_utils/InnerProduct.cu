@@ -42,7 +42,7 @@ namespace polysolve::linear::mas
         assert(out.size() == 1);
 
         cu::fill_bytes(rt.stream, out, 0);
-        int grid_num = compute_grid_num(a.size(), 128);
+        int grid_num = div_round_upper(a.size(), 128);
         inner_product_kernel<<<grid_num, 128, 0, rt.stream.get()>>>(a, b, out.data());
     }
 } // namespace polysolve::linear::mas

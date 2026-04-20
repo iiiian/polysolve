@@ -4,6 +4,7 @@
 
 #include <cuda/std/span>
 #include <vector>
+#include <iostream>
 
 #define IDXTYPEWIDTH 32
 #define REALTYPEWIDTH 32
@@ -39,7 +40,8 @@ namespace polysolve::linear::mas
                                   ? nullptr
                                   : reinterpret_cast<const idx_t *>(weights.data());
 
-        for (int slack = 0; slack < max_part_size; ++slack)
+        // slack starts at one because 0 usually fail anyway.
+        for (int slack = 1; slack < max_part_size; ++slack)
         {
             // Eq 7. from stiffgipc paper.
             int ideal_part_size = max_part_size - slack;

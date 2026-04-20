@@ -3,9 +3,7 @@
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/Types.hpp>
 
-#include <cuda/buffer>
 #include <cuda/std/span>
-#include <cusparse.h>
 
 #include <vector>
 
@@ -33,8 +31,13 @@ namespace polysolve::linear::mas
     public:
         BSRMatrix() = default;
 
-        /// @brief Build from host CSR matrix. Sync stream before return.
-        BSRMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt);
+        /// @brief Build from host CSR matrix. Empty permutation implies identity.
+        /// Sync stream before return.
+        BSRMatrix(
+            const StiffnessMatrix &A,
+            int block_dim,
+            ctd::span<const int> permutation,
+            CudaRuntime rt);
 
         BSRView view() const
         {

@@ -14,12 +14,14 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
-#include <polysolve/linear/mas_utils/BCOOMatrix.hpp>
+#include <polysolve/linear/mas_utils/BSRMatrix.hpp>
+#include <polysolve/linear/mas_utils/CuSparseWrapper.hpp>
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
-#include <polysolve/linear/mas_utils/Spmv.hpp>
+#include <polysolve/linear/mas_utils/MetisPartition.hpp>
 
 namespace polysolve::linear
 {
@@ -56,6 +58,51 @@ namespace polysolve::linear
             };
             cub::DeviceFor::Bulk(x.size(), op, rt.stream.get());
         }
+
+        std::vector<int> build_permutation(std::vector<int> const &part_id, int part_num)
+        {
+            std::vector<int> offsets(part_num + 1, 0);
+            for (int old_id = 0; old_id < part_id.size(); ++old_id)
+            {
+                offsets[part_id[old_id] + 1] += 1;
+            }
+            for (int part = 0; part < part_num; ++part)
+            {
+                offsets[part + 1] += offsets[part];
+            }
+
+            std::vector<int> next = offsets;
+            std::vector<int> permutation(part_id.size(), 0);
+            for (int old_id = 0; old_id < part_id.size(); ++old_id)
+            {
+                int part = part_id[old_id];
+                permutation[old_id] = next[part];
+                next[part] += 1;
+            }
+            return permutation;
+        }
+
+        __global__ void permute_vector_kernel(
+            ctd::span<const double> input,
+            ctd::span<double> output,
+            ctd::span<const int> block_map,
+            int scalar_dim,
+            int block_dim)
+        {
+            int block_id = blockDim.x * blockIdx.x + threadIdx.x;
+            if (block_id >= block_map.size())
+            {
+                return;
+            }
+
+            int mapped = block_map[block_id];
+            for (int i = 0; i < block_dim; ++i)
+            {
+                int in_idx = mapped * block_dim + i;
+                int out_idx = block_id * block_dim + i;
+                output[out_idx] = in_idx < scalar_dim ? input[in_idx] : 0.0;
+            }
+        }
     } // namespace
 
     class CudaPCG::CudaPCGImpl
@@ -67,9 +114,10 @@ namespace polysolve::linear
         double abs_tol_ = 1e-20;
         double rel_tol_ = 1e-6;
         bool use_preconditioned_residual_norm_ = true;
+        int partition_size_ = 32;
 
         int dim_ = 0;
-        int padded_dim_ = 0;
+        int permuted_dim_ = 0;
         int iterations_ = 0;
         double residual_norm_ = 0.0;
         CudaPCGStatus status_ = CudaPCGStatus::Running;
@@ -80,9 +128,16 @@ namespace polysolve::linear
         ctd::optional<cu::device_ref> default_device_;
         ctd::optional<cu::stream> default_stream_;
         ctd::optional<cu::device_memory_pool> default_mem_pool_;
+        CuSparseHandle cusparse_handle_;
 
         BSRMatrix A_;
         MASPreconditioner mas_precond_;
+        std::vector<int> permutation_;
+        std::vector<int> inv_permutation_;
+        CuSparseBSR sparse_A_;
+        Buf<int> d_permutation_;
+        Buf<int> d_inv_permutation_;
+        Buf<char> spmv_workspace_;
         Buf<double> x_;
         Buf<double> b_;
         Buf<double> r_;
@@ -135,22 +190,111 @@ namespace polysolve::linear
 
         void analyze_pattern(const StiffnessMatrix &, const int) {}
 
+        void build_solver_permutation(TopologyView topo)
+        {
+            int part_num = 0;
+            std::vector<int> part_id;
+            metis_partition(topo.row_ptr, topo.cols, partition_size_, part_num, part_id);
+
+            permutation_ = build_permutation(part_id, part_num);
+            inv_permutation_.assign(permutation_.size(), 0);
+            for (int old_id = 0; old_id < permutation_.size(); ++old_id)
+            {
+                inv_permutation_[permutation_[old_id]] = old_id;
+            }
+        }
+
+        void setup_cusparse(CudaRuntime rt)
+        {
+            sparse_A_ = CuSparseBSR(A_.view());
+
+            double alpha = 1.0;
+            double beta = 0.0;
+            CuSparseConstVec x_desc(*x_);
+            CuSparseVec y_desc(*Ap_);
+            size_t workspace_size = 0;
+
+            cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
+            cusparseSpMV_bufferSize(
+                    cusparse_handle_.raw,
+                    CUSPARSE_OPERATION_NON_TRANSPOSE,
+                    &alpha,
+                    sparse_A_.raw,
+                    x_desc.raw,
+                    &beta,
+                    y_desc.raw,
+                    CUDA_R_64F,
+                    CUSPARSE_SPMV_ALG_DEFAULT,
+                    &workspace_size);
+
+            spmv_workspace_ = cu::make_buffer<char>(
+                rt.stream,
+                rt.mr,
+                workspace_size == 0 ? 1 : workspace_size,
+                cu::no_init);
+        }
+
+        void spmv(ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt)
+        {
+            double alpha = 1.0;
+            double beta = 0.0;
+            CuSparseConstVec x_desc(x);
+            CuSparseVec y_desc(y);
+
+            cusparseSetStream(cusparse_handle_.raw, rt.stream.get());
+            cusparseSpMV(
+                cusparse_handle_.raw,
+                CUSPARSE_OPERATION_NON_TRANSPOSE,
+                &alpha,
+                sparse_A_.raw,
+                x_desc.raw,
+                &beta,
+                y_desc.raw,
+                CUDA_R_64F,
+                CUSPARSE_SPMV_ALG_DEFAULT,
+                spmv_workspace_->data());
+        }
+
+        void permute_vector(
+            ctd::span<const double> input,
+            ctd::span<double> output,
+            ctd::span<const int> block_map,
+            CudaRuntime rt)
+        {
+            BSRView view = A_.view();
+            int grid_size = div_round_upper(view.dim, 128);
+            permute_vector_kernel<<<grid_size, 128, 0, rt.stream.get()>>>(
+                input, output, block_map, dim_, view.block_dim);
+        }
+
         void factorize(const StiffnessMatrix &A)
         {
             CudaRuntime rt{*default_stream_, default_mem_pool_->as_ref()};
-            A_ = BCOOMatrix{A, block_dim_, rt};
+            BSRMatrix topo_matrix{A, block_dim_, {}, rt};
+            build_solver_permutation(topo_matrix.host_topology_view());
+            A_ = BSRMatrix{
+                A,
+                block_dim_,
+                ctd::span<const int>(permutation_.data(), permutation_.size()),
+                rt};
 
             BSRView view = A_.view();
             dim_ = A.rows();
-            padded_dim_ = view.block_dim * view.dim;
+            permuted_dim_ = view.block_dim * view.dim;
             mas_precond_.factorize(A_, rt);
 
-            x_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
-            b_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
-            r_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
-            p_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
-            z_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
-            Ap_ = cu::make_buffer<double>(rt.stream, rt.mr, padded_dim_, cu::no_init);
+            d_permutation_ = cu::make_buffer<int>(rt.stream, rt.mr, permutation_.size(), cu::no_init);
+            d_inv_permutation_ =
+                cu::make_buffer<int>(rt.stream, rt.mr, inv_permutation_.size(), cu::no_init);
+            cu::copy_bytes(rt.stream, permutation_, *d_permutation_);
+            cu::copy_bytes(rt.stream, inv_permutation_, *d_inv_permutation_);
+
+            x_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            b_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            r_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            p_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            z_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            Ap_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
 
             scalar_rz_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             scalar_pAp_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
@@ -159,6 +303,7 @@ namespace polysolve::linear
             scalar_rz_old_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             scalar_rr_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
 
+            setup_cusparse(rt);
             rt.stream.sync();
         }
 
@@ -176,11 +321,10 @@ namespace polysolve::linear
             cu::copy_bytes(
                 rt.stream,
                 ctd::span<const double>(b.data(), dim_),
-                ctd::span<double>(b_->data(), dim_));
+                ctd::span<double>(r_->data(), dim_));
             cu::fill_bytes(
-                rt.stream,
-                ctd::span<double>(b_->data() + dim_, padded_dim_ - dim_),
-                0);
+                rt.stream, ctd::span<double>(r_->data() + dim_, permuted_dim_ - dim_), 0);
+            permute_vector(*r_, *b_, *d_inv_permutation_, rt);
 
             // The solver sometimes fails to converge if we use input x as initial value.
             // Maybe the caller does not initialize x properly?
@@ -189,9 +333,11 @@ namespace polysolve::linear
 
             pcg_solve(rt);
 
+            permute_vector(*x_, *r_, *d_permutation_, rt);
+
             cu::copy_bytes(
                 rt.stream,
-                ctd::span<const double>(x_->data(), dim_),
+                ctd::span<const double>(r_->data(), dim_),
                 ctd::span<double>(x.data(), dim_));
             rt.stream.sync();
         }
@@ -214,20 +360,20 @@ namespace polysolve::linear
                 return false;
             }
 
-            if (view.rows.size() != view.non_zeros
+            if (view.rows.size() != (view.dim + 1)
                 || view.cols.size() != view.non_zeros
-                || view.vals.size() != block_size * view.non_zeros
-                || view.diag_index.size() != view.dim)
+                || view.vals.size() != block_size * view.non_zeros)
             {
                 return false;
             }
 
-            if (x_->size() != padded_dim_
-                || b_->size() != padded_dim_
-                || r_->size() != padded_dim_
-                || p_->size() != padded_dim_
-                || z_->size() != padded_dim_
-                || Ap_->size() != padded_dim_)
+            if (!d_permutation_ || !d_inv_permutation_ || sparse_A_.raw == nullptr || !spmv_workspace_
+                || x_->size() != permuted_dim_
+                || b_->size() != permuted_dim_
+                || r_->size() != permuted_dim_
+                || p_->size() != permuted_dim_
+                || z_->size() != permuted_dim_
+                || Ap_->size() != permuted_dim_)
             {
                 return false;
             }
@@ -247,10 +393,8 @@ namespace polysolve::linear
 
         void pcg_solve(CudaRuntime rt)
         {
-            BSRView view = A_.view();
-
             // Compute initial residual r = b-Ax.
-            spmv(view, *x_, *r_, rt);
+            spmv(*x_, *r_, rt);
             axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
 
             // Compute z = M^-1 r.
@@ -277,7 +421,7 @@ namespace polysolve::linear
             for (int k = 1; k <= max_iter_; ++k)
             {
                 // Compute Ap = A p.
-                spmv(view, *p_, *Ap_, rt);
+                spmv(*p_, *Ap_, rt);
                 // Compute pAp = p^T * A * p.
                 inner_product(*p_, *Ap_, *scalar_pAp_, rt);
                 // Compute alpha = (r M^-1 r) / (p^T A p).
@@ -288,7 +432,7 @@ namespace polysolve::linear
                 // Compute residual b-Ax directly.
                 if (k % true_residual_period_ == 0)
                 {
-                    spmv(view, *x_, *r_, rt);
+                    spmv(*x_, *r_, rt);
                     axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
                 }
                 // Compute residual update using r' = r - alpha A p.

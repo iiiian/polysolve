@@ -43,16 +43,18 @@ namespace polysolve::linear::mas
 
             idx_t ncon = 1;
             idx_t objval = 0;
-            part_id.resize(part_num, 0);
+            idx_t nvtxs = node_num;
+            idx_t nparts = part_num;
+            part_id.resize(node_num, 0);
             int ret = METIS_PartGraphKway(
-                reinterpret_cast<idx_t *>(node_num),
+                &nvtxs,
                 &ncon,                       // balancing constraint num (none)
                 const_cast<idx_t *>(xadj),   // adjacency in CSR format
                 const_cast<idx_t *>(adjncy), // adjacency in CSR format
                 nullptr,                     // vertex weight (none)
                 nullptr,                     // for communication volume (not used)
                 nullptr,                     // edge weight (none)
-                reinterpret_cast<idx_t *>(part_num),
+                &nparts,
                 nullptr,                                  // target partition weight (none)
                 nullptr,                                  // load imbalance tol (none)
                 nullptr,                                  // options (none)

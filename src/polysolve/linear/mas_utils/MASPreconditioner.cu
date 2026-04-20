@@ -1,5 +1,7 @@
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
 
+#if 0
+
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/linear/mas_utils/MetisPartition.hpp>
 #include <polysolve/linear/mas_utils/BSRMatrix.hpp>
@@ -525,4 +527,38 @@ namespace polysolve::linear::mas
         }
     } // namespace
 
+} // namespace polysolve::linear::mas
+
+#endif
+
+namespace polysolve::linear::mas
+{
+    void MASPreconditioner::factorize(const BSRMatrix &A, CudaRuntime)
+    {
+        BSRView view = A.view();
+        vector_size_ = view.dim * view.block_dim;
+        initialized_ = true;
+    }
+
+    void MASPreconditioner::apply(
+        ctd::span<const double> r,
+        ctd::span<double> z,
+        CudaRuntime rt)
+    {
+        if (!initialized_)
+        {
+            throw std::runtime_error("[CudaPCG] MASPreconditioner is not initialized.");
+        }
+        if (r.size() != z.size() || r.size() != vector_size_)
+        {
+            throw std::runtime_error("[CudaPCG] Invalid vector size for MAS preconditioner.");
+        }
+
+        cudaMemcpyAsync(
+            z.data(),
+            r.data(),
+            r.size() * sizeof(double),
+            cudaMemcpyDeviceToDevice,
+            rt.stream.get());
+    }
 } // namespace polysolve::linear::mas

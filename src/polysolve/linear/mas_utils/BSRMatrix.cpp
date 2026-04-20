@@ -65,8 +65,11 @@ namespace std
 
 namespace polysolve::linear::mas
 {
-
-    BSRMatrix::BSRMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt)
+    BSRMatrix::BSRMatrix(
+        const StiffnessMatrix &A,
+        int block_dim,
+        ctd::span<const int> permutation,
+        CudaRuntime rt)
     {
         if (A.cols() != A.rows() || A.cols() == 0 || A.rows() == 0 || A.nonZeros() == 0)
         {
@@ -91,15 +94,30 @@ namespace polysolve::linear::mas
             for (Iter it(A, k); it; ++it)
             {
                 // Block index (bi, bj).
-                int bi = it.row() / block_dim_;
-                int bj = it.col() / block_dim_;
+                int old_bi = it.row() / block_dim_;
+                int old_bj = it.col() / block_dim_;
+                int bi = permutation.empty() ? old_bi : permutation[old_bi];
+                int bj = permutation.empty() ? old_bj : permutation[old_bj];
                 // Block local index (li, lj).
-                int li = it.row() - block_dim_ * bi;
-                int lj = it.col() - block_dim_ * bj;
+                int li = it.row() - block_dim_ * old_bi;
+                int lj = it.col() - block_dim_ * old_bj;
 
                 auto key = IndexKey(bi, bj);
                 auto block_iter = block_map.try_emplace(key, Block::Zero(block_dim_, block_dim_)).first;
                 block_iter->second(li, lj) = it.value();
+            }
+        }
+
+        int padded = block_dim_ * dim_ - A.rows();
+        if (padded > 0)
+        {
+            int old_tail_block = dim_ - 1;
+            int tail_block = permutation.empty() ? old_tail_block : permutation[old_tail_block];
+            auto key = IndexKey(tail_block, tail_block);
+            auto block_iter = block_map.try_emplace(key, Block::Zero(block_dim_, block_dim_)).first;
+            for (int i = block_dim_ - padded; i < block_dim_; ++i)
+            {
+                block_iter->second(i, i) = 1.0;
             }
         }
 
@@ -118,7 +136,8 @@ namespace polysolve::linear::mas
         non_zeros_ = h_blocks.size();
         int block_size = block_dim_ * block_dim_;
         std::vector<int> h_rows(dim_ + 1, 0);
-        std::vector<int> h_cols(non_zeros_);
+        std::vector<int> h_cols;
+        h_cols.reserve(non_zeros_);
         std::vector<double> h_vals(block_size * non_zeros_);
         h_topo_rows_.resize(dim_ + 1, 0);
 
@@ -143,22 +162,6 @@ namespace polysolve::linear::mas
         {
             h_rows[i + 1] += h_rows[i];
             h_topo_rows_[i + 1] += h_topo_rows_[i];
-        }
-
-        // Pad trailing block.
-        auto [ei, ej] = h_blocks.back().second.get_index();
-        if (ei == (dim_ - 1) && ej == (dim_ - 1))
-        {
-            int padded = block_dim_ * dim_ - A.rows();
-            if (padded > 0)
-            {
-                double *start = h_vals.data() + block_dim_ * block_dim_ * (non_zeros_ - 1);
-                for (int i = block_dim_ - padded; i < block_dim_; ++i)
-                {
-                    int diag_offset = block_dim_ * i + i;
-                    start[diag_offset] = 1.0;
-                }
-            }
         }
 
         // Copy host BSR data to device.

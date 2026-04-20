@@ -1,9 +1,8 @@
 set(mas_test_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/../main.cpp
-    test_bcoo_matrix.cpp
+    test_bsr_matrix.cpp
     test_inner_product.cpp
     test_inverse.cpp
-    test_spmv.cpp
 )
 
 add_executable(mas_utils_test ${mas_test_sources})

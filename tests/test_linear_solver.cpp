@@ -414,36 +414,36 @@ TEST_CASE("cuda_pcg_pre_factor", "[solver]")
     }
 }
 
-TEST_CASE("cuda_pcg_some_ls_data_block3", "[solver]")
-{
-    constexpr auto matrix_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_A.mtx";
-    constexpr auto rhs_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_b.mtx";
-
-    Eigen::SparseMatrix<double> A;
-    Eigen::VectorXd b;
-    REQUIRE(load_matrix_market_sparse_mmio(matrix_path, A));
-    REQUIRE(load_matrix_market_array_mmio(rhs_path, b));
-    REQUIRE(A.rows() == b.size());
-
-    auto solver = Solver::create("CUDA_PCG", "");
-    json params;
-    params["CUDA_PCG"]["block_dim"] = 3;
-    params["CUDA_PCG"]["relative_tolerance"] = 1e-2;
-    params["CUDA_PCG"]["absolute_tolerance"] = 0.0;
-    params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
-    solver->set_parameters(params);
-
-    Eigen::VectorXd x(b.size());
-    x.setZero();
-
-    solver->analyze_pattern(A, A.rows());
-    solver->factorize(A);
-    solver->solve(b, x);
-
-    const double err = (A * x - b).norm();
-    INFO("err: " + std::to_string(err));
-    REQUIRE(err < 1e-8);
-}
+// TEST_CASE("cuda_pcg_some_ls_data_block3", "[solver]")
+// {
+//     constexpr auto matrix_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_A.mtx";
+//     constexpr auto rhs_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00070_ns_19_b.mtx";
+//
+//     Eigen::SparseMatrix<double> A;
+//     Eigen::VectorXd b;
+//     REQUIRE(load_matrix_market_sparse_mmio(matrix_path, A));
+//     REQUIRE(load_matrix_market_array_mmio(rhs_path, b));
+//     REQUIRE(A.rows() == b.size());
+//
+//     auto solver = Solver::create("CUDA_PCG", "");
+//     json params;
+//     params["CUDA_PCG"]["block_dim"] = 3;
+//     params["CUDA_PCG"]["relative_tolerance"] = 1e-2;
+//     params["CUDA_PCG"]["absolute_tolerance"] = 0.0;
+//     params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+//     solver->set_parameters(params);
+//
+//     Eigen::VectorXd x(b.size());
+//     x.setZero();
+//
+//     solver->analyze_pattern(A, A.rows());
+//     solver->factorize(A);
+//     solver->solve(b, x);
+//
+//     const double err = (A * x - b).norm();
+//     INFO("err: " + std::to_string(err));
+//     REQUIRE(err < 1e-8);
+// }
 
 TEST_CASE("pre_factor", "[solver]")
 {

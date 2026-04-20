@@ -525,6 +525,154 @@ namespace polysolve::linear::mas
             }
         }
 
+        __global__ void gather_multi_level_r(
+            ctd::span<const double> r,
+            ctd::span<double> multi_level_r,
+            ctd::span<const int> real_to_padded,
+            ctd::span<const int> coarse_space_map,
+            ctd::span<const int> level_offsets,
+            int block_dim)
+        {
+            int real_id = blockDim.x * blockIdx.x + threadIdx.x;
+            if (real_id >= real_to_padded.size())
+            {
+                return;
+            }
+
+            int padded_id = real_to_padded[real_id];
+            for (int lv = 0; lv < MAX_COARSE_LEVEL; ++lv)
+            {
+                int cco_id = coarse_space_map[padded_id * MAX_COARSE_LEVEL + lv];
+                int dst_root = (level_offsets[lv] + cco_id) * block_dim;
+                int src_root = real_id * block_dim;
+                for (int comp = 0; comp < block_dim; ++comp)
+                {
+                    atomicAdd(multi_level_r.data() + dst_root + comp, r[src_root + comp]);
+                }
+            }
+        }
+
+        template <int N, int BLOCK>
+        __global__ void symv_upper_packed(const double *__restrict__ A_upper,
+                                          const double *__restrict__ x,
+                                          double *__restrict__ y,
+                                          int num_mats)
+        {
+            int mat = blockIdx.x;
+            if (mat >= num_mats)
+            {
+                return;
+            }
+
+            int row = threadIdx.x;
+            constexpr int L = N * (N + 1) / 2;
+            const double *Amat = A_upper + static_cast<size_t>(mat) * L;
+
+            __shared__ double sx[N];
+            __shared__ double sA[L];
+
+            for (int i = threadIdx.x; i < N; i += BLOCK)
+            {
+                sx[i] = x[static_cast<size_t>(mat) * N + i];
+            }
+            for (int k = threadIdx.x; k < L; k += BLOCK)
+            {
+                sA[k] = Amat[k];
+            }
+
+            __syncthreads();
+
+            if (row >= N)
+            {
+                return;
+            }
+
+            double sum = 0.0;
+            for (int col = 0; col < N; ++col)
+            {
+                int r = row <= col ? row : col;
+                int c = row <= col ? col : row;
+                sum += sA[index_upper_mat(N, r, c)] * sx[col];
+            }
+
+            y[static_cast<size_t>(mat) * N + row] = sum;
+        }
+
+        void apply_packed_matrices(const CoarseMatrices &mats,
+                                   ctd::span<const double> x,
+                                   ctd::span<double> y,
+                                   int block_dim,
+                                   CudaRuntime rt)
+        {
+            int mat_num = mats.total_matrix_num;
+            if (mat_num == 0)
+            {
+                return;
+            }
+
+            if (block_dim == 1)
+            {
+                symv_upper_packed<32, 32><<<mat_num, 32, 0, rt.stream.get()>>>(
+                    mats.data->data(),
+                    x.data(),
+                    y.data(),
+                    mat_num);
+                return;
+            }
+            if (block_dim == 2)
+            {
+                symv_upper_packed<64, 64><<<mat_num, 64, 0, rt.stream.get()>>>(
+                    mats.data->data(),
+                    x.data(),
+                    y.data(),
+                    mat_num);
+                return;
+            }
+            if (block_dim == 3)
+            {
+                symv_upper_packed<96, 96><<<mat_num, 96, 0, rt.stream.get()>>>(
+                    mats.data->data(),
+                    x.data(),
+                    y.data(),
+                    mat_num);
+                return;
+            }
+
+            throw std::runtime_error("[CudaPCG] MAS only supports block size 1, 2, or 3.");
+        }
+
+        __global__ void collect_multi_level_z(
+            ctd::span<const double> multi_level_z,
+            ctd::span<double> z,
+            ctd::span<const int> real_to_padded,
+            ctd::span<const int> coarse_space_map,
+            ctd::span<const int> level_offsets,
+            int block_dim)
+        {
+            int real_id = blockDim.x * blockIdx.x + threadIdx.x;
+            if (real_id >= real_to_padded.size())
+            {
+                return;
+            }
+
+            int padded_id = real_to_padded[real_id];
+            int dst_root = real_id * block_dim;
+            for (int comp = 0; comp < block_dim; ++comp)
+            {
+                z[dst_root + comp] = 0.0;
+            }
+
+            for (int lv = 0; lv < MAX_COARSE_LEVEL; ++lv)
+            {
+                int cco_id = coarse_space_map[padded_id * MAX_COARSE_LEVEL + lv];
+                int src_root = (level_offsets[lv] + cco_id) * block_dim;
+                for (int comp = 0; comp < block_dim; ++comp)
+                {
+                    z[dst_root + comp] += multi_level_z[src_root + comp];
+                }
+            }
+        }
+
         __global__ void pad_zero_diagonal(double *mats, int mat_num, int mat_dim, int mat_storage_size)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -769,6 +917,19 @@ namespace polysolve::linear::mas
                 topo.real_to_padded.size()),
             rt);
 
+        workspace_.total_level_nodes = 0;
+        for (int i = 0; i < MAX_COARSE_LEVEL; ++i)
+        {
+            workspace_.level_offsets[i] = workspace_.total_level_nodes;
+            workspace_.level_sizes[i] = coarse_matrices_.matrix_counts[i] * BANK_SIZE;
+            workspace_.total_level_nodes += workspace_.level_sizes[i];
+        }
+        int total_level_scalars = std::max(workspace_.total_level_nodes * block_dim_, 1);
+        workspace_.multi_level_r =
+            cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
+        workspace_.multi_level_z =
+            cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
+
         initialized_ = true;
     }
 
@@ -785,12 +946,51 @@ namespace polysolve::linear::mas
         {
             throw std::runtime_error("[CudaPCG] Invalid vector size for MAS preconditioner.");
         }
+        if (!workspace_.multi_level_r || !workspace_.multi_level_z)
+        {
+            throw std::runtime_error("[CudaPCG] MAS workspace is not initialized.");
+        }
 
-        cudaMemcpyAsync(
-            z.data(),
-            r.data(),
-            r.size() * sizeof(double),
-            cudaMemcpyDeviceToDevice,
+        int total_level_scalars = workspace_.total_level_nodes * block_dim_;
+        cudaMemsetAsync(
+            workspace_.multi_level_r->data(),
+            0,
+            total_level_scalars * sizeof(double),
             rt.stream.get());
+        cudaMemsetAsync(
+            workspace_.multi_level_z->data(),
+            0,
+            total_level_scalars * sizeof(double),
+            rt.stream.get());
+
+        auto level_offsets =
+            ctd::span<const int>(workspace_.level_offsets.data(), MAX_COARSE_LEVEL);
+        int grid_num = div_round_upper(padded_topology_.node_num, 128);
+        gather_multi_level_r<<<grid_num, 128, 0, rt.stream.get()>>>(
+            r,
+            *workspace_.multi_level_r,
+            ctd::span<const int>(
+                padded_topology_.real_to_padded->data(),
+                padded_topology_.node_num),
+            *coarse_space_.map,
+            level_offsets,
+            block_dim_);
+
+        apply_packed_matrices(
+            coarse_matrices_,
+            ctd::span<const double>(workspace_.multi_level_r->data(), total_level_scalars),
+            ctd::span<double>(workspace_.multi_level_z->data(), total_level_scalars),
+            block_dim_,
+            rt);
+
+        collect_multi_level_z<<<grid_num, 128, 0, rt.stream.get()>>>(
+            ctd::span<const double>(workspace_.multi_level_z->data(), total_level_scalars),
+            z,
+            ctd::span<const int>(
+                padded_topology_.real_to_padded->data(),
+                padded_topology_.node_num),
+            *coarse_space_.map,
+            level_offsets,
+            block_dim_);
     }
 } // namespace polysolve::linear::mas

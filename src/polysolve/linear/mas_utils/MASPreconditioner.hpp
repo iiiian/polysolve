@@ -35,6 +35,15 @@ namespace polysolve::linear::mas
         int total_matrix_num = 0;
     };
 
+    struct MASWorkspace
+    {
+        Buf<double> multi_level_r;
+        Buf<double> multi_level_z;
+        std::array<int, MAS_MAX_COARSE_LEVEL> level_offsets{};
+        std::array<int, MAS_MAX_COARSE_LEVEL> level_sizes{};
+        int total_level_nodes = 0;
+    };
+
     class MASPreconditioner
     {
     public:
@@ -56,5 +65,6 @@ namespace polysolve::linear::mas
         PaddedTopology padded_topology_;
         CoarseSpace coarse_space_;
         CoarseMatrices coarse_matrices_;
+        MASWorkspace workspace_;
     };
 } // namespace polysolve::linear::mas

@@ -92,7 +92,8 @@ namespace polysolve::linear
             ctd::span<const double> input,
             ctd::span<double> output,
             ctd::span<const int> block_map,
-            int scalar_dim,
+            int source_tail_block,
+            int tail_scalar_num,
             int block_dim)
         {
             int block_id = blockDim.x * blockIdx.x + threadIdx.x;
@@ -102,11 +103,16 @@ namespace polysolve::linear
             }
 
             int mapped = block_map[block_id];
+            int valid_scalar_num = block_dim;
+            if (tail_scalar_num < block_dim && mapped == source_tail_block)
+            {
+                valid_scalar_num = tail_scalar_num;
+            }
             for (int i = 0; i < block_dim; ++i)
             {
                 int in_idx = mapped * block_dim + i;
                 int out_idx = block_id * block_dim + i;
-                output[out_idx] = in_idx < scalar_dim ? input[in_idx] : 0.0;
+                output[out_idx] = i < valid_scalar_num ? input[in_idx] : 0.0;
             }
         }
     } // namespace
@@ -267,12 +273,14 @@ namespace polysolve::linear
             ctd::span<const double> input,
             ctd::span<double> output,
             ctd::span<const int> block_map,
+            int source_tail_block,
             CudaRuntime rt)
         {
             BSRView view = A_.view();
+            int tail_scalar_num = dim_ - (view.dim - 1) * view.block_dim;
             int grid_size = div_round_upper(view.dim, 128);
             permute_vector_kernel<<<grid_size, 128, 0, rt.stream.get()>>>(
-                input, output, block_map, dim_, view.block_dim);
+                input, output, block_map, source_tail_block, tail_scalar_num, view.block_dim);
         }
 
         void factorize(const StiffnessMatrix &A)
@@ -335,7 +343,7 @@ namespace polysolve::linear
                 ctd::span<double>(r_->data(), dim_));
             cu::fill_bytes(
                 rt.stream, ctd::span<double>(r_->data() + dim_, permuted_dim_ - dim_), 0);
-            permute_vector(*r_, *b_, *d_inv_permutation_, rt);
+            permute_vector(*r_, *b_, *d_inv_permutation_, A_.view().dim - 1, rt);
 
             // The solver sometimes fails to converge if we use input x as initial value.
             // Maybe the caller does not initialize x properly?
@@ -344,7 +352,7 @@ namespace polysolve::linear
 
             pcg_solve(rt);
 
-            permute_vector(*x_, *r_, *d_permutation_, rt);
+            permute_vector(*x_, *r_, *d_permutation_, permutation_[A_.view().dim - 1], rt);
 
             cu::copy_bytes(
                 rt.stream,

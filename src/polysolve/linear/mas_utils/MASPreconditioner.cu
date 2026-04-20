@@ -1,4 +1,5 @@
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
+#include <polysolve/linear/mas_utils/MASPreconditionerTest.cuh>
 
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
@@ -1049,5 +1050,35 @@ namespace polysolve::linear::mas
             level_offsets,
             block_dim_,
             coarse_space_.level_num);
+    }
+
+    void invert_packed_matrices_for_test(ctd::span<double> mats, int block_dim, CudaRuntime rt)
+    {
+        int mat_dim = BANK_SIZE * block_dim;
+        int mat_storage_size = mat_dim * (mat_dim + 1) / 2;
+        int mat_num = mats.size() / mat_storage_size;
+        invert_packed_matrices(mats.data(), mat_num, block_dim, rt);
+    }
+
+    void apply_packed_matrices_for_test(
+        ctd::span<const double> mats,
+        ctd::span<const double> x,
+        ctd::span<double> y,
+        int block_dim,
+        CudaRuntime rt)
+    {
+        CoarseMatrices coarse_mats;
+        coarse_mats.data = cu::make_buffer<double>(rt.stream, rt.mr, mats.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, mats, *coarse_mats.data);
+        coarse_mats.total_matrix_num = 0;
+
+        int mat_dim = BANK_SIZE * block_dim;
+        int mat_storage_size = mat_dim * (mat_dim + 1) / 2;
+        if (mat_storage_size > 0)
+        {
+            coarse_mats.total_matrix_num = mats.size() / mat_storage_size;
+        }
+
+        apply_packed_matrices(coarse_mats, x, y, block_dim, rt);
     }
 } // namespace polysolve::linear::mas

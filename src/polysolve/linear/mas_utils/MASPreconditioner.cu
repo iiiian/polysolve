@@ -614,27 +614,27 @@ namespace polysolve::linear::mas
         }
 
         template <int N, int BLOCK>
-        __global__ void symv_upper_packed(const double *__restrict__ A_upper,
-                                          const double *__restrict__ x,
-                                          double *__restrict__ y,
+        __global__ void symv_upper_packed(const double *A_upper,
+                                          const double *x,
+                                          double *y,
                                           int num_mats)
         {
-            int mat = blockIdx.x;
-            if (mat >= num_mats)
+            int mat_id = blockIdx.x;
+            if (mat_id >= num_mats)
             {
                 return;
             }
 
             int row = threadIdx.x;
             constexpr int L = N * (N + 1) / 2;
-            const double *Amat = A_upper + static_cast<size_t>(mat) * L;
+            const double *Amat = A_upper + static_cast<size_t>(mat_id) * L;
 
             __shared__ double sx[N];
             __shared__ double sA[L];
 
             for (int i = threadIdx.x; i < N; i += BLOCK)
             {
-                sx[i] = x[static_cast<size_t>(mat) * N + i];
+                sx[i] = x[static_cast<size_t>(mat_id) * N + i];
             }
             for (int k = threadIdx.x; k < L; k += BLOCK)
             {
@@ -656,7 +656,7 @@ namespace polysolve::linear::mas
                 sum += sA[index_upper_mat(N, r, c)] * sx[col];
             }
 
-            y[static_cast<size_t>(mat) * N + row] = sum;
+            y[mat_id * N + row] = sum;
         }
 
         void apply_packed_matrices(const CoarseMatrices &mats,

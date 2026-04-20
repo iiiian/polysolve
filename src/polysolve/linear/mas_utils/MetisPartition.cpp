@@ -15,12 +15,14 @@ namespace polysolve::linear::mas
 {
     void metis_partition(ctd::span<const int> row_ptr,
                          ctd::span<const int> cols,
+                         ctd::span<const int> weights,
                          int max_part_size,
                          int &part_num,
                          std::vector<int> &part_id)
     {
         int node_num = row_ptr.size() - 1;
         assert(node_num >= 0);
+        assert(weights.empty() || weights.size() == cols.size());
 
         part_id.resize(node_num, 0);
         if (node_num <= max_part_size)
@@ -33,6 +35,9 @@ namespace polysolve::linear::mas
         static_assert(sizeof(int) == 4, "int is not 32 bits");
         const idx_t *xadj = reinterpret_cast<const idx_t *>(row_ptr.data());
         const idx_t *adjncy = reinterpret_cast<const idx_t *>(cols.data());
+        const idx_t *adjwgt = weights.empty()
+                                  ? nullptr
+                                  : reinterpret_cast<const idx_t *>(weights.data());
 
         for (int slack = 0; slack < max_part_size; ++slack)
         {
@@ -53,7 +58,7 @@ namespace polysolve::linear::mas
                 const_cast<idx_t *>(adjncy), // adjacency in CSR format
                 nullptr,                     // vertex weight (none)
                 nullptr,                     // for communication volume (not used)
-                nullptr,                     // edge weight (none)
+                const_cast<idx_t *>(adjwgt), // edge weight
                 &nparts,
                 nullptr,                                  // target partition weight (none)
                 nullptr,                                  // load imbalance tol (none)

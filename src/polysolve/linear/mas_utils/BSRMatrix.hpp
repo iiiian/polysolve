@@ -24,6 +24,7 @@ namespace polysolve::linear::mas
     {
         ctd::span<const int> row_ptr;
         ctd::span<const int> cols;
+        ctd::span<const int> weights;
     };
 
     class BSRMatrix
@@ -49,6 +50,7 @@ namespace polysolve::linear::mas
             return TopologyView{
                 h_topo_rows_,
                 h_topo_cols_,
+                h_topo_weights_,
             };
         }
 
@@ -63,6 +65,7 @@ namespace polysolve::linear::mas
 
         std::vector<int> h_topo_rows_;
         std::vector<int> h_topo_cols_;
+        std::vector<int> h_topo_weights_;
     };
 
 } // namespace polysolve::linear::mas

@@ -64,12 +64,10 @@ namespace polysolve::linear::mas
 
             HostPaddedTopology out;
             out.real_to_padded.assign(node_num, -1);
-            out.padded_to_real.assign(node_num, -1);
+            out.padded_to_real.assign(padded_offsets[part_num], -1);
             out.row_ptr.assign(padded_offsets[part_num] + 1, 0);
             out.node_num = node_num;
             out.padded_node_num = padded_offsets[part_num];
-
-            std::vector<int> padded_to_real(out.padded_node_num, -1);
 
             for (int part = 0; part < part_num; ++part)
             {
@@ -85,8 +83,7 @@ namespace polysolve::linear::mas
                     {
                         int real_id = part_begin + local_id;
                         out.real_to_padded[real_id] = padded_id;
-                        out.padded_to_real[real_id] = padded_id;
-                        padded_to_real[padded_id] = real_id;
+                        out.padded_to_real[padded_id] = real_id;
                         out.row_ptr[padded_id + 1] = topo.row_ptr[real_id + 1] - topo.row_ptr[real_id];
                     }
                 }
@@ -100,7 +97,7 @@ namespace polysolve::linear::mas
 
             for (int padded_id = 0; padded_id < out.padded_node_num; ++padded_id)
             {
-                int real_id = padded_to_real[padded_id];
+                int real_id = out.padded_to_real[padded_id];
                 if (real_id == -1)
                 {
                     continue;
@@ -148,10 +145,12 @@ namespace polysolve::linear::mas
         /// @brief Build local CCO mapping from input space -> coarse space lv 0 and collapse topology.
         /// @param row_ptr CSR graph topology (does not include self).
         /// @param cols CSR graph topology (does not include self).
+        /// @param padded_to_real Padded id -> real id. -1 denotes padding.
         /// @param cco_num_per_bank Independent CCO number per bank.
         /// @param local_cco_ids Bank local CCO id at coarse space lv 0.
         __global__ void build_local_cco_lv0(ctd::span<const int> row_ptr,
                                             ctd::span<int> cols,
+                                            ctd::span<const int> padded_to_real,
                                             ctd::span<int> cco_num_per_bank,
                                             ctd::span<int> local_cco_ids)
         {
@@ -173,9 +172,10 @@ namespace polysolve::linear::mas
             // Build neighbor mask (including self) and collapse topology.
             int row_begin = row_ptr[tid];
             int row_end = row_ptr[tid + 1];
-            uint32_t neighbor = (1u << lid);
+            bool valid = padded_to_real[tid] != -1;
+            uint32_t neighbor = valid ? (1u << lid) : 0u;
             int out_of_bank_neighbor_count = 0;
-            for (int n = row_begin; n < row_end; ++n)
+            for (int n = row_begin; valid && n < row_end; ++n)
             {
                 int neighbor_vid = cols[n];
                 int neighbor_bid = neighbor_vid / BANK_SIZE;
@@ -199,11 +199,16 @@ namespace polysolve::linear::mas
             neighbors[btid] = neighbor;
             __syncwarp();
 
+            if (!valid)
+            {
+                local_cco_ids[tid] = -1;
+            }
+
             // Build connectivity mask (including self).
             uint32_t connection = neighbor;
             uint32_t visited = (1u << lid);
             uint32_t to_visit = connection ^ visited;
-            while (to_visit)
+            while (valid && to_visit)
             {
                 int visiting = ctd::countr_zero(to_visit);
                 connection |= neighbors[visiting + wid * BANK_SIZE];
@@ -213,12 +218,15 @@ namespace polysolve::linear::mas
 
             // Find bank (warp) local connected component (CCO).
             uint32_t cco_lead_lid = ctd::countr_zero(connection);
-            bool is_lead = (cco_lead_lid == lid);
+            bool is_lead = valid && (cco_lead_lid == lid);
             uint32_t lead_lanes = __ballot_sync(0xFFFFFFFFu, is_lead);
             uint32_t before_cco_lead_mask = static_cast<uint32_t>((1ull << cco_lead_lid) - 1ull);
 
             // Write cco info back.
-            local_cco_ids[tid] = ctd::popcount(lead_lanes & before_cco_lead_mask);
+            if (valid)
+            {
+                local_cco_ids[tid] = ctd::popcount(lead_lanes & before_cco_lead_mask);
+            }
             if (lid == 0)
             {
                 cco_num_per_bank[bid] = ctd::popcount(lead_lanes);
@@ -235,6 +243,7 @@ namespace polysolve::linear::mas
                                                  ctd::span<const int> coarse_space_map,
                                                  ctd::span<const int> row_ptr,
                                                  ctd::span<int> cols,
+                                                 ctd::span<const int> padded_to_real,
                                                  ctd::span<uint32_t> neighbors)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x; // global thread id
@@ -247,6 +256,10 @@ namespace polysolve::linear::mas
             // Build neighbor mask (including self) and collapse topology.
             int row_begin = row_ptr[tid];
             int row_end = row_ptr[tid + 1];
+            if (padded_to_real[tid] == -1)
+            {
+                return;
+            }
             int cco_id = get_coarse_space_id(coarse_space_map, tid, level - 1);
             uint32_t neighbor = (1u << (cco_id % BANK_SIZE));
             int out_of_bank_neighbor_count = 0;
@@ -354,6 +367,12 @@ namespace polysolve::linear::mas
                 return;
             }
 
+            if (local_cco_ids[tid] == -1)
+            {
+                coarse_space_map[tid * MAX_COARSE_LEVEL] = -1;
+                return;
+            }
+
             int cco_id = local_cco_ids[tid] + cco_num_per_bank_summed[bid] - cco_num_per_bank[bid];
             coarse_space_map[tid * MAX_COARSE_LEVEL] = cco_id;
         }
@@ -374,6 +393,11 @@ namespace polysolve::linear::mas
             }
 
             int prev_cco_id = get_coarse_space_id(coarse_space_map, tid, level - 1);
+            if (prev_cco_id == -1)
+            {
+                coarse_space_map[tid * MAX_COARSE_LEVEL + level] = -1;
+                return;
+            }
             coarse_space_map[tid * MAX_COARSE_LEVEL + level] = global_cco_ids[prev_cco_id];
         }
 
@@ -384,9 +408,13 @@ namespace polysolve::linear::mas
         ///
         /// @param row_ptr CSR graph topology (does not include self).
         /// @param cols CSR graph topology (does not include self).
+        /// @param padded_to_real Padded id -> real id. -1 denotes padding.
         /// @rt Cuda runtime config.
         /// @warning Will modify cols as side effect!
-        CoarseSpace build_coarse_space(ctd::span<const int> row_ptr, ctd::span<int> cols, CudaRuntime rt)
+        CoarseSpace build_coarse_space(ctd::span<const int> row_ptr,
+                                       ctd::span<int> cols,
+                                       ctd::span<const int> padded_to_real,
+                                       CudaRuntime rt)
         {
             std::array<int, MAX_COARSE_LEVEL> cco_nums{};
 
@@ -406,7 +434,7 @@ namespace polysolve::linear::mas
             // Build coarse map level 0.
             int grid_num = div_round_upper(node_num, 128);
             build_local_cco_lv0<<<grid_num, 128, 0, rt.stream.get()>>>(
-                row_ptr, cols, cco_num_per_bank, local_cco_ids);
+                row_ptr, cols, padded_to_real, cco_num_per_bank, local_cco_ids);
 
             size_t cub_tmp_size = 0;
             cub::DeviceScan::InclusiveSum(nullptr,
@@ -439,7 +467,12 @@ namespace polysolve::linear::mas
 
                 grid_num = div_round_upper(node_num, 128);
                 build_neighbor_masks_lvx<<<grid_num, 128, 0, rt.stream.get()>>>(
-                    lv, coarse_space_map, row_ptr, cols, ctd::span<uint32_t>(neighbors.data(), cco_num));
+                    lv,
+                    coarse_space_map,
+                    row_ptr,
+                    cols,
+                    padded_to_real,
+                    ctd::span<uint32_t>(neighbors.data(), cco_num));
 
                 int bank_num = div_round_upper(cco_num, BANK_SIZE);
                 grid_num = div_round_upper(cco_num, 128);
@@ -573,6 +606,12 @@ namespace polysolve::linear::mas
                             }
 
                             double val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
+                            // When two different fine nodes collapse to the same coarse node,
+                            // the coarse diagonal block must receive both A_ij and A_ji = A_ij^T.
+                            if (tid != j && cco_i == cco_j)
+                            {
+                                val += mat_in.vals[block_offset + bj * mat_in.block_dim + bi];
+                            }
                             atomicAdd(mat + index_upper_mat(mat_out.mat_dim, row, col), val);
                         }
                     }
@@ -981,6 +1020,7 @@ namespace polysolve::linear::mas
         coarse_space_ = build_coarse_space(
             ctd::span<const int>(padded_topology_.rows->data(), topo.row_ptr.size()),
             ctd::span<int>(padded_topology_.cols->data(), topo.cols.size()),
+            ctd::span<const int>(padded_topology_.padded_to_real->data(), topo.padded_to_real.size()),
             rt);
         rt.stream.sync();
         SPDLOG_TRACE("CUDA_PCG MAS: build_coarse_space {:.6f}s", elapsed_seconds(phase_begin));

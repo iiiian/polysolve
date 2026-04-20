@@ -6,6 +6,7 @@
 #include <Eigen/SparseCore>
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <stdexcept>
@@ -140,6 +141,21 @@ namespace polysolve::linear::mas
         h_cols.reserve(non_zeros_);
         std::vector<double> h_vals(block_size * non_zeros_);
         h_topo_rows_.resize(dim_ + 1, 0);
+        double topo_strength_sum = 0.0;
+        int topo_edge_num = 0;
+
+        for (auto &[key, mat] : h_blocks)
+        {
+            auto [bi, bj] = key.get_index();
+            if (bi == bj)
+            {
+                continue;
+            }
+
+            topo_strength_sum += mat.norm();
+            topo_edge_num += 1;
+        }
+        double topo_strength_avg = topo_edge_num > 0 ? topo_strength_sum / topo_edge_num : 0.0;
 
         for (int idx = 0; idx < non_zeros_; ++idx)
         {
@@ -153,6 +169,14 @@ namespace polysolve::linear::mas
             {
                 h_topo_rows_[bi + 1] += 1;
                 h_topo_cols_.push_back(bj);
+
+                int weight = 1;
+                if (topo_strength_avg > 0.0)
+                {
+                    double scaled = mat.norm() / topo_strength_avg * 100.0;
+                    weight = std::clamp(int(std::lround(scaled)), 1, 1000000);
+                }
+                h_topo_weights_.push_back(weight);
             }
 
             memcpy(h_vals.data() + block_size * idx, mat.data(), block_size * sizeof(double));

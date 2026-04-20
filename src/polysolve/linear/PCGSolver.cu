@@ -220,7 +220,7 @@ namespace polysolve::linear
         {
             int part_num = 0;
             std::vector<int> part_id;
-            metis_partition(topo.row_ptr, topo.cols, partition_size_, part_num, part_id);
+            metis_partition(topo.row_ptr, topo.cols, topo.weights, partition_size_, part_num, part_id);
 
             part_offsets_ = build_part_offsets(part_id, part_num);
             permutation_ = build_permutation(part_id, part_offsets_);

@@ -59,7 +59,7 @@ namespace polysolve::linear
             cub::DeviceFor::Bulk(x.size(), op, rt.stream.get());
         }
 
-        std::vector<int> build_permutation(std::vector<int> const &part_id, int part_num)
+        std::vector<int> build_part_offsets(std::vector<int> const &part_id, int part_num)
         {
             std::vector<int> offsets(part_num + 1, 0);
             for (int old_id = 0; old_id < part_id.size(); ++old_id)
@@ -70,7 +70,13 @@ namespace polysolve::linear
             {
                 offsets[part + 1] += offsets[part];
             }
+            return offsets;
+        }
 
+        std::vector<int> build_permutation(
+            std::vector<int> const &part_id,
+            std::vector<int> const &offsets)
+        {
             std::vector<int> next = offsets;
             std::vector<int> permutation(part_id.size(), 0);
             for (int old_id = 0; old_id < part_id.size(); ++old_id)
@@ -134,6 +140,7 @@ namespace polysolve::linear
         MASPreconditioner mas_precond_;
         std::vector<int> permutation_;
         std::vector<int> inv_permutation_;
+        std::vector<int> part_offsets_;
         CuSparseBSR sparse_A_;
         Buf<int> d_permutation_;
         Buf<int> d_inv_permutation_;
@@ -196,7 +203,8 @@ namespace polysolve::linear
             std::vector<int> part_id;
             metis_partition(topo.row_ptr, topo.cols, partition_size_, part_num, part_id);
 
-            permutation_ = build_permutation(part_id, part_num);
+            part_offsets_ = build_part_offsets(part_id, part_num);
+            permutation_ = build_permutation(part_id, part_offsets_);
             inv_permutation_.assign(permutation_.size(), 0);
             for (int old_id = 0; old_id < permutation_.size(); ++old_id)
             {
@@ -281,7 +289,10 @@ namespace polysolve::linear
             BSRView view = A_.view();
             dim_ = A.rows();
             permuted_dim_ = view.block_dim * view.dim;
-            mas_precond_.factorize(A_, rt);
+            mas_precond_.factorize(
+                A_,
+                ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
+                rt);
 
             d_permutation_ = cu::make_buffer<int>(rt.stream, rt.mr, permutation_.size(), cu::no_init);
             d_inv_permutation_ =

@@ -9,6 +9,7 @@
 #endif
 
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 #include <catch2/catch.hpp>
 #include <iostream>
@@ -147,6 +148,24 @@ bool load_matrix_market_array_mmio(const std::string &path, Eigen::VectorXd &b)
 
     fclose(file);
     return true;
+}
+
+std::shared_ptr<spdlog::logger> get_test_logger(const std::string &name)
+{
+    auto logger = spdlog::get(name);
+    if (!logger)
+    {
+        logger = spdlog::stdout_color_mt(name);
+    }
+    return logger;
+}
+
+void enable_cuda_pcg_trace_logging()
+{
+    auto logger = get_test_logger("test_logger");
+    logger->set_level(spdlog::level::trace);
+    spdlog::set_default_logger(logger);
+    spdlog::set_level(spdlog::level::trace);
 }
 
 TEST_CASE("jse", "[solver]")
@@ -303,6 +322,7 @@ TEST_CASE("eigen_params", "[solver]")
 
 TEST_CASE("cuda_pcg_block_dims", "[solver]")
 {
+    enable_cuda_pcg_trace_logging();
     const std::string path = POLYFEM_DATA_DIR;
     Eigen::SparseMatrix<double> A;
     const bool ok = loadMarket(A, path + "/A_2.mat");
@@ -335,6 +355,7 @@ TEST_CASE("cuda_pcg_block_dims", "[solver]")
 
 TEST_CASE("cuda_pcg_default_block_dim", "[solver]")
 {
+    enable_cuda_pcg_trace_logging();
     auto solver = Solver::create("CUDA_PCG", "");
     const std::string path = POLYFEM_DATA_DIR;
     Eigen::SparseMatrix<double> A;
@@ -362,6 +383,7 @@ TEST_CASE("cuda_pcg_default_block_dim", "[solver]")
 
 TEST_CASE("cuda_pcg_pre_factor", "[solver]")
 {
+    enable_cuda_pcg_trace_logging();
     auto solver = Solver::create("CUDA_PCG", "");
     const std::string path = POLYFEM_DATA_DIR;
     Eigen::SparseMatrix<double> A;
@@ -416,8 +438,9 @@ TEST_CASE("cuda_pcg_pre_factor", "[solver]")
 
 TEST_CASE("cuda_pcg_some_ls_data_block3", "[solver]")
 {
-    constexpr auto matrix_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00040_ns_0_A.mtx";
-    constexpr auto rhs_path = "/home/ian/local_code/polysolve/some_ls_data/frame_00040_ns_0_b.mtx";
+    enable_cuda_pcg_trace_logging();
+    constexpr auto matrix_path = "/home/ian/local_code/polysolve/some_ls_data/1e8/frame_00040_ns_0_A.mtx";
+    constexpr auto rhs_path = "/home/ian/local_code/polysolve/some_ls_data/1e8/frame_00040_ns_0_b.mtx";
 
     Eigen::SparseMatrix<double> A;
     Eigen::VectorXd b;
@@ -429,7 +452,7 @@ TEST_CASE("cuda_pcg_some_ls_data_block3", "[solver]")
     json params;
     params["CUDA_PCG"]["block_dim"] = 3;
     params["CUDA_PCG"]["relative_tolerance"] = 0.0;
-    params["CUDA_PCG"]["absolute_tolerance"] = 1e-6;
+    params["CUDA_PCG"]["absolute_tolerance"] = 1e-7;
     params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
     solver->set_parameters(params);
 

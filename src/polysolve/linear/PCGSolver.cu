@@ -1,5 +1,9 @@
 #include "PCGSolver.hpp"
 
+#ifndef SPDLOG_ACTIVE_LEVEL
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#endif
+
 #include <Eigen/Core>
 
 #include <cub/cub.cuh>
@@ -12,6 +16,7 @@
 #include <cuda/std/span>
 #include <cuda/std/optional>
 
+#include <chrono>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,6 +27,7 @@
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/MetisPartition.hpp>
+#include <spdlog/spdlog.h>
 
 namespace polysolve::linear
 {
@@ -30,6 +36,13 @@ namespace polysolve::linear
 
     namespace
     {
+        using clock = std::chrono::steady_clock;
+
+        double elapsed_seconds(const std::chrono::time_point<clock> &begin)
+        {
+            return std::chrono::duration<double>(clock::now() - begin).count();
+        }
+
         void scalar_division(
             ctd::span<const double> num,
             ctd::span<const double> denom,
@@ -286,22 +299,37 @@ namespace polysolve::linear
         void factorize(const StiffnessMatrix &A)
         {
             CudaRuntime rt{*default_stream_, default_mem_pool_->as_ref()};
+            auto total_begin = clock::now();
+
+            auto phase_begin = clock::now();
             BSRMatrix topo_matrix{A, block_dim_, {}, rt};
+            SPDLOG_TRACE("CUDA_PCG setup: topology_bsr {:.6f}s", elapsed_seconds(phase_begin));
+
+            phase_begin = clock::now();
             build_solver_permutation(topo_matrix.host_topology_view());
+            SPDLOG_TRACE("CUDA_PCG setup: metis_partition {:.6f}s", elapsed_seconds(phase_begin));
+
+            phase_begin = clock::now();
             A_ = BSRMatrix{
                 A,
                 block_dim_,
                 ctd::span<const int>(permutation_.data(), permutation_.size()),
                 rt};
+            SPDLOG_TRACE("CUDA_PCG setup: permuted_bsr {:.6f}s", elapsed_seconds(phase_begin));
 
             BSRView view = A_.view();
             dim_ = A.rows();
             permuted_dim_ = view.block_dim * view.dim;
+
+            phase_begin = clock::now();
             mas_precond_.factorize(
                 A_,
                 ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
                 rt);
+            rt.stream.sync();
+            SPDLOG_TRACE("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
 
+            phase_begin = clock::now();
             d_permutation_ = cu::make_buffer<int>(rt.stream, rt.mr, permutation_.size(), cu::no_init);
             d_inv_permutation_ =
                 cu::make_buffer<int>(rt.stream, rt.mr, inv_permutation_.size(), cu::no_init);
@@ -321,9 +349,14 @@ namespace polysolve::linear
             scalar_beta_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             scalar_rz_old_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             scalar_rr_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
+            rt.stream.sync();
+            SPDLOG_TRACE("CUDA_PCG setup: device_buffers {:.6f}s", elapsed_seconds(phase_begin));
 
+            phase_begin = clock::now();
             setup_cusparse(rt);
             rt.stream.sync();
+            SPDLOG_TRACE("CUDA_PCG setup: cusparse {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_TRACE("CUDA_PCG setup: total {:.6f}s", elapsed_seconds(total_begin));
         }
 
         void solve(const Eigen::Ref<const Eigen::VectorXd> b, Eigen::Ref<Eigen::VectorXd> x)
@@ -437,6 +470,8 @@ namespace polysolve::linear
                 rr0 = device2host(scalar_rr_->data(), rt);
             }
 
+            auto iter_window_begin = clock::now();
+            int iter_window_start = 1;
             for (int k = 1; k <= max_iter_; ++k)
             {
                 // Compute Ap = A p.
@@ -499,6 +534,19 @@ namespace polysolve::linear
                             converged = true;
                         }
                     }
+                }
+
+                if (k % 100 == 0)
+                {
+                    rt.stream.sync();
+                    SPDLOG_TRACE(
+                        "CUDA_PCG iter {}-{}: {:.6f}s residual {:.6e}",
+                        iter_window_start,
+                        k,
+                        elapsed_seconds(iter_window_begin),
+                        residual_norm_);
+                    iter_window_begin = clock::now();
+                    iter_window_start = k + 1;
                 }
 
                 if (converged)

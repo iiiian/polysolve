@@ -1,13 +1,19 @@
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/MASPreconditionerTest.cuh>
 
+#ifndef SPDLOG_ACTIVE_LEVEL
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+#endif
+
 #include <cub/cub.cuh>
 #include <cuda/algorithm>
 #include <cuda/std/array>
 #include <cuda/std/bit>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <vector>
 
@@ -15,6 +21,13 @@ namespace polysolve::linear::mas
 {
     namespace
     {
+        using clock = std::chrono::steady_clock;
+
+        double elapsed_seconds(const std::chrono::time_point<clock> &begin)
+        {
+            return std::chrono::duration<double>(clock::now() - begin).count();
+        }
+
         constexpr int BANK_SIZE = 32;
         constexpr int MAX_COARSE_LEVEL = MAS_MAX_COARSE_LEVEL;
         constexpr int LEVEL_COUNT = MAS_LEVEL_COUNT;
@@ -931,10 +944,15 @@ namespace polysolve::linear::mas
         block_dim_ = view.block_dim;
         vector_size_ = view.dim * view.block_dim;
 
+        auto total_begin = clock::now();
+        auto phase_begin = clock::now();
         HostPaddedTopology topo = build_padded_topology(A.host_topology_view(), part_offsets);
+        SPDLOG_TRACE("CUDA_PCG MAS: build_padded_topology {:.6f}s", elapsed_seconds(phase_begin));
+
         padded_vector_size_ = topo.padded_node_num * block_dim_;
         int topo_col_size = topo.cols.empty() ? 1 : topo.cols.size();
 
+        phase_begin = clock::now();
         padded_topology_.node_num = topo.node_num;
         padded_topology_.padded_node_num = topo.padded_node_num;
         padded_topology_.real_to_padded =
@@ -956,12 +974,18 @@ namespace polysolve::linear::mas
                 topo.cols,
                 ctd::span<int>(padded_topology_.cols->data(), topo.cols.size()));
         }
+        rt.stream.sync();
+        SPDLOG_TRACE("CUDA_PCG MAS: copy_padded_topology {:.6f}s", elapsed_seconds(phase_begin));
 
+        phase_begin = clock::now();
         coarse_space_ = build_coarse_space(
             ctd::span<const int>(padded_topology_.rows->data(), topo.row_ptr.size()),
             ctd::span<int>(padded_topology_.cols->data(), topo.cols.size()),
             rt);
+        rt.stream.sync();
+        SPDLOG_TRACE("CUDA_PCG MAS: build_coarse_space {:.6f}s", elapsed_seconds(phase_begin));
 
+        phase_begin = clock::now();
         coarse_matrices_ = build_sym_coarse_matrices(
             coarse_space_,
             view,
@@ -970,7 +994,10 @@ namespace polysolve::linear::mas
                 topo.real_to_padded.size()),
             padded_topology_.padded_node_num,
             rt);
+        rt.stream.sync();
+        SPDLOG_TRACE("CUDA_PCG MAS: build_coarse_matrices {:.6f}s", elapsed_seconds(phase_begin));
 
+        phase_begin = clock::now();
         workspace_.level_offsets[0] = 0;
         workspace_.level_sizes[0] = padded_topology_.padded_node_num;
         workspace_.total_level_nodes = padded_topology_.padded_node_num;
@@ -985,6 +1012,9 @@ namespace polysolve::linear::mas
             cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
         workspace_.multi_level_z =
             cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
+        rt.stream.sync();
+        SPDLOG_TRACE("CUDA_PCG MAS: build_workspace {:.6f}s", elapsed_seconds(phase_begin));
+        SPDLOG_TRACE("CUDA_PCG MAS: factorize_total {:.6f}s", elapsed_seconds(total_begin));
 
         initialized_ = true;
     }

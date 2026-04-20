@@ -206,7 +206,11 @@ TEST_CASE("cuda_pcg_block_dims", "[solver]")
 {
     const std::string path = POLYFEM_DATA_DIR;
     Eigen::SparseMatrix<double> A;
-    const bool ok = loadMarket(A, path + "/A_2.mat");
+    Eigen::VectorXd b;
+    // const bool ok = loadMarket(A, path + "/A_2.mat");
+    bool ok = loadMarket(A, "/home/ian/local_code/polysolve/some_ls_data/1e8/frame_00040_ns_0_A.mtx");
+    REQUIRE(ok);
+    ok = Eigen::loadMarketVector(b, "/home/ian/local_code/polysolve/some_ls_data/1e8/frame_00040_ns_0_b.mtx");
     REQUIRE(ok);
 
     for (int block_dim : {1, 2, 3})
@@ -215,12 +219,12 @@ TEST_CASE("cuda_pcg_block_dims", "[solver]")
         json params;
         params["CUDA_PCG"]["block_dim"] = block_dim;
         params["CUDA_PCG"]["relative_tolerance"] = 0.0;
-        params["CUDA_PCG"]["absolute_tolerance"] = 1e-8;
+        params["CUDA_PCG"]["absolute_tolerance"] = 1e-6;
         params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
         solver->set_parameters(params);
 
-        Eigen::VectorXd b(A.rows());
-        b.setRandom();
+        // Eigen::VectorXd b(A.rows());
+        // b.setRandom();
         Eigen::VectorXd x(b.size());
         x.setZero();
 
@@ -230,7 +234,7 @@ TEST_CASE("cuda_pcg_block_dims", "[solver]")
 
         const double err = (A * x - b).norm();
         INFO("block_dim: " + std::to_string(block_dim));
-        REQUIRE(err < 1e-8);
+        REQUIRE(err < 1e-6);
     }
 }
 

@@ -1,10 +1,7 @@
 #include "PCGSolver.hpp"
 
-// #ifndef SPDLOG_ACTIVE_LEVEL
-// #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
-// #endif
-
 #include <Eigen/Core>
+#include <spdlog/spdlog.h>
 
 #include <cub/cub.cuh>
 
@@ -27,7 +24,6 @@
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
 #include <polysolve/linear/mas_utils/MASPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/MetisPartition.hpp>
-#include <spdlog/spdlog.h>
 
 namespace polysolve::linear
 {
@@ -301,12 +297,12 @@ namespace polysolve::linear
             // Build initial BSR matrix for metis parition.
             auto phase_begin = clock::now();
             BSRMatrix topo_matrix{A, block_dim_, {}, rt};
-            SPDLOG_TRACE("CUDA_PCG setup: topology_bsr {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: topology_bsr {:.6f}s", elapsed_seconds(phase_begin));
 
             // Sort nodes based on parition.
             phase_begin = clock::now();
             build_partition_and_perm(topo_matrix.host_topology_view());
-            SPDLOG_TRACE("CUDA_PCG setup: metis_partition {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: metis_partition {:.6f}s", elapsed_seconds(phase_begin));
 
             // Build new sorted BSR matrix for MAS initialization.
             phase_begin = clock::now();
@@ -315,7 +311,7 @@ namespace polysolve::linear
                 block_dim_,
                 ctd::span<const int>(permutation_.data(), permutation_.size()),
                 rt};
-            SPDLOG_TRACE("CUDA_PCG setup: permuted_bsr {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: permuted_bsr {:.6f}s", elapsed_seconds(phase_begin));
 
             BSRView view = A_.view();
             dim_ = A.rows();
@@ -328,7 +324,7 @@ namespace polysolve::linear
                 ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
                 rt);
             rt.stream.sync();
-            SPDLOG_TRACE("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
 
             // Copy permutation to device.
             phase_begin = clock::now();
@@ -353,14 +349,14 @@ namespace polysolve::linear
             scalar_rz_old_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             scalar_rr_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
             rt.stream.sync();
-            SPDLOG_TRACE("CUDA_PCG setup: device_buffers {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: device_buffers {:.6f}s", elapsed_seconds(phase_begin));
 
             // Allocates buffers for CuSparse.
             phase_begin = clock::now();
             setup_cusparse(rt);
             rt.stream.sync();
-            SPDLOG_TRACE("CUDA_PCG setup: cusparse {:.6f}s", elapsed_seconds(phase_begin));
-            SPDLOG_TRACE("CUDA_PCG setup: total {:.6f}s", elapsed_seconds(total_begin));
+            SPDLOG_INFO("CUDA_PCG setup: cusparse {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("CUDA_PCG setup: total {:.6f}s", elapsed_seconds(total_begin));
         }
 
         void solve(const Eigen::Ref<const Eigen::VectorXd> b, Eigen::Ref<Eigen::VectorXd> x)
@@ -547,7 +543,7 @@ namespace polysolve::linear
                 if (k % 100 == 0)
                 {
                     rt.stream.sync();
-                    SPDLOG_TRACE(
+                    SPDLOG_INFO(
                         "CUDA_PCG iter {}-{}: {:.6f}s residual {:.6e}",
                         iter_window_start,
                         k,

@@ -16,6 +16,7 @@ namespace polysolve::linear::mas
     {
         constexpr int BANK_SIZE = 32;
         constexpr int MAX_COARSE_LEVEL = MAS_MAX_COARSE_LEVEL;
+        constexpr int LEVEL_COUNT = MAS_LEVEL_COUNT;
 
         struct HostPaddedTopology
         {
@@ -31,7 +32,7 @@ namespace polysolve::linear::mas
         {
             int mat_dim;
             int mat_storage_size;
-            ctd::array<ctd::span<double>, MAX_COARSE_LEVEL> matrix_per_level;
+            ctd::array<ctd::span<double>, LEVEL_COUNT> matrix_per_level;
         };
 
         HostPaddedTopology build_padded_topology(TopologyView topo, ctd::span<const int> part_offsets)
@@ -49,10 +50,12 @@ namespace polysolve::linear::mas
 
             HostPaddedTopology out;
             out.real_to_padded.assign(node_num, -1);
-            out.padded_to_real.assign(padded_offsets[part_num], -1);
-            out.row_ptr.assign(out.padded_to_real.size() + 1, 0);
+            out.padded_to_real.assign(node_num, -1);
+            out.row_ptr.assign(padded_offsets[part_num] + 1, 0);
             out.node_num = node_num;
-            out.padded_node_num = out.padded_to_real.size();
+            out.padded_node_num = padded_offsets[part_num];
+
+            std::vector<int> padded_to_real(out.padded_node_num, -1);
 
             for (int part = 0; part < part_num; ++part)
             {
@@ -68,21 +71,22 @@ namespace polysolve::linear::mas
                     {
                         int real_id = part_begin + local_id;
                         out.real_to_padded[real_id] = padded_id;
-                        out.padded_to_real[padded_id] = real_id;
+                        out.padded_to_real[real_id] = padded_id;
+                        padded_to_real[padded_id] = real_id;
                         out.row_ptr[padded_id + 1] = topo.row_ptr[real_id + 1] - topo.row_ptr[real_id];
                     }
                 }
             }
 
-            for (int i = 0; i < out.padded_to_real.size(); ++i)
+            for (int i = 0; i < out.padded_node_num; ++i)
             {
                 out.row_ptr[i + 1] += out.row_ptr[i];
             }
             out.cols.resize(out.row_ptr.back());
 
-            for (int padded_id = 0; padded_id < out.padded_to_real.size(); ++padded_id)
+            for (int padded_id = 0; padded_id < out.padded_node_num; ++padded_id)
             {
-                int real_id = out.padded_to_real[padded_id];
+                int real_id = padded_to_real[padded_id];
                 if (real_id == -1)
                 {
                     continue;
@@ -106,7 +110,7 @@ namespace polysolve::linear::mas
             out.mat_storage_size = mats.mat_storage_size;
 
             int scalar_offset = 0;
-            for (int i = 0; i < MAX_COARSE_LEVEL; ++i)
+            for (int i = 0; i < LEVEL_COUNT; ++i)
             {
                 int level_size = mats.matrix_counts[i] * mats.mat_storage_size;
                 out.matrix_per_level[i] =
@@ -411,6 +415,7 @@ namespace polysolve::linear::mas
 
             int cco_num = device2host(cco_num_per_bank_summed.data() + max_bank_per_level - 1, rt);
             cco_nums[0] = cco_num;
+            int level_num = 1;
 
             // Build coarse map level 1 ... MAX_COARSE_LEVEL-1 recursively.
             auto neighbors = cu::make_buffer<uint32_t>(rt.stream, rt.mr, node_num, cu::no_init);
@@ -444,12 +449,20 @@ namespace polysolve::linear::mas
                 build_global_cco_lvx<<<div_round_upper(node_num, 128), 128, 0, rt.stream.get()>>>(
                     lv, coarse_space_map, ctd::span<const int>(global_cco_ids.data(), cco_num));
 
-                cco_num = device2host(cco_num_per_bank_summed.data() + bank_num - 1, rt);
+                int next_cco_num = device2host(cco_num_per_bank_summed.data() + bank_num - 1, rt);
+                if (next_cco_num == cco_num)
+                {
+                    break;
+                }
+
+                cco_num = next_cco_num;
                 cco_nums[lv] = cco_num;
+                level_num = lv + 1;
             }
 
             CoarseSpace cs;
             cs.cco_nums = cco_nums;
+            cs.level_num = level_num;
             cs.map = std::move(coarse_space_map);
             return cs;
         }
@@ -468,7 +481,8 @@ namespace polysolve::linear::mas
         __global__ void fill_coarse_matrices(BSRView mat_in,
                                              CoarseMatricesView mat_out,
                                              ctd::span<const int> coarse_space_map,
-                                             ctd::span<const int> real_to_padded)
+                                             ctd::span<const int> real_to_padded,
+                                             int coarse_level_num)
         {
             int tid = blockDim.x * blockIdx.x + threadIdx.x; // global thread id
             if (tid >= mat_in.dim)
@@ -488,7 +502,34 @@ namespace polysolve::linear::mas
 
                 int padded_j = real_to_padded[j];
                 int block_offset = nz * block_size;
-                for (int lv = 0; lv < MAX_COARSE_LEVEL; ++lv)
+                if (padded_i / BANK_SIZE == padded_j / BANK_SIZE)
+                {
+                    int mat_id = padded_i / BANK_SIZE;
+                    int scalar_i_root = (padded_i % BANK_SIZE) * mat_in.block_dim;
+                    int scalar_j_root = (padded_j % BANK_SIZE) * mat_in.block_dim;
+                    double *mat = mat_out.matrix_per_level[0].data() + mat_id * mat_out.mat_storage_size;
+                    for (int bi = 0; bi < mat_in.block_dim; ++bi)
+                    {
+                        for (int bj = 0; bj < mat_in.block_dim; ++bj)
+                        {
+                            int row = scalar_i_root + bi;
+                            int col = scalar_j_root + bj;
+                            if (row > col)
+                            {
+                                continue;
+                            }
+
+                            if (tid == j && bi > bj)
+                            {
+                                continue;
+                            }
+
+                            double val = mat_in.vals[block_offset + bi * mat_in.block_dim + bj];
+                            atomicAdd(mat + index_upper_mat(mat_out.mat_dim, row, col), val);
+                        }
+                    }
+                }
+                for (int lv = 0; lv < coarse_level_num; ++lv)
                 {
                     int cco_i = coarse_space_map[padded_i * MAX_COARSE_LEVEL + lv];
                     int cco_j = coarse_space_map[padded_j * MAX_COARSE_LEVEL + lv];
@@ -500,7 +541,7 @@ namespace polysolve::linear::mas
                     int mat_id = cco_i / BANK_SIZE;
                     int scalar_i_root = (cco_i % BANK_SIZE) * mat_in.block_dim;
                     int scalar_j_root = (cco_j % BANK_SIZE) * mat_in.block_dim;
-                    double *mat = mat_out.matrix_per_level[lv].data() + mat_id * mat_out.mat_storage_size;
+                    double *mat = mat_out.matrix_per_level[lv + 1].data() + mat_id * mat_out.mat_storage_size;
                     for (int bi = 0; bi < mat_in.block_dim; ++bi)
                     {
                         for (int bj = 0; bj < mat_in.block_dim; ++bj)
@@ -531,7 +572,8 @@ namespace polysolve::linear::mas
             ctd::span<const int> real_to_padded,
             ctd::span<const int> coarse_space_map,
             ctd::span<const int> level_offsets,
-            int block_dim)
+            int block_dim,
+            int coarse_level_num)
         {
             int real_id = blockDim.x * blockIdx.x + threadIdx.x;
             if (real_id >= real_to_padded.size())
@@ -540,11 +582,16 @@ namespace polysolve::linear::mas
             }
 
             int padded_id = real_to_padded[real_id];
-            for (int lv = 0; lv < MAX_COARSE_LEVEL; ++lv)
+            int src_root = real_id * block_dim;
+            int fine_root = padded_id * block_dim;
+            for (int comp = 0; comp < block_dim; ++comp)
+            {
+                atomicAdd(multi_level_r.data() + fine_root + comp, r[src_root + comp]);
+            }
+            for (int lv = 0; lv < coarse_level_num; ++lv)
             {
                 int cco_id = coarse_space_map[padded_id * MAX_COARSE_LEVEL + lv];
-                int dst_root = (level_offsets[lv] + cco_id) * block_dim;
-                int src_root = real_id * block_dim;
+                int dst_root = (level_offsets[lv + 1] + cco_id) * block_dim;
                 for (int comp = 0; comp < block_dim; ++comp)
                 {
                     atomicAdd(multi_level_r.data() + dst_root + comp, r[src_root + comp]);
@@ -647,7 +694,8 @@ namespace polysolve::linear::mas
             ctd::span<const int> real_to_padded,
             ctd::span<const int> coarse_space_map,
             ctd::span<const int> level_offsets,
-            int block_dim)
+            int block_dim,
+            int coarse_level_num)
         {
             int real_id = blockDim.x * blockIdx.x + threadIdx.x;
             if (real_id >= real_to_padded.size())
@@ -659,13 +707,13 @@ namespace polysolve::linear::mas
             int dst_root = real_id * block_dim;
             for (int comp = 0; comp < block_dim; ++comp)
             {
-                z[dst_root + comp] = 0.0;
+                z[dst_root + comp] = multi_level_z[padded_id * block_dim + comp];
             }
 
-            for (int lv = 0; lv < MAX_COARSE_LEVEL; ++lv)
+            for (int lv = 0; lv < coarse_level_num; ++lv)
             {
                 int cco_id = coarse_space_map[padded_id * MAX_COARSE_LEVEL + lv];
-                int src_root = (level_offsets[lv] + cco_id) * block_dim;
+                int src_root = (level_offsets[lv + 1] + cco_id) * block_dim;
                 for (int comp = 0; comp < block_dim; ++comp)
                 {
                     z[dst_root + comp] += multi_level_z[src_root + comp];
@@ -826,17 +874,21 @@ namespace polysolve::linear::mas
         CoarseMatrices build_sym_coarse_matrices(const CoarseSpace &cs,
                                                  BSRView mat,
                                                  ctd::span<const int> real_to_padded,
+                                                 int padded_node_num,
                                                  CudaRuntime rt)
         {
             CoarseMatrices out;
             out.mat_dim = BANK_SIZE * mat.block_dim;
             out.mat_storage_size = out.mat_dim * (out.mat_dim + 1) / 2;
             out.total_matrix_num = 0;
-            for (int i = 0; i < MAX_COARSE_LEVEL; ++i)
+            out.matrix_offsets[0] = 0;
+            out.matrix_counts[0] = div_round_upper(padded_node_num, BANK_SIZE);
+            out.total_matrix_num += out.matrix_counts[0];
+            for (int i = 0; i < cs.level_num; ++i)
             {
-                out.matrix_offsets[i] = out.total_matrix_num;
-                out.matrix_counts[i] = div_round_upper(cs.cco_nums[i], BANK_SIZE);
-                out.total_matrix_num += out.matrix_counts[i];
+                out.matrix_offsets[i + 1] = out.total_matrix_num;
+                out.matrix_counts[i + 1] = div_round_upper(cs.cco_nums[i], BANK_SIZE);
+                out.total_matrix_num += out.matrix_counts[i + 1];
             }
 
             out.data = cu::make_buffer<double>(
@@ -848,7 +900,7 @@ namespace polysolve::linear::mas
 
             int grid_num = div_round_upper(mat.dim, 128);
             fill_coarse_matrices<<<grid_num, 128, 0, rt.stream.get()>>>(
-                mat, view, *cs.map, real_to_padded);
+                mat, view, *cs.map, real_to_padded, cs.level_num);
 
             int total_diag = out.total_matrix_num * out.mat_dim;
             pad_zero_diagonal<<<div_round_upper(total_diag, 128), 128, 0, rt.stream.get()>>>(
@@ -915,14 +967,17 @@ namespace polysolve::linear::mas
             ctd::span<const int>(
                 padded_topology_.real_to_padded->data(),
                 topo.real_to_padded.size()),
+            padded_topology_.padded_node_num,
             rt);
 
-        workspace_.total_level_nodes = 0;
-        for (int i = 0; i < MAX_COARSE_LEVEL; ++i)
+        workspace_.level_offsets[0] = 0;
+        workspace_.level_sizes[0] = padded_topology_.padded_node_num;
+        workspace_.total_level_nodes = padded_topology_.padded_node_num;
+        for (int i = 0; i < coarse_space_.level_num; ++i)
         {
-            workspace_.level_offsets[i] = workspace_.total_level_nodes;
-            workspace_.level_sizes[i] = coarse_matrices_.matrix_counts[i] * BANK_SIZE;
-            workspace_.total_level_nodes += workspace_.level_sizes[i];
+            workspace_.level_offsets[i + 1] = workspace_.total_level_nodes;
+            workspace_.level_sizes[i + 1] = coarse_matrices_.matrix_counts[i + 1] * BANK_SIZE;
+            workspace_.total_level_nodes += workspace_.level_sizes[i + 1];
         }
         int total_level_scalars = std::max(workspace_.total_level_nodes * block_dim_, 1);
         workspace_.multi_level_r =
@@ -964,7 +1019,7 @@ namespace polysolve::linear::mas
             rt.stream.get());
 
         auto level_offsets =
-            ctd::span<const int>(workspace_.level_offsets.data(), MAX_COARSE_LEVEL);
+            ctd::span<const int>(workspace_.level_offsets.data(), LEVEL_COUNT);
         int grid_num = div_round_upper(padded_topology_.node_num, 128);
         gather_multi_level_r<<<grid_num, 128, 0, rt.stream.get()>>>(
             r,
@@ -974,7 +1029,8 @@ namespace polysolve::linear::mas
                 padded_topology_.node_num),
             *coarse_space_.map,
             level_offsets,
-            block_dim_);
+            block_dim_,
+            coarse_space_.level_num);
 
         apply_packed_matrices(
             coarse_matrices_,
@@ -991,6 +1047,7 @@ namespace polysolve::linear::mas
                 padded_topology_.node_num),
             *coarse_space_.map,
             level_offsets,
-            block_dim_);
+            block_dim_,
+            coarse_space_.level_num);
     }
 } // namespace polysolve::linear::mas

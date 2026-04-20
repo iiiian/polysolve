@@ -8,6 +8,7 @@
 namespace polysolve::linear::mas
 {
     constexpr int MAS_MAX_COARSE_LEVEL = 4;
+    constexpr int MAS_LEVEL_COUNT = MAS_MAX_COARSE_LEVEL + 1;
 
     struct PaddedTopology
     {
@@ -23,13 +24,14 @@ namespace polysolve::linear::mas
     {
         Buf<int> map;
         std::array<int, MAS_MAX_COARSE_LEVEL> cco_nums{};
+        int level_num = 0;
     };
 
     struct CoarseMatrices
     {
         Buf<double> data;
-        std::array<int, MAS_MAX_COARSE_LEVEL> matrix_offsets{};
-        std::array<int, MAS_MAX_COARSE_LEVEL> matrix_counts{};
+        std::array<int, MAS_LEVEL_COUNT> matrix_offsets{};
+        std::array<int, MAS_LEVEL_COUNT> matrix_counts{};
         int mat_dim = 0;
         int mat_storage_size = 0;
         int total_matrix_num = 0;
@@ -39,8 +41,8 @@ namespace polysolve::linear::mas
     {
         Buf<double> multi_level_r;
         Buf<double> multi_level_z;
-        std::array<int, MAS_MAX_COARSE_LEVEL> level_offsets{};
-        std::array<int, MAS_MAX_COARSE_LEVEL> level_sizes{};
+        std::array<int, MAS_LEVEL_COUNT> level_offsets{};
+        std::array<int, MAS_LEVEL_COUNT> level_sizes{};
         int total_level_nodes = 0;
     };
 

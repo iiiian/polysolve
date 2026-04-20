@@ -25,8 +25,8 @@ namespace
         CudaContext ctx;
         CudaRuntime rt = ctx.rt();
 
-        BCOOMatrix M(A, block_dim, rt);
-        BCOOView view = M.view();
+        BSRMatrix M(A, block_dim, rt);
+        BSRView view = M.view();
         int padded = view.dim * view.block_dim;
 
         Eigen::VectorXd x_padded = Eigen::VectorXd::Zero(padded);

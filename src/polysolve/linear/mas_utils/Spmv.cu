@@ -29,7 +29,7 @@ namespace polysolve::linear::mas
         // Compute y = Ax.
         template <int D>
         __global__ void spmv_kernel(
-            BCOOView A,
+            BSRView A,
             ctd::span<const double> x,
             ctd::span<double> y)
         {
@@ -75,7 +75,7 @@ namespace polysolve::linear::mas
 
     } // namespace
 
-    void spmv(BCOOView A, ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt)
+    void spmv(BSRView A, ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt)
     {
         cu::fill_bytes(rt.stream, y, 0);
 

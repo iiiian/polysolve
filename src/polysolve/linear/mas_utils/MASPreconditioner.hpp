@@ -15,9 +15,9 @@ namespace polysolve::linear::mas
     {
     public:
         void analyze_pattern(
-            const BCOOMatrix &A, CudaRuntime rt);
+            const BSRMatrix &A, CudaRuntime rt);
 
-        void factorize(const BCOOMatrix &A, CudaRuntime rt);
+        void factorize(const BSRMatrix &A, CudaRuntime rt);
 
         void apply(ctd::span<const double> r, ctd::span<double> z, CudaRuntime rt);
 

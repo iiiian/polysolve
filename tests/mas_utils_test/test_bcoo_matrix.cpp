@@ -23,8 +23,8 @@ namespace
         CudaContext ctx;
         CudaRuntime rt = ctx.rt();
 
-        BCOOMatrix M(A, block_dim, rt);
-        BCOOView view = M.view();
+        BSRMatrix M(A, block_dim, rt);
+        BSRView view = M.view();
         TopologyView host_topology = M.host_topology_view();
         TopologyView device_topology = M.device_topology_view();
 

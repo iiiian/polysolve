@@ -1,4 +1,4 @@
-#include <polysolve/linear/mas_utils/BCOOMatrix.hpp>
+#include <polysolve/linear/mas_utils/BSRMatrix.hpp>
 
 #include <cuda/buffer>
 #include <cuda/std/span>
@@ -66,7 +66,7 @@ namespace std
 namespace polysolve::linear::mas
 {
 
-    BCOOMatrix::BCOOMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt)
+    BSRMatrix::BSRMatrix(const StiffnessMatrix &A, int block_dim, CudaRuntime rt)
     {
         if (A.cols() != A.rows() || A.cols() == 0 || A.rows() == 0 || A.nonZeros() == 0)
         {
@@ -114,32 +114,26 @@ namespace polysolve::linear::mas
             return a.first < b.first;
         });
 
-        // Prepare host Block COO matrix.
+        // Prepare host BSR matrix.
         non_zeros_ = h_blocks.size();
         int block_size = block_dim_ * block_dim_;
-        std::vector<int> h_rows(non_zeros_);
-        std::vector<int> h_diag_index(dim_, -1);
+        std::vector<int> h_rows(dim_ + 1, 0);
+        std::vector<int> h_cols(non_zeros_);
         std::vector<double> h_vals(block_size * non_zeros_);
-        h_cols_.resize(non_zeros_);
-        h_topology_row_ptr_.assign(dim_ + 1, 0);
-        h_topology_cols_.clear();
-        h_topology_cols_.reserve(std::max(0, non_zeros_ - dim_));
+        h_topo_rows_.resize(dim_ + 1, 0);
 
         for (int idx = 0; idx < non_zeros_; ++idx)
         {
             auto &[key, mat] = h_blocks[idx];
             auto [bi, bj] = key.get_index();
-            h_rows[idx] = bi;
-            h_cols_[idx] = bj;
+
+            h_rows[bi + 1] += 1;
+            h_cols.push_back(bj);
+
             if (bi != bj)
             {
-                h_topology_cols_.push_back(bj);
-                h_topology_row_ptr_[bi + 1]++;
-            }
-
-            if (bi == bj)
-            {
-                h_diag_index[bi] = idx;
+                h_topo_rows_[bi + 1] += 1;
+                h_topo_cols_.push_back(bj);
             }
 
             memcpy(h_vals.data() + block_size * idx, mat.data(), block_size * sizeof(double));
@@ -147,11 +141,13 @@ namespace polysolve::linear::mas
 
         for (int i = 0; i < dim_; ++i)
         {
-            h_topology_row_ptr_[i + 1] += h_topology_row_ptr_[i];
+            h_rows[i + 1] += h_rows[i];
+            h_topo_rows_[i + 1] += h_topo_rows_[i];
         }
 
         // Pad trailing block.
-        if (h_rows[non_zeros_ - 1] == (dim_ - 1) && h_cols_[non_zeros_ - 1] == (dim_ - 1))
+        auto [ei, ej] = h_blocks.back().second.get_index();
+        if (ei == (dim_ - 1) && ej == (dim_ - 1))
         {
             int padded = block_dim_ * dim_ - A.rows();
             if (padded > 0)
@@ -165,22 +161,13 @@ namespace polysolve::linear::mas
             }
         }
 
-        // Copy host COO data to device.
+        // Copy host BSR data to device.
         rows_ = cu::make_buffer<int>(rt.stream, rt.mr, h_rows.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_rows, *rows_);
-        cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols_.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_cols_, *cols_);
-        diag_index_ = cu::make_buffer<int>(rt.stream, rt.mr, h_diag_index.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_diag_index, *diag_index_);
+        cols_ = cu::make_buffer<int>(rt.stream, rt.mr, h_cols.size(), cu::no_init);
+        cu::copy_bytes(rt.stream, h_cols, *cols_);
         vals_ = cu::make_buffer<double>(rt.stream, rt.mr, h_vals.size(), cu::no_init);
         cu::copy_bytes(rt.stream, h_vals, *vals_);
-        topology_non_zeros_ = h_topology_cols_.size();
-        topology_row_ptr_ =
-            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_row_ptr_.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_topology_row_ptr_, *topology_row_ptr_);
-        topology_cols_ =
-            cu::make_buffer<int>(rt.stream, rt.mr, h_topology_cols_.size(), cu::no_init);
-        cu::copy_bytes(rt.stream, h_topology_cols_, *topology_cols_);
 
         rt.stream.sync();
     }

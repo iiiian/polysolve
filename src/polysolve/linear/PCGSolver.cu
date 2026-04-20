@@ -81,7 +81,7 @@ namespace polysolve::linear
         ctd::optional<cu::stream> default_stream_;
         ctd::optional<cu::device_memory_pool> default_mem_pool_;
 
-        BCOOMatrix A_;
+        BSRMatrix A_;
         MASPreconditioner mas_precond_;
         Buf<double> x_;
         Buf<double> b_;
@@ -140,7 +140,7 @@ namespace polysolve::linear
             CudaRuntime rt{*default_stream_, default_mem_pool_->as_ref()};
             A_ = BCOOMatrix{A, block_dim_, rt};
 
-            BCOOView view = A_.view();
+            BSRView view = A_.view();
             dim_ = A.rows();
             padded_dim_ = view.block_dim * view.dim;
             mas_precond_.factorize(A_, rt);
@@ -205,7 +205,7 @@ namespace polysolve::linear
                 return false;
             }
 
-            BCOOView view = A_.view();
+            BSRView view = A_.view();
             int block_n = (n + view.block_dim - 1) / view.block_dim;
             int block_size = view.block_dim * view.block_dim;
 
@@ -247,7 +247,7 @@ namespace polysolve::linear
 
         void pcg_solve(CudaRuntime rt)
         {
-            BCOOView view = A_.view();
+            BSRView view = A_.view();
 
             // Compute initial residual r = b-Ax.
             spmv(view, *x_, *r_, rt);

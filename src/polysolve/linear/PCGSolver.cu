@@ -310,7 +310,7 @@ namespace polysolve::linear
                 // Sort nodes based on parition.
                 phase_begin = clock::now();
                 build_partition_and_perm(topo_matrix.host_topology_view());
-                SPDLOG_TRACE("CUDA_PCG setup: metis_partition {:.6f}s", elapsed_seconds(phase_begin));
+                SPDLOG_INFO("CUDA_PCG setup: metis_partition {:.6f}s", elapsed_seconds(phase_begin));
             }
             else
             {

@@ -384,15 +384,33 @@ namespace polysolve::linear::mas
             int real_node_num = real_to_padded.size();
             int max_bank_per_level = div_round_up(padded_node_num, BANK_SIZE);
             // Bank local CCO id.
-            auto local_cco_ids =
-                cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, cu::no_init);
-            auto cco_num_per_bank =
-                cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init);
+            const size_t coarse_space_bytes =
+                static_cast<size_t>(padded_node_num + 2 * max_bank_per_level
+                    + real_node_num * MAS_MAX_COARSE_LEVEL) * sizeof(int);
+            auto local_cco_ids = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space",
+                coarse_space_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, cu::no_init); });
+            auto cco_num_per_bank = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space",
+                coarse_space_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init); });
             // Inclusive prefix sum of cco_num_per_bank.
-            auto cco_num_per_bank_summed =
-                cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init);
-            auto coarse_space_map =
-                cu::make_buffer<int>(rt.stream, rt.mr, real_node_num * MAS_MAX_COARSE_LEVEL, cu::no_init);
+            auto cco_num_per_bank_summed = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space",
+                coarse_space_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, max_bank_per_level, cu::no_init); });
+            auto coarse_space_map = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space",
+                coarse_space_bytes,
+                [&] {
+                    return cu::make_buffer<int>(
+                        rt.stream, rt.mr, real_node_num * MAS_MAX_COARSE_LEVEL, cu::no_init);
+                });
 
             // Build coarse map level 0.
             int grid_num = div_round_up(padded_node_num, 128);
@@ -407,8 +425,11 @@ namespace polysolve::linear::mas
                                           cco_num_per_bank_summed.data(),
                                           max_bank_per_level,
                                           rt.stream.get());
-            auto cub_tmp =
-                cu::make_buffer<char>(rt.stream, rt.mr, cub_tmp_size, cu::no_init);
+            auto cub_tmp = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space cub_tmp",
+                cub_tmp_size,
+                [&] { return cu::make_buffer<char>(rt.stream, rt.mr, cub_tmp_size, cu::no_init); });
             cub::DeviceScan::InclusiveSum(cub_tmp.data(),
                                           cub_tmp_size,
                                           cco_num_per_bank.data(),
@@ -428,7 +449,11 @@ namespace polysolve::linear::mas
             //  1. Build bank local neighbbor bit mask.
             //  2. Build bank local connectivity mask and find local CCO partition.
             //  3. Compute global CCO id and write to coarse space map.
-            auto neighbors = cu::make_buffer<uint32_t>(rt.stream, rt.mr, padded_node_num, cu::no_init);
+            auto neighbors = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_space neighbors",
+                static_cast<size_t>(padded_node_num) * sizeof(uint32_t),
+                [&] { return cu::make_buffer<uint32_t>(rt.stream, rt.mr, padded_node_num, cu::no_init); });
             for (int lv = 1; lv < MAS_MAX_COARSE_LEVEL; ++lv)
             {
                 cudaMemsetAsync(neighbors.data(), 0, cco_num * sizeof(uint32_t), rt.stream.get());
@@ -881,7 +906,11 @@ namespace polysolve::linear::mas
                 return;
             }
 
-            auto success = cu::make_buffer<bool>(rt.stream, rt.mr, 1, true);
+            auto success = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_matrices invert_flag",
+                sizeof(bool),
+                [&] { return cu::make_buffer<bool>(rt.stream, rt.mr, 1, true); });
 
             if (block_dim == 1)
             {
@@ -931,11 +960,19 @@ namespace polysolve::linear::mas
                 out.total_matrix_num += out.matrix_counts[i + 1];
             }
 
-            out.data = cu::make_buffer<double>(
-                rt.stream,
-                rt.mr,
-                out.total_matrix_num * out.mat_storage_size,
-                0.0);
+            const size_t matrix_bytes =
+                static_cast<size_t>(out.total_matrix_num) * out.mat_storage_size * sizeof(double);
+            out.data = with_cuda_oom_context(
+                "[CudaPCG][MAS]",
+                "coarse_matrices",
+                matrix_bytes,
+                [&] {
+                    return cu::make_buffer<double>(
+                        rt.stream,
+                        rt.mr,
+                        out.total_matrix_num * out.mat_storage_size,
+                        0.0);
+                });
             CoarseMatricesRef view{out};
 
             // Gather.
@@ -980,17 +1017,44 @@ namespace polysolve::linear::mas
         int part_num = part_offsets.size() - 1;
         int padded_node_num = part_num * BANK_SIZE;
 
-        auto d_part_offsets = cu::make_buffer<int>(rt.stream, rt.mr, part_offsets.size(), cu::no_init);
+        const size_t padded_topology_bytes =
+            static_cast<size_t>(part_offsets.size() + node_num + padded_node_num
+                + (padded_node_num + 1) + view.non_zeros + padded_node_num) * sizeof(int);
+        auto d_part_offsets = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, part_offsets.size(), cu::no_init); });
         cu::copy_bytes(rt.stream, part_offsets, d_part_offsets);
 
         padded_topology_.node_num = node_num;
         padded_topology_.padded_node_num = padded_node_num;
-        padded_topology_.real_to_padded = cu::make_buffer<int>(rt.stream, rt.mr, node_num, -1);
-        padded_topology_.padded_to_real = cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, -1);
-        padded_topology_.rows = cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num + 1, cu::no_init);
-        padded_topology_.cols = cu::make_buffer<int>(rt.stream, rt.mr, view.non_zeros, cu::no_init);
+        padded_topology_.real_to_padded = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, node_num, -1); });
+        padded_topology_.padded_to_real = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, -1); });
+        padded_topology_.rows = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num + 1, cu::no_init); });
+        padded_topology_.cols = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, view.non_zeros, cu::no_init); });
 
-        auto read_num_per_row = cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, 0);
+        auto read_num_per_row = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology",
+            padded_topology_bytes,
+            [&] { return cu::make_buffer<int>(rt.stream, rt.mr, padded_node_num, 0); });
         build_padded_maps<<<div_round_up(padded_node_num, 128), 128, 0, rt.stream.get()>>>(
             d_part_offsets,
             view.rows,
@@ -1006,7 +1070,11 @@ namespace polysolve::linear::mas
                                       padded_topology_.rows->data(),
                                       padded_node_num,
                                       rt.stream.get());
-        auto cub_tmp = cu::make_buffer<char>(rt.stream, rt.mr, cub_tmp_size, cu::no_init);
+        auto cub_tmp = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "padded_topology cub_tmp",
+            cub_tmp_size,
+            [&] { return cu::make_buffer<char>(rt.stream, rt.mr, cub_tmp_size, cu::no_init); });
         cub::DeviceScan::ExclusiveSum(cub_tmp.data(),
                                       cub_tmp_size,
                                       read_num_per_row.data(),
@@ -1059,10 +1127,18 @@ namespace polysolve::linear::mas
             coarse_vectors_.total_level_nodes += coarse_vectors_.level_sizes[i + 1];
         }
         int total_level_scalars = coarse_vectors_.total_level_nodes * block_dim_;
-        coarse_vectors_.multi_level_r =
-            cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
-        coarse_vectors_.multi_level_z =
-            cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0);
+        const size_t coarse_vector_bytes =
+            2ull * static_cast<size_t>(total_level_scalars) * sizeof(double);
+        coarse_vectors_.multi_level_r = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "coarse_vectors",
+            coarse_vector_bytes,
+            [&] { return cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0); });
+        coarse_vectors_.multi_level_z = with_cuda_oom_context(
+            "[CudaPCG][MAS]",
+            "coarse_vectors",
+            coarse_vector_bytes,
+            [&] { return cu::make_buffer<double>(rt.stream, rt.mr, total_level_scalars, 0.0); });
         rt.stream.sync();
         SPDLOG_TRACE("CUDA_PCG MAS: allocate_coarse_vectors {:.6f}s", elapsed_seconds(phase_begin));
         SPDLOG_TRACE("CUDA_PCG MAS: factorize_total {:.6f}s", elapsed_seconds(total_begin));

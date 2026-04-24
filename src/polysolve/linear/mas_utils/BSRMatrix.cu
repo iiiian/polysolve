@@ -176,61 +176,143 @@ namespace polysolve::linear::mas
             }
         }
 
-        int build_device_bsr_from_csc(ctd::span<const int> d_col_ptr,
-                                      ctd::span<const int> d_row_idx,
-                                      ctd::span<const double> d_vals,
-                                      int rows_num,
-                                      int cols_num,
-                                      int block_dim,
-                                      const int *d_perm,
-                                      Buf<int> &out_rows,
-                                      Buf<int> &out_cols,
-                                      Buf<double> &out_vals,
-                                      CudaRuntime rt)
+        int build_bsr_from_csc(const StiffnessMatrix &A_csc,
+                               int block_dim,
+                               ctd::span<const int> permutation,
+                               Buf<int> &out_rows,
+                               Buf<int> &out_cols,
+                               Buf<double> &out_vals,
+                               CudaRuntime rt)
         {
-            int nnz = d_row_idx.size();
+            const int rows_num = A_csc.rows();
+            const int cols_num = A_csc.cols();
+            const int nnz = A_csc.nonZeros();
             int dim_blocks = div_round_up(rows_num, block_dim);
             int padded = block_dim * dim_blocks - rows_num;
             int nnz_total = nnz + padded;
+
+            // Upload input CSC to device.
+            const size_t input_csc_bytes =
+                static_cast<size_t>(cols_num + 1 + nnz) * sizeof(int)
+                + static_cast<size_t>(nnz) * sizeof(double);
+            Buf<int> d_col_ptr = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr input_csc",
+                input_csc_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, cols_num + 1, cu::no_init); });
+            Buf<int> d_row_idx = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr input_csc",
+                input_csc_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<double> d_vals = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr input_csc",
+                input_csc_bytes,
+                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init); });
+            cudaMemcpyAsync(
+                d_col_ptr->data(),
+                A_csc.outerIndexPtr(),
+                static_cast<size_t>(cols_num + 1) * sizeof(int),
+                cudaMemcpyHostToDevice,
+                rt.stream.get());
+            cudaMemcpyAsync(
+                d_row_idx->data(),
+                A_csc.innerIndexPtr(),
+                static_cast<size_t>(nnz) * sizeof(int),
+                cudaMemcpyHostToDevice,
+                rt.stream.get());
+            cudaMemcpyAsync(
+                d_vals->data(),
+                A_csc.valuePtr(),
+                static_cast<size_t>(nnz) * sizeof(double),
+                cudaMemcpyHostToDevice,
+                rt.stream.get());
+
+            const int *d_perm_ptr = nullptr;
+            Buf<int> d_perm;
+            if (!permutation.empty())
+            {
+                d_perm = with_cuda_oom_context(
+                    "[CudaPCG]",
+                    "CUDA_PCG permuted_bsr permutation",
+                    static_cast<size_t>(permutation.size()) * sizeof(int),
+                    [&] { return cu::make_buffer<int>(rt.stream, rt.mr, permutation.size(), cu::no_init); });
+                cu::copy_bytes(rt.stream, permutation, *d_perm);
+                d_perm_ptr = d_perm->data();
+            }
 
             // ---------------------------------------------------------------------------
             // Map each nnz index to input col.
             // ---------------------------------------------------------------------------
 
-            auto col_of_nnz = cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init);
+            Buf<int> col_of_nnz = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr col_of_nnz",
+                static_cast<size_t>(nnz) * sizeof(int),
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
             build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
-                cols_num, d_col_ptr, col_of_nnz);
+                cols_num, *d_col_ptr, *col_of_nnz);
+            d_col_ptr->destroy();
 
             // ---------------------------------------------------------------------------
             // Convert each non-zero to [key, payload] pair.
             // ---------------------------------------------------------------------------
 
-            auto keys_in = cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init);
-            auto payloads_in = cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init);
+            const size_t staging_bytes =
+                4ull * static_cast<size_t>(nnz_total) * sizeof(uint64_t);
+            Buf<uint64_t> keys_in = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr staging",
+                staging_bytes,
+                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<uint64_t> payloads_in = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr staging",
+                staging_bytes,
+                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
             build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0, rt.stream.get()>>>(
                 nnz,
                 padded,
                 block_dim,
                 dim_blocks,
-                d_perm,
-                col_of_nnz,
-                d_row_idx,
-                keys_in,
-                payloads_in);
+                d_perm_ptr,
+                *col_of_nnz,
+                *d_row_idx,
+                *keys_in,
+                *payloads_in);
+            col_of_nnz->destroy();
+            d_row_idx->destroy();
+            if (d_perm)
+            {
+                d_perm->destroy();
+            }
 
             // ---------------------------------------------------------------------------
             // Radix sort by key. Result should be in row major order.
             // ---------------------------------------------------------------------------
 
-            auto keys_alt = cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init);
-            auto payloads_alt = cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init);
-            cub::DoubleBuffer<uint64_t> d_keys(keys_in.data(), keys_alt.data());
-            cub::DoubleBuffer<uint64_t> d_payloads(payloads_in.data(), payloads_alt.data());
+            Buf<uint64_t> keys_alt = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr staging",
+                staging_bytes,
+                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<uint64_t> payloads_alt = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr staging",
+                staging_bytes,
+                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            cub::DoubleBuffer<uint64_t> d_keys(keys_in->data(), keys_alt->data());
+            cub::DoubleBuffer<uint64_t> d_payloads(payloads_in->data(), payloads_alt->data());
             Buf<char> cub_tmp;
             auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
                 if (!cub_tmp || cub_tmp->size() < required_size)
                 {
-                    cub_tmp = cu::make_buffer<char>(rt.stream, rt.mr, required_size, cu::no_init);
+                    cub_tmp = with_cuda_oom_context(
+                        "[CudaPCG]",
+                        "CUDA_PCG permuted_bsr cub_tmp",
+                        required_size,
+                        [&] { return cu::make_buffer<char>(rt.stream, rt.mr, required_size, cu::no_init); });
                 }
                 return cub_tmp->data();
             };
@@ -253,51 +335,86 @@ namespace polysolve::linear::mas
                                             64,
                                             rt.stream.get());
 
+            Buf<uint64_t> &sorted_keys_buf = (d_keys.Current() == keys_in->data()) ? keys_in : keys_alt;
+            Buf<uint64_t> &sorted_payloads_buf =
+                (d_payloads.Current() == payloads_in->data()) ? payloads_in : payloads_alt;
+            Buf<uint64_t> &stale_keys_buf = (d_keys.Current() == keys_in->data()) ? keys_alt : keys_in;
+            Buf<uint64_t> &stale_payloads_buf =
+                (d_payloads.Current() == payloads_in->data()) ? payloads_alt : payloads_in;
+            stale_keys_buf->destroy();
+            stale_payloads_buf->destroy();
+
             // ---------------------------------------------------------------------------
             // Run-length encode.
             // This step computes non-zero block num + payload count for each block.
             // ---------------------------------------------------------------------------
 
-            auto unique_keys = cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init);
-            auto counts = cu::make_buffer<int>(rt.stream, rt.mr, nnz_total, cu::no_init);
-            auto num_runs = cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init);
+            const size_t rle_bytes =
+                static_cast<size_t>(nnz_total) * (sizeof(uint64_t) + sizeof(int)) + sizeof(int);
+            Buf<uint64_t> unique_keys = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr rle",
+                rle_bytes,
+                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<int> counts = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr rle",
+                rle_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<int> num_runs = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr rle",
+                rle_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init); });
 
             size_t rle_tmp_size = 0;
             cub::DeviceRunLengthEncode::Encode(nullptr,
                                                rle_tmp_size,
                                                d_keys.Current(),
-                                               unique_keys.data(),
-                                               counts.data(),
-                                               num_runs.data(),
+                                               unique_keys->data(),
+                                               counts->data(),
+                                               num_runs->data(),
                                                nnz_total,
                                                rt.stream.get());
             cub::DeviceRunLengthEncode::Encode(make_cub_tmp(rle_tmp_size),
                                                rle_tmp_size,
                                                d_keys.Current(),
-                                               unique_keys.data(),
-                                               counts.data(),
-                                               num_runs.data(),
+                                               unique_keys->data(),
+                                               counts->data(),
+                                               num_runs->data(),
                                                nnz_total,
                                                rt.stream.get());
+            sorted_keys_buf->destroy();
 
             // ---------------------------------------------------------------------------
             // Histogram + ExclusiveSum
             // This step count non-zero blocks per rows to compute row_ptr.
             // ---------------------------------------------------------------------------
 
-            int nnz_blocks = device2host(num_runs.data(), rt);
-            auto block_rows = cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init);
+            int nnz_blocks = device2host(num_runs->data(), rt);
+            num_runs->destroy();
+            const size_t histogram_bytes =
+                static_cast<size_t>(nnz_blocks + 2 * (dim_blocks + 1)) * sizeof(int);
+            Buf<int> block_rows = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr histogram",
+                histogram_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init); });
             // Extract row index from packed key.
             extract_block_rows<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
-                ctd::span<const uint64_t>(unique_keys.data(), nnz_blocks),
-                block_rows);
+                ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
+                *block_rows);
             // Histogram count nnz block per row.
-            auto hist = cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, 0);
+            Buf<int> hist = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr histogram",
+                histogram_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, 0); });
             size_t hist_tmp_size = 0;
             cub::DeviceHistogram::HistogramEven(nullptr,
                                                 hist_tmp_size,
-                                                block_rows.data(),
-                                                hist.data(),
+                                                block_rows->data(),
+                                                hist->data(),
                                                 dim_blocks + 1,
                                                 0,
                                                 dim_blocks,
@@ -305,61 +422,91 @@ namespace polysolve::linear::mas
                                                 rt.stream.get());
             cub::DeviceHistogram::HistogramEven(make_cub_tmp(hist_tmp_size),
                                                 hist_tmp_size,
-                                                block_rows.data(),
-                                                hist.data(),
+                                                block_rows->data(),
+                                                hist->data(),
                                                 dim_blocks + 1,
                                                 0,
                                                 dim_blocks,
                                                 nnz_blocks,
                                                 rt.stream.get());
             // Exclusive scan compute CSR row ptr.
-            out_rows = cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, cu::no_init);
+            out_rows = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr histogram",
+                histogram_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, cu::no_init); });
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
-                                          hist.data(),
+                                          hist->data(),
                                           out_rows->data(),
                                           dim_blocks + 1,
                                           rt.stream.get());
             cub::DeviceScan::ExclusiveSum(make_cub_tmp(scan_tmp_size),
                                           scan_tmp_size,
-                                          hist.data(),
+                                          hist->data(),
                                           out_rows->data(),
                                           dim_blocks + 1,
                                           rt.stream.get());
+            block_rows->destroy();
+            hist->destroy();
 
             // ---------------------------------------------------------------------------
             // Fill cols and vals non-zero blocks.
             // ---------------------------------------------------------------------------
 
             // Compute Payload offsets for each block.
-            auto payload_offsets = cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks + 1, cu::no_init);
-            cudaMemsetAsync(counts.data() + nnz_blocks, 0, sizeof(int), rt.stream.get());
+            const size_t output_bytes =
+                static_cast<size_t>(nnz_blocks + 1 + nnz_blocks) * sizeof(int)
+                + static_cast<size_t>(nnz_blocks) * block_dim * block_dim * sizeof(double);
+            Buf<int> payload_offsets = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr outputs",
+                output_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks + 1, cu::no_init); });
+            cudaMemsetAsync(counts->data() + nnz_blocks, 0, sizeof(int), rt.stream.get());
             size_t off_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           off_tmp_size,
-                                          counts.data(),
-                                          payload_offsets.data(),
+                                          counts->data(),
+                                          payload_offsets->data(),
                                           nnz_blocks + 1,
                                           rt.stream.get());
             cub::DeviceScan::ExclusiveSum(make_cub_tmp(off_tmp_size),
                                           off_tmp_size,
-                                          counts.data(),
-                                          payload_offsets.data(),
+                                          counts->data(),
+                                          payload_offsets->data(),
                                           nnz_blocks + 1,
                                           rt.stream.get());
+            counts->destroy();
+            cub_tmp->destroy();
 
             // Fill cols and vals.
-            out_cols = cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init);
-            out_vals = cu::make_buffer<double>(rt.stream, rt.mr, nnz_blocks * block_dim * block_dim, 0.0);
+            out_cols = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr outputs",
+                output_bytes,
+                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init); });
+            out_vals = with_cuda_oom_context(
+                "[CudaPCG]",
+                "CUDA_PCG permuted_bsr outputs",
+                output_bytes,
+                [&] {
+                    return cu::make_buffer<double>(
+                        rt.stream, rt.mr, nnz_blocks * block_dim * block_dim, 0.0);
+                });
             fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
                 block_dim,
-                ctd::span<const uint64_t>(unique_keys.data(), nnz_blocks),
-                payload_offsets,
+                ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
+                *payload_offsets,
                 ctd::span<const uint64_t>(d_payloads.Current(), nnz_total),
-                d_vals,
+                *d_vals,
                 *out_cols,
                 *out_vals);
+            unique_keys->destroy();
+            payload_offsets->destroy();
+            sorted_payloads_buf->destroy();
+            d_vals->destroy();
 
             return nnz_blocks;
         }
@@ -389,51 +536,10 @@ namespace polysolve::linear::mas
         block_dim_ = block_dim;
         dim_ = div_round_up(A_csc->rows(), block_dim_);
 
-        int rows_num = A_csc->rows();
-        int cols_num = A_csc->cols();
-        int nnz = A_csc->nonZeros();
-
-        // Upload input CSC to device.
-        auto d_col_ptr = cu::make_buffer<int>(rt.stream, rt.mr, cols_num + 1, cu::no_init);
-        auto d_row_idx = cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init);
-        auto d_vals = cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init);
-        cudaMemcpyAsync(
-            d_col_ptr.data(),
-            A_csc->outerIndexPtr(),
-            static_cast<size_t>(cols_num + 1) * sizeof(int),
-            cudaMemcpyHostToDevice,
-            rt.stream.get());
-        cudaMemcpyAsync(
-            d_row_idx.data(),
-            A_csc->innerIndexPtr(),
-            static_cast<size_t>(nnz) * sizeof(int),
-            cudaMemcpyHostToDevice,
-            rt.stream.get());
-        cudaMemcpyAsync(
-            d_vals.data(),
-            A_csc->valuePtr(),
-            static_cast<size_t>(nnz) * sizeof(double),
-            cudaMemcpyHostToDevice,
-            rt.stream.get());
-
-        // Upload permutation if non empty.
-        const int *d_perm_ptr = nullptr;
-        Buf<int> d_perm;
-        if (!permutation.empty())
-        {
-            d_perm = cu::make_buffer<int>(rt.stream, rt.mr, permutation.size(), cu::no_init);
-            cu::copy_bytes(rt.stream, permutation, *d_perm);
-            d_perm_ptr = d_perm->data();
-        }
-
-        non_zeros_ = build_device_bsr_from_csc(
-            d_col_ptr,
-            d_row_idx,
-            d_vals,
-            rows_num,
-            cols_num,
+        non_zeros_ = build_bsr_from_csc(
+            *A_csc,
             block_dim_,
-            d_perm_ptr,
+            permutation,
             rows_,
             cols_,
             vals_,

@@ -463,6 +463,8 @@ if(POLYSOLVE_WITH_TESTS)
     include(CTest)
     enable_testing()
 
+    include(argparse)
+
     # Include Catch2 and provide function `catch_discover_tests` to register tests.
     include(catch2)
     FetchContent_GetProperties(catch2)

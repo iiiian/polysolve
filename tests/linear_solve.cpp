@@ -23,6 +23,8 @@ using namespace polysolve::linear;
 
 namespace
 {
+    constexpr std::uint32_t DEFAULT_RAND_SEED = 0;
+
     class ScopedOutputSilencer
     {
     public:
@@ -135,7 +137,7 @@ int main(int argc, char *argv[])
     auto &rhs_group = program.add_mutually_exclusive_group();
     rhs_group.add_argument("-b")
         .metavar("rhs.mtx")
-        .help("Optional Matrix Market RHS vector. Defaults to a zero vector unless --rand is used.");
+        .help("Optional Matrix Market RHS vector. Defaults to a deterministic random vector with seed 0 unless --rand is used.");
     rhs_group.add_argument("--rand")
         .metavar("seed")
         .scan<'i', long long>()
@@ -239,7 +241,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            b.setZero();
+            b = make_random_rhs(A.rows(), DEFAULT_RAND_SEED);
         }
     }
 

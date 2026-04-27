@@ -1,5 +1,6 @@
 #pragma once
 
+#include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/Types.hpp>
 
 #include <cstdint>
@@ -7,13 +8,13 @@
 
 namespace polysolve::linear::mas
 {
-    /// Host-only CSR adjacency for graph partitioning.
+    /// Host CSR adjacency for graph partitioning, built using CUDA.
     /// Self-excluding, with symmetrized + quantized positive integer weights.
     class BSRAdjacency
     {
     public:
         BSRAdjacency() = default;
-        BSRAdjacency(const StiffnessMatrix &A, int block_dim);
+        BSRAdjacency(const StiffnessMatrix &A, int block_dim, CudaRuntime rt);
 
         std::vector<int> row_ptr;
         std::vector<int> cols;

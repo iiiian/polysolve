@@ -323,7 +323,7 @@ namespace polysolve::linear
             {
                 // Build adjacency for graph partition.
                 auto phase_begin = clock::now();
-                BSRAdjacency adj{A, block_dim_};
+                BSRAdjacency adj{A, block_dim_, rt};
                 SPDLOG_INFO("CUDA_PCG setup: topology_adj {:.6f}s", elapsed_seconds(phase_begin));
 
                 // Sort nodes based on parition.

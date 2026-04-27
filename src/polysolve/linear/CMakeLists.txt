@@ -21,7 +21,7 @@ if(POLYSOLVE_WITH_CUDA)
     list(APPEND SOURCES
         PCGSolver.cu
         PCGSolver.hpp
-        mas_utils/BSRAdjacency.cpp
+        mas_utils/BSRAdjacency.cu
         mas_utils/BSRAdjacency.hpp
         mas_utils/BSRMatrix.cu
         mas_utils/BSRMatrix.hpp

@@ -110,7 +110,7 @@ namespace polysolve::linear::mas
             int block_size = view.block_dim * view.block_dim;
             int permuted_scalar_dim = view.dim * view.block_dim;
             std::vector<double> diag_abs;
-            std::vector<double> diag_idx;
+            std::vector<int> diag_idx;
             for (int block_row = 0; block_row < view.dim; ++block_row)
             {
                 // Traverse BSR, find diagonal.

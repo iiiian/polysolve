@@ -261,38 +261,12 @@ namespace polysolve::linear::mas
             return;
         }
 
-        size_t bad_dof_bytes =
-            (host_bad_dof.indices.size() + host_bad_dof.rows.size() + host_bad_dof.cols.size()) * sizeof(int)
-            + (host_bad_dof.vals.size() + 2ull * bad_dof_count_) * sizeof(double);
-
-        with_cuda_oom_context(
-            "[CudaPCG][BadDOF]",
-            "factorize",
-            bad_dof_bytes,
-            [&] {
-                bad_dof_indices_ = cu::make_buffer<int>(
-                    rt.stream,
-                    rt.mr,
-                    host_bad_dof.indices.size(),
-                    cu::no_init);
-                bad_dof_rows_ = cu::make_buffer<int>(
-                    rt.stream,
-                    rt.mr,
-                    host_bad_dof.rows.size(),
-                    cu::no_init);
-                bad_dof_cols_ = cu::make_buffer<int>(
-                    rt.stream,
-                    rt.mr,
-                    host_bad_dof.cols.size(),
-                    cu::no_init);
-                bad_dof_vals_ = cu::make_buffer<double>(
-                    rt.stream,
-                    rt.mr,
-                    host_bad_dof.vals.size(),
-                    cu::no_init);
-                bad_dof_rhs_ = cu::make_buffer<double>(rt.stream, rt.mr, bad_dof_count_, 0.0);
-                bad_dof_solution_ = cu::make_buffer<double>(rt.stream, rt.mr, bad_dof_count_, 0.0);
-            });
+        bad_dof_indices_ = safe_alloc<int>(host_bad_dof.indices.size(), rt, "BadDOF factorize indices");
+        bad_dof_rows_ = safe_alloc<int>(host_bad_dof.rows.size(), rt, "BadDOF factorize rows");
+        bad_dof_cols_ = safe_alloc<int>(host_bad_dof.cols.size(), rt, "BadDOF factorize cols");
+        bad_dof_vals_ = safe_alloc<double>(host_bad_dof.vals.size(), rt, "BadDOF factorize vals");
+        bad_dof_rhs_ = safe_alloc<double>(bad_dof_count_, 0.0, rt, "BadDOF factorize rhs");
+        bad_dof_solution_ = safe_alloc<double>(bad_dof_count_, 0.0, rt, "BadDOF factorize solution");
 
         cu::copy_bytes(rt.stream, host_bad_dof.indices, *bad_dof_indices_);
         cu::copy_bytes(rt.stream, host_bad_dof.rows, *bad_dof_rows_);

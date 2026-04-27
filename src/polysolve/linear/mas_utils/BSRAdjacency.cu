@@ -216,24 +216,9 @@ namespace polysolve::linear::mas
             const int nnz = A_csc.nonZeros();
             const int dim_blocks = div_round_up(rows_num, block_dim);
 
-            const size_t input_csc_bytes =
-                static_cast<size_t>(cols_num + 1 + nnz) * sizeof(int)
-                + static_cast<size_t>(nnz) * sizeof(double);
-            Buf<int> d_col_ptr = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, cols_num + 1, cu::no_init); });
-            Buf<int> d_row_idx = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<double> d_vals = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "CUDA_PCG topology_adj input_csc");
+            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj input_csc");
+            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj input_csc");
             cudaMemcpyAsync(
                 d_col_ptr->data(),
                 A_csc.outerIndexPtr(),
@@ -253,32 +238,14 @@ namespace polysolve::linear::mas
                 cudaMemcpyHostToDevice,
                 rt.stream.get());
 
-            Buf<int> col_of_nnz = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj col_of_nnz",
-                static_cast<size_t>(nnz) * sizeof(int),
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj col_of_nnz");
             build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
                 cols_num, *d_col_ptr, *col_of_nnz);
             d_col_ptr->destroy();
 
-            const size_t staging_bytes =
-                static_cast<size_t>(nnz) * (sizeof(uint64_t) + sizeof(double) + sizeof(int));
-            Buf<uint64_t> all_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<double> all_norm2 = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<int> keep_flags = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<uint64_t> all_keys = safe_alloc<uint64_t>(nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<double> all_norm2 = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<int> keep_flags = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj staging");
             build_directed_keys_vals_flags<<<div_round_up(nnz, 128), 128, 0, rt.stream.get()>>>(
                 nnz,
                 block_dim,
@@ -295,30 +262,14 @@ namespace polysolve::linear::mas
             auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
                 if (!cub_tmp || cub_tmp->size() < required_size)
                 {
-                    cub_tmp = with_cuda_oom_context(
-                        "[CudaPCG]",
-                        "CUDA_PCG topology_adj cub_tmp",
-                        required_size,
-                        [&] { return cu::make_buffer<char>(rt.stream, rt.mr, required_size, cu::no_init); });
+                    cub_tmp = safe_alloc<char>(required_size, rt, "CUDA_PCG topology_adj cub_tmp");
                 }
                 return cub_tmp->data();
             };
 
-            Buf<uint64_t> directed_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                static_cast<size_t>(nnz) * sizeof(uint64_t),
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<double> directed_norm2 = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                static_cast<size_t>(nnz) * sizeof(double),
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<int> num_selected = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                sizeof(int),
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init); });
+            Buf<uint64_t> directed_keys = safe_alloc<uint64_t>(nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<double> directed_norm2 = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<int> num_selected = safe_alloc<int>(1, rt, "CUDA_PCG topology_adj staging");
 
             size_t select_tmp_size = 0;
             cub::DeviceSelect::Flagged(nullptr,
@@ -359,18 +310,10 @@ namespace polysolve::linear::mas
             keep_flags->destroy();
             num_selected->destroy();
 
-            const size_t offdiag_bytes =
-                static_cast<size_t>(offdiag_nnz) * (2 * sizeof(uint64_t) + 2 * sizeof(double));
-            Buf<uint64_t> directed_keys_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                offdiag_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, offdiag_nnz, cu::no_init); });
-            Buf<double> directed_norm2_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj staging",
-                offdiag_bytes,
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, offdiag_nnz, cu::no_init); });
+            Buf<uint64_t> directed_keys_alt =
+                safe_alloc<uint64_t>(offdiag_nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<double> directed_norm2_alt =
+                safe_alloc<double>(offdiag_nnz, rt, "CUDA_PCG topology_adj staging");
             cub::DoubleBuffer<uint64_t> d_keys(directed_keys->data(), directed_keys_alt->data());
             cub::DoubleBuffer<double> d_norm2(directed_norm2->data(), directed_norm2_alt->data());
 
@@ -403,23 +346,9 @@ namespace polysolve::linear::mas
             stale_key_buf->destroy();
             stale_norm2_buf->destroy();
 
-            const size_t reduce_bytes =
-                static_cast<size_t>(offdiag_nnz) * (sizeof(uint64_t) + sizeof(double)) + sizeof(int);
-            Buf<uint64_t> unique_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj reduce",
-                reduce_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, offdiag_nnz, cu::no_init); });
-            Buf<double> directed_weights = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj reduce",
-                reduce_bytes,
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, offdiag_nnz, cu::no_init); });
-            Buf<int> edge_count_buf = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj reduce",
-                reduce_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init); });
+            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(offdiag_nnz, rt, "CUDA_PCG topology_adj reduce");
+            Buf<double> directed_weights = safe_alloc<double>(offdiag_nnz, rt, "CUDA_PCG topology_adj reduce");
+            Buf<int> edge_count_buf = safe_alloc<int>(1, rt, "CUDA_PCG topology_adj reduce");
 
             size_t reduce_tmp_size = 0;
             cub::DeviceReduce::ReduceByKey(nullptr,
@@ -450,21 +379,11 @@ namespace polysolve::linear::mas
             apply_sqrt<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<double>(directed_weights->data(), edge_count));
 
-            const size_t histogram_bytes =
-                static_cast<size_t>(edge_count + 2 * (dim_blocks + 1)) * sizeof(int);
-            Buf<int> block_rows = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<int> block_rows = safe_alloc<int>(edge_count, rt, "CUDA_PCG topology_adj histogram");
             extract_block_rows<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), edge_count),
                 *block_rows);
-            Buf<int> hist = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, 0); });
+            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "CUDA_PCG topology_adj histogram");
             size_t hist_tmp_size = 0;
             cub::DeviceHistogram::HistogramEven(nullptr,
                                                 hist_tmp_size,
@@ -484,11 +403,7 @@ namespace polysolve::linear::mas
                                                 dim_blocks,
                                                 edge_count,
                                                 rt.stream.get());
-            Buf<int> d_row_ptr = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, cu::no_init); });
+            Buf<int> d_row_ptr = safe_alloc<int>(dim_blocks + 1, rt, "CUDA_PCG topology_adj histogram");
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
@@ -505,42 +420,21 @@ namespace polysolve::linear::mas
             block_rows->destroy();
             hist->destroy();
 
-            Buf<int> d_cols = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj outputs",
-                static_cast<size_t>(edge_count) * sizeof(int),
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<int> d_cols = safe_alloc<int>(edge_count, rt, "CUDA_PCG topology_adj outputs");
             extract_block_cols<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), edge_count),
                 *d_cols);
 
-            const size_t pair_bytes =
-                static_cast<size_t>(edge_count) * (2 * sizeof(uint64_t) + 2 * sizeof(int));
-            Buf<uint64_t> pair_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, edge_count, cu::no_init); });
-            Buf<int> orig_indices = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<uint64_t> pair_keys = safe_alloc<uint64_t>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
+            Buf<int> orig_indices = safe_alloc<int>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
             build_pair_keys_indices<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), edge_count),
                 *pair_keys,
                 *orig_indices);
 
-            Buf<uint64_t> pair_keys_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, edge_count, cu::no_init); });
-            Buf<int> orig_indices_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<uint64_t> pair_keys_alt =
+                safe_alloc<uint64_t>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
+            Buf<int> orig_indices_alt = safe_alloc<int>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
             cub::DoubleBuffer<uint64_t> d_pair_keys(pair_keys->data(), pair_keys_alt->data());
             cub::DoubleBuffer<int> d_orig_indices(orig_indices->data(), orig_indices_alt->data());
 
@@ -573,23 +467,10 @@ namespace polysolve::linear::mas
             stale_pair_keys->destroy();
             stale_orig_indices->destroy();
 
-            const size_t pair_rle_bytes =
-                static_cast<size_t>(edge_count) * (sizeof(uint64_t) + sizeof(int)) + sizeof(int);
-            Buf<uint64_t> unique_pair_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_rle_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, edge_count, cu::no_init); });
-            Buf<int> pair_counts = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_rle_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, edge_count + 1, cu::no_init); });
-            Buf<int> pair_count_buf = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                pair_rle_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init); });
+            Buf<uint64_t> unique_pair_keys =
+                safe_alloc<uint64_t>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
+            Buf<int> pair_counts = safe_alloc<int>(edge_count + 1, rt, "CUDA_PCG topology_adj symmetrize");
+            Buf<int> pair_count_buf = safe_alloc<int>(1, rt, "CUDA_PCG topology_adj symmetrize");
 
             size_t pair_rle_tmp_size = 0;
             cub::DeviceRunLengthEncode::Encode(nullptr,
@@ -613,11 +494,7 @@ namespace polysolve::linear::mas
             unique_pair_keys->destroy();
             pair_count_buf->destroy();
 
-            Buf<int> pair_offsets = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                static_cast<size_t>(pair_count + 1) * sizeof(int),
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, pair_count + 1, cu::no_init); });
+            Buf<int> pair_offsets = safe_alloc<int>(pair_count + 1, rt, "CUDA_PCG topology_adj symmetrize");
             cudaMemsetAsync(pair_counts->data() + pair_count, 0, sizeof(int), rt.stream.get());
             size_t pair_scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
@@ -634,11 +511,7 @@ namespace polysolve::linear::mas
                                           rt.stream.get());
             pair_counts->destroy();
 
-            Buf<double> sym_weights = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj symmetrize",
-                static_cast<size_t>(edge_count) * sizeof(double),
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<double> sym_weights = safe_alloc<double>(edge_count, rt, "CUDA_PCG topology_adj symmetrize");
             average_sym_weights<<<div_round_up(pair_count, 128), 128, 0, rt.stream.get()>>>(
                 *pair_offsets,
                 ctd::span<const int>(d_orig_indices.Current(), edge_count),
@@ -649,16 +522,8 @@ namespace polysolve::linear::mas
             directed_weights->destroy();
             unique_keys->destroy();
 
-            Buf<double> min_weight_buf = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj quantize",
-                2 * sizeof(double),
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init); });
-            Buf<double> max_weight_buf = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj quantize",
-                2 * sizeof(double),
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init); });
+            Buf<double> min_weight_buf = safe_alloc<double>(1, rt, "CUDA_PCG topology_adj quantize");
+            Buf<double> max_weight_buf = safe_alloc<double>(1, rt, "CUDA_PCG topology_adj quantize");
 
             size_t min_tmp_size = 0;
             cub::DeviceReduce::Min(nullptr,
@@ -691,11 +556,7 @@ namespace polysolve::linear::mas
             double min_weight = device2host(min_weight_buf->data(), rt);
             double max_weight = device2host(max_weight_buf->data(), rt);
 
-            Buf<int64_t> d_weights = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG topology_adj outputs",
-                static_cast<size_t>(edge_count) * sizeof(int64_t),
-                [&] { return cu::make_buffer<int64_t>(rt.stream, rt.mr, edge_count, cu::no_init); });
+            Buf<int64_t> d_weights = safe_alloc<int64_t>(edge_count, rt, "CUDA_PCG topology_adj outputs");
             quantize_weights<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 *sym_weights,
                 min_weight,

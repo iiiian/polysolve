@@ -7,7 +7,6 @@
 #include <cuda/std/optional>
 
 #include <new>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -37,50 +36,19 @@ namespace polysolve::linear::mas
         using std::runtime_error::runtime_error;
     };
 
-    inline size_t bytes_to_mb_ceil(size_t bytes)
+    // Actually, there's nothing safe about this wrapper.
+    // It just throw meaningful error indicating exactly where allocation fails.
+    template <typename T>
+    cu::device_buffer<T> safe_alloc(
+        size_t n,
+        CudaRuntime rt,
+        const char *ctx = nullptr)
     {
-        constexpr size_t mb = 1024ull * 1024ull;
-        return (bytes + mb - 1) / mb;
-    }
-
-    inline size_t bytes_to_mb_floor(size_t bytes)
-    {
-        constexpr size_t mb = 1024ull * 1024ull;
-        return bytes / mb;
-    }
-
-    inline size_t query_free_device_bytes()
-    {
-        size_t free_bytes = 0;
-        size_t total_bytes = 0;
-        cudaMemGetInfo(&free_bytes, &total_bytes);
-        return free_bytes;
-    }
-
-    [[noreturn]] inline void throw_cuda_oom(
-        const char *prefix,
-        const std::string &context,
-        size_t requested_bytes)
-    {
-        const size_t free_bytes = query_free_device_bytes();
-
-        std::ostringstream ss;
-        ss << prefix << " Failed to allocate " << bytes_to_mb_ceil(requested_bytes)
-           << " MB for " << context << "; only " << bytes_to_mb_floor(free_bytes)
-           << " MB free.";
-        throw CudaOutOfMemoryError(ss.str());
-    }
-
-    template <class F>
-    decltype(auto) with_cuda_oom_context(
-        const char *prefix,
-        const std::string &context,
-        size_t requested_bytes,
-        F &&fn)
-    {
+        const std::string context = ctx ? ctx : "cuda allocation";
+        const size_t requested_bytes = n * sizeof(T);
         try
         {
-            return fn();
+            return cu::make_buffer<T>(rt.stream, rt.mr, n, cu::no_init);
         }
         catch (const CudaOutOfMemoryError &)
         {
@@ -88,16 +56,71 @@ namespace polysolve::linear::mas
         }
         catch (const std::bad_alloc &)
         {
-            throw_cuda_oom(prefix, context, requested_bytes);
         }
         catch (const cuda::cuda_error &err)
         {
-            if (err.status() == cudaErrorMemoryAllocation)
+            if (err.status() != cudaErrorMemoryAllocation)
             {
-                throw_cuda_oom(prefix, context, requested_bytes);
+                throw;
             }
+        }
+
+        size_t free_bytes = 0;
+        size_t total_bytes = 0;
+        cudaMemGetInfo(&free_bytes, &total_bytes);
+        constexpr size_t mb = 1024ull * 1024ull;
+        throw CudaOutOfMemoryError(
+            std::string("[CudaPCG] Failed to allocate ")
+            + std::to_string((requested_bytes + mb - 1) / mb)
+            + " MB for "
+            + context
+            + "; only "
+            + std::to_string(free_bytes / mb)
+            + " MB free.");
+    }
+
+    // Actually, there's nothing safe about this wrapper.
+    // It just throw meaningful error indicating exactly where allocation fails.
+    template <typename T>
+    cu::device_buffer<T> safe_alloc(
+        size_t n,
+        T init_val,
+        CudaRuntime rt,
+        const char *ctx = nullptr)
+    {
+        const std::string context = ctx ? ctx : "cuda allocation";
+        const size_t requested_bytes = n * sizeof(T);
+        try
+        {
+            return cu::make_buffer<T>(rt.stream, rt.mr, n, init_val);
+        }
+        catch (const CudaOutOfMemoryError &)
+        {
             throw;
         }
+        catch (const std::bad_alloc &)
+        {
+        }
+        catch (const cuda::cuda_error &err)
+        {
+            if (err.status() != cudaErrorMemoryAllocation)
+            {
+                throw;
+            }
+        }
+
+        size_t free_bytes = 0;
+        size_t total_bytes = 0;
+        cudaMemGetInfo(&free_bytes, &total_bytes);
+        constexpr size_t mb = 1024ull * 1024ull;
+        throw CudaOutOfMemoryError(
+            std::string("[CudaPCG] Failed to allocate ")
+            + std::to_string((requested_bytes + mb - 1) / mb)
+            + " MB for "
+            + context
+            + "; only "
+            + std::to_string(free_bytes / mb)
+            + " MB free.");
     }
 
     /// @brief Transfer device scalar src to host.

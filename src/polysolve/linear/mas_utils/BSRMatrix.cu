@@ -192,24 +192,9 @@ namespace polysolve::linear::mas
             int nnz_total = nnz + padded;
 
             // Upload input CSC to device.
-            const size_t input_csc_bytes =
-                static_cast<size_t>(cols_num + 1 + nnz) * sizeof(int)
-                + static_cast<size_t>(nnz) * sizeof(double);
-            Buf<int> d_col_ptr = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, cols_num + 1, cu::no_init); });
-            Buf<int> d_row_idx = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
-            Buf<double> d_vals = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr input_csc",
-                input_csc_bytes,
-                [&] { return cu::make_buffer<double>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "CUDA_PCG permuted_bsr input_csc");
+            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "CUDA_PCG permuted_bsr input_csc");
+            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "CUDA_PCG permuted_bsr input_csc");
             cudaMemcpyAsync(
                 d_col_ptr->data(),
                 A_csc.outerIndexPtr(),
@@ -233,11 +218,7 @@ namespace polysolve::linear::mas
             Buf<int> d_perm;
             if (!permutation.empty())
             {
-                d_perm = with_cuda_oom_context(
-                    "[CudaPCG]",
-                    "CUDA_PCG permuted_bsr permutation",
-                    static_cast<size_t>(permutation.size()) * sizeof(int),
-                    [&] { return cu::make_buffer<int>(rt.stream, rt.mr, permutation.size(), cu::no_init); });
+                d_perm = safe_alloc<int>(permutation.size(), rt, "CUDA_PCG permuted_bsr permutation");
                 cu::copy_bytes(rt.stream, permutation, *d_perm);
                 d_perm_ptr = d_perm->data();
             }
@@ -246,11 +227,7 @@ namespace polysolve::linear::mas
             // Map each nnz index to input col.
             // ---------------------------------------------------------------------------
 
-            Buf<int> col_of_nnz = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr col_of_nnz",
-                static_cast<size_t>(nnz) * sizeof(int),
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz, cu::no_init); });
+            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "CUDA_PCG permuted_bsr col_of_nnz");
             build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
                 cols_num, *d_col_ptr, *col_of_nnz);
             d_col_ptr->destroy();
@@ -259,18 +236,9 @@ namespace polysolve::linear::mas
             // Convert each non-zero to [key, payload] pair.
             // ---------------------------------------------------------------------------
 
-            const size_t staging_bytes =
-                4ull * static_cast<size_t>(nnz_total) * sizeof(uint64_t);
-            Buf<uint64_t> keys_in = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
-            Buf<uint64_t> payloads_in = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<uint64_t> keys_in = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+            Buf<uint64_t> payloads_in =
+                safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
             build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0, rt.stream.get()>>>(
                 nnz,
                 padded,
@@ -292,27 +260,16 @@ namespace polysolve::linear::mas
             // Radix sort by key. Result should be in row major order.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> keys_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
-            Buf<uint64_t> payloads_alt = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr staging",
-                staging_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
+            Buf<uint64_t> keys_alt = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+            Buf<uint64_t> payloads_alt =
+                safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
             cub::DoubleBuffer<uint64_t> d_keys(keys_in->data(), keys_alt->data());
             cub::DoubleBuffer<uint64_t> d_payloads(payloads_in->data(), payloads_alt->data());
             Buf<char> cub_tmp;
             auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
                 if (!cub_tmp || cub_tmp->size() < required_size)
                 {
-                    cub_tmp = with_cuda_oom_context(
-                        "[CudaPCG]",
-                        "CUDA_PCG permuted_bsr cub_tmp",
-                        required_size,
-                        [&] { return cu::make_buffer<char>(rt.stream, rt.mr, required_size, cu::no_init); });
+                    cub_tmp = safe_alloc<char>(required_size, rt, "CUDA_PCG permuted_bsr cub_tmp");
                 }
                 return cub_tmp->data();
             };
@@ -349,23 +306,9 @@ namespace polysolve::linear::mas
             // This step computes non-zero block num + payload count for each block.
             // ---------------------------------------------------------------------------
 
-            const size_t rle_bytes =
-                static_cast<size_t>(nnz_total) * (sizeof(uint64_t) + sizeof(int)) + sizeof(int);
-            Buf<uint64_t> unique_keys = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr rle",
-                rle_bytes,
-                [&] { return cu::make_buffer<uint64_t>(rt.stream, rt.mr, nnz_total, cu::no_init); });
-            Buf<int> counts = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr rle",
-                rle_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_total, cu::no_init); });
-            Buf<int> num_runs = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr rle",
-                rle_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, 1, cu::no_init); });
+            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr rle");
+            Buf<int> counts = safe_alloc<int>(nnz_total, rt, "CUDA_PCG permuted_bsr rle");
+            Buf<int> num_runs = safe_alloc<int>(1, rt, "CUDA_PCG permuted_bsr rle");
 
             size_t rle_tmp_size = 0;
             cub::DeviceRunLengthEncode::Encode(nullptr,
@@ -393,23 +336,13 @@ namespace polysolve::linear::mas
 
             int nnz_blocks = device2host(num_runs->data(), rt);
             num_runs->destroy();
-            const size_t histogram_bytes =
-                static_cast<size_t>(nnz_blocks + 2 * (dim_blocks + 1)) * sizeof(int);
-            Buf<int> block_rows = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init); });
+            Buf<int> block_rows = safe_alloc<int>(nnz_blocks, rt, "CUDA_PCG permuted_bsr histogram");
             // Extract row index from packed key.
             extract_block_rows<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
                 *block_rows);
             // Histogram count nnz block per row.
-            Buf<int> hist = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, 0); });
+            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "CUDA_PCG permuted_bsr histogram");
             size_t hist_tmp_size = 0;
             cub::DeviceHistogram::HistogramEven(nullptr,
                                                 hist_tmp_size,
@@ -430,11 +363,7 @@ namespace polysolve::linear::mas
                                                 nnz_blocks,
                                                 rt.stream.get());
             // Exclusive scan compute CSR row ptr.
-            out_rows = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr histogram",
-                histogram_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, dim_blocks + 1, cu::no_init); });
+            out_rows = safe_alloc<int>(dim_blocks + 1, rt, "CUDA_PCG permuted_bsr histogram");
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
@@ -456,14 +385,7 @@ namespace polysolve::linear::mas
             // ---------------------------------------------------------------------------
 
             // Compute Payload offsets for each block.
-            const size_t output_bytes =
-                static_cast<size_t>(nnz_blocks + 1 + nnz_blocks) * sizeof(int)
-                + static_cast<size_t>(nnz_blocks) * block_dim * block_dim * sizeof(double);
-            Buf<int> payload_offsets = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr outputs",
-                output_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks + 1, cu::no_init); });
+            Buf<int> payload_offsets = safe_alloc<int>(nnz_blocks + 1, rt, "CUDA_PCG permuted_bsr outputs");
             cudaMemsetAsync(counts->data() + nnz_blocks, 0, sizeof(int), rt.stream.get());
             size_t off_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
@@ -482,19 +404,9 @@ namespace polysolve::linear::mas
             cub_tmp->destroy();
 
             // Fill cols and vals.
-            out_cols = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr outputs",
-                output_bytes,
-                [&] { return cu::make_buffer<int>(rt.stream, rt.mr, nnz_blocks, cu::no_init); });
-            out_vals = with_cuda_oom_context(
-                "[CudaPCG]",
-                "CUDA_PCG permuted_bsr outputs",
-                output_bytes,
-                [&] {
-                    return cu::make_buffer<double>(
-                        rt.stream, rt.mr, nnz_blocks * block_dim * block_dim, 0.0);
-                });
+            out_cols = safe_alloc<int>(nnz_blocks, rt, "CUDA_PCG permuted_bsr outputs");
+            out_vals =
+                safe_alloc<double>(nnz_blocks * block_dim * block_dim, 0.0, rt, "CUDA_PCG permuted_bsr outputs");
             fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
                 block_dim,
                 ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),

@@ -271,17 +271,7 @@ namespace polysolve::linear
                 &workspace_size);
 
             const size_t workspace_bytes = workspace_size == 0 ? 1 : workspace_size;
-            spmv_workspace_ = with_cuda_oom_context(
-                "[CudaPCG]",
-                "cusparse_workspace",
-                workspace_bytes,
-                [&] {
-                    return cu::make_buffer<char>(
-                        rt.stream,
-                        rt.mr,
-                        workspace_bytes,
-                        cu::no_init);
-                });
+            spmv_workspace_ = safe_alloc<char>(workspace_bytes, rt, "cusparse_workspace");
         }
 
         void spmv(ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt)
@@ -338,17 +328,11 @@ namespace polysolve::linear
 
             // Build new sorted BSR matrix for MAS initialization.
             auto phase_begin = clock::now();
-            A_ = with_cuda_oom_context(
-                "[CudaPCG]",
-                "permuted_bsr",
-                1,
-                [&] {
-                    return BSRMatrix{
-                        A,
-                        block_dim_,
-                        ctd::span<const int>(permutation_.data(), permutation_.size()),
-                        rt};
-                });
+            A_ = BSRMatrix{
+                A,
+                block_dim_,
+                ctd::span<const int>(permutation_.data(), permutation_.size()),
+                rt};
             SPDLOG_INFO("CUDA_PCG setup: permuted_bsr {:.6f}s", elapsed_seconds(phase_begin));
 
             BSRView view = A_.view();
@@ -357,72 +341,47 @@ namespace polysolve::linear
 
             // Initialize MAS.
             phase_begin = clock::now();
-            with_cuda_oom_context(
-                "[CudaPCG][MAS]",
-                "mas_factorize",
-                1,
-                [&] {
-                    mas_precond_.factorize(
-                        A_,
-                        ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
-                        rt);
-                });
+            mas_precond_.factorize(
+                A_,
+                ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
+                rt);
             rt.stream.sync();
             SPDLOG_INFO("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
 
             if (use_bad_dof_precond_)
             {
                 phase_begin = clock::now();
-                with_cuda_oom_context(
-                    "[CudaPCG][BadDOF]",
-                    "bad_dof_factorize",
-                    1,
-                    [&] { bad_dof_precond_.factorize(A_, rt); });
+                bad_dof_precond_.factorize(A_, rt);
                 rt.stream.sync();
                 SPDLOG_INFO("CUDA_PCG setup: bad_dof_factorize {:.6f}s", elapsed_seconds(phase_begin));
             }
 
             // Copy permutation to device.
             phase_begin = clock::now();
-            const size_t pcg_buffer_bytes =
-                static_cast<size_t>(permutation_.size() + inv_permutation_.size()) * sizeof(int)
-                + static_cast<size_t>(6ull * permuted_dim_ + 6ull) * sizeof(double);
-            with_cuda_oom_context(
-                "[CudaPCG]",
-                "device_buffers",
-                pcg_buffer_bytes,
-                [&] {
-                    d_permutation_ =
-                        cu::make_buffer<int>(rt.stream, rt.mr, permutation_.size(), cu::no_init);
-                    d_inv_permutation_ =
-                        cu::make_buffer<int>(rt.stream, rt.mr, inv_permutation_.size(), cu::no_init);
-                    cu::copy_bytes(rt.stream, permutation_, *d_permutation_);
-                    cu::copy_bytes(rt.stream, inv_permutation_, *d_inv_permutation_);
+            d_permutation_ = safe_alloc<int>(permutation_.size(), rt, "device_buffers permutation");
+            d_inv_permutation_ = safe_alloc<int>(inv_permutation_.size(), rt, "device_buffers inv_permutation");
+            cu::copy_bytes(rt.stream, permutation_, *d_permutation_);
+            cu::copy_bytes(rt.stream, inv_permutation_, *d_inv_permutation_);
 
-                    x_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
-                    b_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
-                    r_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
-                    p_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
-                    z_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
-                    Ap_ = cu::make_buffer<double>(rt.stream, rt.mr, permuted_dim_, cu::no_init);
+            x_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers x");
+            b_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers b");
+            r_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers r");
+            p_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers p");
+            z_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers z");
+            Ap_ = safe_alloc<double>(permuted_dim_, rt, "device_buffers Ap");
 
-                    scalar_rz_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                    scalar_pAp_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                    scalar_alpha_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                    scalar_beta_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                    scalar_rz_old_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                    scalar_rr_ = cu::make_buffer<double>(rt.stream, rt.mr, 1, cu::no_init);
-                });
+            scalar_rz_ = safe_alloc<double>(1, rt, "device_buffers scalar_rz");
+            scalar_pAp_ = safe_alloc<double>(1, rt, "device_buffers scalar_pAp");
+            scalar_alpha_ = safe_alloc<double>(1, rt, "device_buffers scalar_alpha");
+            scalar_beta_ = safe_alloc<double>(1, rt, "device_buffers scalar_beta");
+            scalar_rz_old_ = safe_alloc<double>(1, rt, "device_buffers scalar_rz_old");
+            scalar_rr_ = safe_alloc<double>(1, rt, "device_buffers scalar_rr");
             rt.stream.sync();
             SPDLOG_INFO("CUDA_PCG setup: device_buffers {:.6f}s", elapsed_seconds(phase_begin));
 
             // Allocates buffers for CuSparse.
             phase_begin = clock::now();
-            with_cuda_oom_context(
-                "[CudaPCG]",
-                "cusparse_workspace",
-                1,
-                [&] { setup_cusparse(rt); });
+            setup_cusparse(rt);
             rt.stream.sync();
             SPDLOG_INFO("CUDA_PCG setup: cusparse {:.6f}s", elapsed_seconds(phase_begin));
             SPDLOG_INFO("CUDA_PCG setup: total {:.6f}s", elapsed_seconds(total_begin));

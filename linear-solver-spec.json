@@ -463,7 +463,12 @@
             "absolute_tolerance",
             "lazy_partitioning",
             "use_preconditioned_residual_norm",
-            "use_bad_dof_precond"
+            "use_bad_dof_precond",
+            "bad_dof_strategy",
+            "bad_dof_kmeans_search_fraction",
+            "bad_dof_kmeans_jump_threshold",
+            "bad_dof_kmeans_max_iterations",
+            "bad_dof_kmeans_expand_neighbors"
         ],
         "doc": "Settings for the CUDA PCG solver."
     },
@@ -513,5 +518,39 @@
         "default": false,
         "type": "bool",
         "doc": "Enable an additive bad-DoF cuDSS correction on top of MAS."
+    },
+    {
+        "pointer": "/CUDA_PCG/bad_dof_strategy",
+        "default": "elbow",
+        "type": "string",
+        "options": [
+            "elbow",
+            "kmean"
+        ],
+        "doc": "Bad-DOF detection strategy used when use_bad_dof_precond is enabled."
+    },
+    {
+        "pointer": "/CUDA_PCG/bad_dof_kmeans_search_fraction",
+        "default": 0.2,
+        "type": "float",
+        "doc": "Fraction of largest abs(diag) entries to cluster."
+    },
+    {
+        "pointer": "/CUDA_PCG/bad_dof_kmeans_jump_threshold",
+        "default": 10.0,
+        "type": "float",
+        "doc": "Threshold for cluster centroid ratio jump"
+    },
+    {
+        "pointer": "/CUDA_PCG/bad_dof_kmeans_max_iterations",
+        "default": 32,
+        "type": "int",
+        "doc": "Maximum k-means iterations"
+    },
+    {
+        "pointer": "/CUDA_PCG/bad_dof_kmeans_expand_neighbors",
+        "default": 0,
+        "type": "int",
+        "doc": "Expand each selected bad-DoF by including this many neighboring indices in the partition-sorted ordering (0 disables)."
     }
 ]

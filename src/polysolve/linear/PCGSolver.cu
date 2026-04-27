@@ -21,6 +21,7 @@
 #include <polysolve/linear/mas_utils/BSRAdjacency.hpp>
 #include <polysolve/linear/mas_utils/BSRMatrix.hpp>
 #include <polysolve/linear/mas_utils/BadDOFPreconditioner.hpp>
+#include <polysolve/linear/mas_utils/BadDofKMeanPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/CuSparseWrapper.hpp>
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
@@ -135,6 +136,12 @@ namespace polysolve::linear
     class CudaPCG::CudaPCGImpl
     {
     public:
+        enum class BadDofSelectionStrategy
+        {
+            Elbow,
+            KMeans,
+        };
+
         int block_dim_ = 3; ///< BSR block dim.
         int max_iter_ = 1e5;
         int true_residual_period_ = 4;
@@ -143,6 +150,11 @@ namespace polysolve::linear
         bool lazy_partitioning_ = false;
         bool use_preconditioned_residual_norm_ = true;
         bool use_bad_dof_precond_ = false;
+        BadDofSelectionStrategy bad_dof_strategy_ = BadDofSelectionStrategy::Elbow;
+        double bad_dof_kmeans_search_fraction_ = 0.02;
+        double bad_dof_kmeans_jump_threshold_ = 10.0;
+        int bad_dof_kmeans_max_iterations_ = 32;
+        int bad_dof_kmeans_expand_neighbors_ = 0;
 
         int dim_ = 0;          ///< Input matrix A dim.
         int permuted_dim_ = 0; ///< Dim with block padding.
@@ -161,6 +173,7 @@ namespace polysolve::linear
         BSRMatrix A_;
         MASPreconditioner mas_precond_;
         BadDOFPreconditioner bad_dof_precond_;
+        BadDofKMeanPreconditioner bad_dof_kmeans_precond_;
         std::vector<int> permutation_;     ///< Permutation from graph partition.
         std::vector<int> inv_permutation_; ///< Permutation from graph partition.
         std::vector<int> part_offsets_;    ///< Partition offsets for sorted blocks.
@@ -214,6 +227,31 @@ namespace polysolve::linear
                 use_preconditioned_residual_norm_ = params["use_preconditioned_residual_norm"];
             if (params.contains("use_bad_dof_precond"))
                 use_bad_dof_precond_ = params["use_bad_dof_precond"];
+            if (params.contains("bad_dof_strategy"))
+            {
+                const std::string strategy = params["bad_dof_strategy"];
+                if (strategy == "kmean")
+                {
+                    bad_dof_strategy_ = BadDofSelectionStrategy::KMeans;
+                }
+                else
+                {
+                    bad_dof_strategy_ = BadDofSelectionStrategy::Elbow;
+                }
+            }
+            if (params.contains("bad_dof_kmeans_search_fraction"))
+                bad_dof_kmeans_search_fraction_ = params["bad_dof_kmeans_search_fraction"];
+            if (params.contains("bad_dof_kmeans_jump_threshold"))
+                bad_dof_kmeans_jump_threshold_ = params["bad_dof_kmeans_jump_threshold"];
+            if (params.contains("bad_dof_kmeans_max_iterations"))
+                bad_dof_kmeans_max_iterations_ = params["bad_dof_kmeans_max_iterations"];
+            if (params.contains("bad_dof_kmeans_expand_neighbors"))
+                bad_dof_kmeans_expand_neighbors_ = params["bad_dof_kmeans_expand_neighbors"];
+
+            bad_dof_kmeans_precond_.set_kmeans_search_fraction(bad_dof_kmeans_search_fraction_);
+            bad_dof_kmeans_precond_.set_kmeans_jump_threshold(bad_dof_kmeans_jump_threshold_);
+            bad_dof_kmeans_precond_.set_kmeans_max_iterations(bad_dof_kmeans_max_iterations_);
+            bad_dof_kmeans_precond_.set_kmeans_expand_neighbors(bad_dof_kmeans_expand_neighbors_);
         }
 
         void get_info(json &params) const
@@ -351,7 +389,14 @@ namespace polysolve::linear
             if (use_bad_dof_precond_)
             {
                 phase_begin = clock::now();
-                bad_dof_precond_.factorize(A_, rt);
+                if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
+                {
+                    bad_dof_kmeans_precond_.factorize(A_, rt);
+                }
+                else
+                {
+                    bad_dof_precond_.factorize(A_, rt);
+                }
                 rt.stream.sync();
                 SPDLOG_INFO("[MAS] [factorize_bad_dof] [{:.6f}]", elapsed_seconds(phase_begin));
             }
@@ -424,7 +469,20 @@ namespace polysolve::linear
 
         bool check_buffer_size(int n) const
         {
-            if (n <= 0 || mas_precond_.empty() || (use_bad_dof_precond_ && bad_dof_precond_.empty()) || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
+            bool bad_dof_ready = true;
+            if (use_bad_dof_precond_)
+            {
+                if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
+                {
+                    bad_dof_ready = !bad_dof_kmeans_precond_.empty();
+                }
+                else
+                {
+                    bad_dof_ready = !bad_dof_precond_.empty();
+                }
+            }
+
+            if (n <= 0 || mas_precond_.empty() || !bad_dof_ready || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
                 || !scalar_rz_ || !scalar_pAp_ || !scalar_alpha_ || !scalar_beta_
                 || !scalar_rz_old_ || !scalar_rr_)
             {
@@ -479,7 +537,14 @@ namespace polysolve::linear
             mas_precond_.apply(r, z, rt);
             if (use_bad_dof_precond_)
             {
-                bad_dof_precond_.apply(r, *Ap_, rt);
+                if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
+                {
+                    bad_dof_kmeans_precond_.apply(r, *Ap_, rt);
+                }
+                else
+                {
+                    bad_dof_precond_.apply(r, *Ap_, rt);
+                }
                 axpby(1.0, nullptr, 1.0, nullptr, *Ap_, z, rt);
             }
         }

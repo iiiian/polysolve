@@ -9,12 +9,14 @@ namespace polysolve::linear::mas
 {
     struct BSRView
     {
-        int dim;
-        int block_dim;
-        int non_zeros;
-        ctd::span<const int> rows;
-        ctd::span<const int> cols;
-        ctd::span<const double> vals;
+        int dim;                      //< BSR matrix dim.
+        int block_dim;                //< dim of a block.
+        int padded_block;             //< block id that is padded.
+        int padded_scalar_num;        //< padded scalar num.
+        int non_zeros;                //< BSR non-zeros.
+        ctd::span<const int> rows;    //< BSR row ptr.
+        ctd::span<const int> cols;    //< BSR cols.
+        ctd::span<const double> vals; //< BSR values.
     };
 
     /// @brief Block CSR matrix.
@@ -32,12 +34,22 @@ namespace polysolve::linear::mas
 
         BSRView view() const
         {
-            return BSRView{dim_, block_dim_, non_zeros_, *rows_, *cols_, *vals_};
+            return BSRView{
+                dim_,
+                block_dim_,
+                padded_block_,
+                padded_scalar_num_,
+                non_zeros_,
+                *rows_,
+                *cols_,
+                *vals_};
         }
 
     private:
         int dim_ = 0;
         int block_dim_ = 0;
+        int padded_block_ = -1;
+        int padded_scalar_num_ = 0;
         int non_zeros_ = 0;
         Buf<int> rows_;
         Buf<int> cols_;

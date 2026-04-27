@@ -25,7 +25,10 @@ if(POLYSOLVE_WITH_CUDA)
         mas_utils/BSRAdjacency.hpp
         mas_utils/BSRMatrix.cu
         mas_utils/BSRMatrix.hpp
+        mas_utils/BadDOFPreconditioner.cu
+        mas_utils/BadDOFPreconditioner.hpp
         mas_utils/CuSparseWrapper.hpp
+        mas_utils/CuDSSWrapper.hpp
         mas_utils/CudaUtils.cuh
         mas_utils/InnerProduct.cu
         mas_utils/InnerProduct.hpp

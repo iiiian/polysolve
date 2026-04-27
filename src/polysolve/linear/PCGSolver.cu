@@ -20,6 +20,7 @@
 
 #include <polysolve/linear/mas_utils/BSRAdjacency.hpp>
 #include <polysolve/linear/mas_utils/BSRMatrix.hpp>
+#include <polysolve/linear/mas_utils/BadDOFPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/CuSparseWrapper.hpp>
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 #include <polysolve/linear/mas_utils/InnerProduct.hpp>
@@ -141,6 +142,7 @@ namespace polysolve::linear
         double rel_tol_ = 1e-6;
         bool lazy_partitioning_ = false;
         bool use_preconditioned_residual_norm_ = true;
+        bool use_bad_dof_precond_ = false;
 
         int dim_ = 0;          ///< Input matrix A dim.
         int permuted_dim_ = 0; ///< Dim with block padding.
@@ -158,6 +160,7 @@ namespace polysolve::linear
 
         BSRMatrix A_;
         MASPreconditioner mas_precond_;
+        BadDOFPreconditioner bad_dof_precond_;
         std::vector<int> permutation_;     ///< Permutation from graph partition.
         std::vector<int> inv_permutation_; ///< Permutation from graph partition.
         std::vector<int> part_offsets_;    ///< Partition offsets for sorted blocks.
@@ -209,6 +212,8 @@ namespace polysolve::linear
                 lazy_partitioning_ = params["lazy_partitioning"];
             if (params.contains("use_preconditioned_residual_norm"))
                 use_preconditioned_residual_norm_ = params["use_preconditioned_residual_norm"];
+            if (params.contains("use_bad_dof_precond"))
+                use_bad_dof_precond_ = params["use_bad_dof_precond"];
         }
 
         void get_info(json &params) const
@@ -365,6 +370,18 @@ namespace polysolve::linear
             rt.stream.sync();
             SPDLOG_INFO("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
 
+            if (use_bad_dof_precond_)
+            {
+                phase_begin = clock::now();
+                with_cuda_oom_context(
+                    "[CudaPCG][BadDOF]",
+                    "bad_dof_factorize",
+                    1,
+                    [&] { bad_dof_precond_.factorize(A_, rt); });
+                rt.stream.sync();
+                SPDLOG_INFO("CUDA_PCG setup: bad_dof_factorize {:.6f}s", elapsed_seconds(phase_begin));
+            }
+
             // Copy permutation to device.
             phase_begin = clock::now();
             const size_t pcg_buffer_bytes =
@@ -448,7 +465,7 @@ namespace polysolve::linear
 
         bool check_buffer_size(int n) const
         {
-            if (n <= 0 || mas_precond_.empty() || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
+            if (n <= 0 || mas_precond_.empty() || (use_bad_dof_precond_ && bad_dof_precond_.empty()) || !x_ || !b_ || !r_ || !p_ || !z_ || !Ap_
                 || !scalar_rz_ || !scalar_pAp_ || !scalar_alpha_ || !scalar_beta_
                 || !scalar_rz_old_ || !scalar_rr_)
             {
@@ -495,6 +512,19 @@ namespace polysolve::linear
             return true;
         }
 
+        void apply_preconditioner(
+            ctd::span<const double> r,
+            ctd::span<double> z,
+            CudaRuntime rt)
+        {
+            mas_precond_.apply(r, z, rt);
+            if (use_bad_dof_precond_)
+            {
+                bad_dof_precond_.apply(r, *Ap_, rt);
+                axpby(1.0, nullptr, 1.0, nullptr, *Ap_, z, rt);
+            }
+        }
+
         /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
         void pcg_solve(CudaRuntime rt)
         {
@@ -503,7 +533,7 @@ namespace polysolve::linear
             axpby(1.0, nullptr, -1.0, nullptr, *b_, *r_, rt);
 
             // Compute z = M^-1 r.
-            mas_precond_.apply(*r_, *z_, rt);
+            apply_preconditioner(*r_, *z_, rt);
             // Initial search direction p = z;
             cu::copy_bytes(rt.stream, *z_, *p_);
 
@@ -552,7 +582,7 @@ namespace polysolve::linear
                 }
 
                 // Compute z = M^-1 r.
-                mas_precond_.apply(*r_, *z_, rt);
+                apply_preconditioner(*r_, *z_, rt);
 
                 // Compute rz = r M^-1 r.
                 cu::copy_bytes(rt.stream, *scalar_rz_, *scalar_rz_old_);

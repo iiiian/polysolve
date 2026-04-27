@@ -535,6 +535,13 @@ namespace polysolve::linear::mas
 
         block_dim_ = block_dim;
         dim_ = div_round_up(A_csc->rows(), block_dim_);
+        padded_scalar_num_ = block_dim_ * dim_ - A_csc->rows();
+        padded_block_ = -1;
+        if (padded_scalar_num_ > 0)
+        {
+            int tail = dim_ - 1;
+            padded_block_ = permutation.empty() ? tail : permutation[tail];
+        }
 
         non_zeros_ = build_bsr_from_csc(
             *A_csc,

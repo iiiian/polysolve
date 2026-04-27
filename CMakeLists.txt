@@ -421,6 +421,12 @@ if(POLYSOLVE_WITH_CUDA)
   target_link_libraries(polysolve_linear PRIVATE KaMinPar::KaMinPar)
 endif()
 
+# CuDSS
+if (POLYSOLVE_WITH_CUDA)
+  include(cudss)
+  target_link_libraries(polysolve_linear PRIVATE cudss)
+endif()
+
 
 # ---------
 # Nonlinear

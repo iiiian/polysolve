@@ -462,7 +462,8 @@
             "relative_tolerance",
             "absolute_tolerance",
             "lazy_partitioning",
-            "use_preconditioned_residual_norm"
+            "use_preconditioned_residual_norm",
+            "use_bad_dof_precond"
         ],
         "doc": "Settings for the CUDA PCG solver."
     },
@@ -506,5 +507,11 @@
         "default": false,
         "type": "bool",
         "doc": "Use preconditioned residual norm for termination check."
+    },
+    {
+        "pointer": "/CUDA_PCG/use_bad_dof_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Enable an additive bad-DoF cuDSS correction on top of MAS."
     }
 ]

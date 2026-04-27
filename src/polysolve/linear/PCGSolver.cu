@@ -314,16 +314,16 @@ namespace polysolve::linear
                 // Build adjacency for graph partition.
                 auto phase_begin = clock::now();
                 BSRAdjacency adj{A, block_dim_, rt};
-                SPDLOG_INFO("CUDA_PCG setup: topology_adj {:.6f}s", elapsed_seconds(phase_begin));
+                SPDLOG_INFO("[MAS] [factorize_topology_adj] [{:.6f}]", elapsed_seconds(phase_begin));
 
                 // Sort nodes based on parition.
                 phase_begin = clock::now();
                 build_partition_and_perm(adj);
-                SPDLOG_INFO("CUDA_PCG setup: graph_partition {:.6f}s", elapsed_seconds(phase_begin));
+                SPDLOG_INFO("[MAS] [factorize_graph_partition] [{:.6f}]", elapsed_seconds(phase_begin));
             }
             else
             {
-                SPDLOG_TRACE("CUDA_PCG setup: reuse_partition");
+                SPDLOG_TRACE("[MAS] [factorize_reuse_partition] [0.000000]");
             }
 
             // Build new sorted BSR matrix for MAS initialization.
@@ -333,7 +333,7 @@ namespace polysolve::linear
                 block_dim_,
                 ctd::span<const int>(permutation_.data(), permutation_.size()),
                 rt};
-            SPDLOG_INFO("CUDA_PCG setup: permuted_bsr {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("[MAS] [factorize_permuted_bsr] [{:.6f}]", elapsed_seconds(phase_begin));
 
             BSRView view = A_.view();
             dim_ = A.rows();
@@ -346,14 +346,14 @@ namespace polysolve::linear
                 ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
                 rt);
             rt.stream.sync();
-            SPDLOG_INFO("CUDA_PCG setup: mas_factorize {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("[MAS] [factorize_mas] [{:.6f}]", elapsed_seconds(phase_begin));
 
             if (use_bad_dof_precond_)
             {
                 phase_begin = clock::now();
                 bad_dof_precond_.factorize(A_, rt);
                 rt.stream.sync();
-                SPDLOG_INFO("CUDA_PCG setup: bad_dof_factorize {:.6f}s", elapsed_seconds(phase_begin));
+                SPDLOG_INFO("[MAS] [factorize_bad_dof] [{:.6f}]", elapsed_seconds(phase_begin));
             }
 
             // Copy permutation to device.
@@ -377,14 +377,14 @@ namespace polysolve::linear
             scalar_rz_old_ = safe_alloc<double>(1, rt, "device_buffers scalar_rz_old");
             scalar_rr_ = safe_alloc<double>(1, rt, "device_buffers scalar_rr");
             rt.stream.sync();
-            SPDLOG_INFO("CUDA_PCG setup: device_buffers {:.6f}s", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("[MAS] [factorize_device_buffers] [{:.6f}]", elapsed_seconds(phase_begin));
 
             // Allocates buffers for CuSparse.
             phase_begin = clock::now();
             setup_cusparse(rt);
             rt.stream.sync();
-            SPDLOG_INFO("CUDA_PCG setup: cusparse {:.6f}s", elapsed_seconds(phase_begin));
-            SPDLOG_INFO("CUDA_PCG setup: total {:.6f}s", elapsed_seconds(total_begin));
+            SPDLOG_INFO("[MAS] [factorize_cusparse] [{:.6f}]", elapsed_seconds(phase_begin));
+            SPDLOG_INFO("[MAS] [factorize_total] [{:.6f}]", elapsed_seconds(total_begin));
         }
 
         void solve(const Eigen::Ref<const Eigen::VectorXd> b, Eigen::Ref<Eigen::VectorXd> x)
@@ -514,8 +514,6 @@ namespace polysolve::linear
 
             // debug logging
             auto iter_window_begin = clock::now();
-            int iter_window_start = 1;
-
             for (int k = 1; k <= max_iter_; ++k)
             {
                 // Compute Ap = A p.
@@ -585,13 +583,11 @@ namespace polysolve::linear
                 {
                     rt.stream.sync();
                     SPDLOG_INFO(
-                        "CUDA_PCG iter {}-{}: {:.6f}s residual {:.6e}",
-                        iter_window_start,
-                        k,
+                        "[MAS] [pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
                         elapsed_seconds(iter_window_begin),
+                        k,
                         residual_norm_);
                     iter_window_begin = clock::now();
-                    iter_window_start = k + 1;
                 }
 
                 if (converged)
@@ -611,10 +607,9 @@ namespace polysolve::linear
             }
 
             SPDLOG_INFO(
-                "CUDA_PCG iter {}-{}: {:.6f}s residual {:.6e}",
-                iter_window_start,
-                iterations_,
+                "[MAS] [pcg_loop] [{:.6f}] [iter={}] [residual={:.6e}]",
                 elapsed_seconds(iter_window_begin),
+                iterations_,
                 residual_norm_);
         }
     };

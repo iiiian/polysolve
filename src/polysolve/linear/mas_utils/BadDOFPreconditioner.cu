@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <numeric>
 #include <utility>
@@ -14,6 +15,13 @@ namespace polysolve::linear::mas
 {
     namespace
     {
+        using clock = std::chrono::steady_clock;
+
+        double elapsed_seconds(const std::chrono::time_point<clock> &begin)
+        {
+            return std::chrono::duration<double>(clock::now() - begin).count();
+        }
+
         template <typename T>
         std::vector<T> copy_device_span_to_host(ctd::span<const T> src, CudaRuntime rt)
         {
@@ -247,6 +255,7 @@ namespace polysolve::linear::mas
         const BSRMatrix &A,
         CudaRuntime rt)
     {
+        auto phase_begin = clock::now();
         reset();
         cudssSetStream(cudss_handle_.raw, rt.stream.get());
 
@@ -255,7 +264,10 @@ namespace polysolve::linear::mas
 
         HostBadDofMatrix host_bad_dof = build_bad_dof_matrix(view, rt);
         bad_dof_count_ = host_bad_dof.indices.size();
-        SPDLOG_INFO("CUDA_PCG BadDOF: bad dof count {}", bad_dof_count_);
+        SPDLOG_INFO(
+            "[MAS] [factorize_bad_dof] [{:.6f}] [count={}]",
+            elapsed_seconds(phase_begin),
+            bad_dof_count_);
         if (bad_dof_count_ == 0)
         {
             return;

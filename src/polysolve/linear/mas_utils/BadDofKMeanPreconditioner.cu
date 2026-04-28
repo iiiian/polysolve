@@ -61,13 +61,13 @@ namespace polysolve::linear::mas
         };
 
         std::vector<int> select_bad_dofs_from_diagonal_kmeans(
-            const std::vector<double> &diag_abs,
+            const std::vector<double> &off_diag_max_abs,
             double search_fraction,
             double jump_threshold,
             int max_iterations,
             int expand_neighbors)
         {
-            int n = diag_abs.size();
+            int n = off_diag_max_abs.size();
             if (n < 2)
             {
                 return {};
@@ -77,7 +77,7 @@ namespace polysolve::linear::mas
             std::vector<std::pair<int, double>> entries;
             for (int i = 0; i < n; ++i)
             {
-                entries.emplace_back(i, diag_abs[i]);
+                entries.emplace_back(i, off_diag_max_abs[i]);
             }
             std::sort(entries.begin(), entries.end(), [](const std::pair<int, double> &a, const std::pair<int, double> &b) {
                 return a.second > b.second;
@@ -184,30 +184,13 @@ namespace polysolve::linear::mas
             auto h_cols = copy_device_span_to_host(view.cols, rt);
             auto h_vals = copy_device_span_to_host(view.vals, rt);
 
-            // Gather permuted abs(diagonal) excluding BSR padding.
+            // Gather permuted max abs(off-diagonal) excluding BSR padding.
             int block_size = view.block_dim * view.block_dim;
             int permuted_scalar_dim = view.dim * view.block_dim;
-            std::vector<double> diag_abs;
+            std::vector<double> off_diag_max_abs;
             std::vector<int> diag_idx;
             for (int block_row = 0; block_row < view.dim; ++block_row)
             {
-                // Traverse BSR, find diagonal.
-                int diag_block = -1;
-                for (int p = h_rows[block_row]; p < h_rows[block_row + 1]; ++p)
-                {
-                    if (h_cols[p] == block_row)
-                    {
-                        diag_block = p;
-                        break;
-                    }
-                }
-                if (diag_block < 0)
-                {
-                    continue;
-                }
-
-                // Copy diagonals within block.
-                int diag_offset = diag_block * block_size;
                 for (int local_row = 0; local_row < view.block_dim; ++local_row)
                 {
                     int scalar_row = block_row * view.block_dim + local_row;
@@ -216,15 +199,35 @@ namespace polysolve::linear::mas
                         continue;
                     }
 
-                    double val = std::abs(h_vals[diag_offset + local_row * view.block_dim + local_row]);
+                    double val = 0.0;
+                    for (int p = h_rows[block_row]; p < h_rows[block_row + 1]; ++p)
+                    {
+                        int block_col = h_cols[p];
+                        int row_offset = p * block_size + local_row * view.block_dim;
+                        for (int local_col = 0; local_col < view.block_dim; ++local_col)
+                        {
+                            int scalar_col = block_col * view.block_dim + local_col;
+                            if (is_padding(view, scalar_col))
+                            {
+                                continue;
+                            }
+                            if (scalar_col == scalar_row)
+                            {
+                                continue;
+                            }
+
+                            val = std::max(val, std::abs(h_vals[row_offset + local_col]));
+                        }
+                    }
+
                     diag_idx.push_back(scalar_row);
-                    diag_abs.push_back(val);
+                    off_diag_max_abs.push_back(val);
                 }
             }
 
             // Select bad dof and build gather/scatter map.
             std::vector<int> selected_positions = select_bad_dofs_from_diagonal_kmeans(
-                diag_abs,
+                off_diag_max_abs,
                 kmeans_search_fraction,
                 kmeans_jump_threshold,
                 kmeans_max_iterations,

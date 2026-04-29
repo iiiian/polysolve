@@ -16,7 +16,10 @@
             "Pardiso",
             "Hypre",
             "AMGCL",
-            "CUDA_PCG"
+            "CUDA_PCG",
+            "CUDSS",
+            "Hybrid",
+            "GPUHybrid"
         ],
         "doc": "Settings for the linear solver."
     },
@@ -49,7 +52,10 @@
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
             "Eigen::MINRES",
-            "CUDA_PCG"
+            "CUDA_PCG",
+            "CUDSS",
+            "Hybrid",
+            "GPUHybrid"
         ]
     },
     {
@@ -451,6 +457,30 @@
         "default": 0,
         "type": "float",
         "doc": "Aggregation epsilon strong."
+    },
+    {
+        "pointer": "/CUDSS",
+        "default": null,
+        "type": "object",
+        "optional": [
+        ],
+        "doc": "Settings for the cuDSS solver."
+    },
+    {
+        "pointer": "/Hybrid",
+        "default": null,
+        "type": "object",
+        "optional": [
+        ],
+        "doc": "Settings for the Hybrid solver."
+    },
+    {
+        "pointer": "/GPUHybrid",
+        "default": null,
+        "type": "object",
+        "optional": [
+        ],
+        "doc": "Settings for the Hybrid solver."
     },
     {
         "pointer": "/CUDA_PCG",

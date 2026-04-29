@@ -19,6 +19,8 @@ set(SOURCES
 
 if(POLYSOLVE_WITH_CUDA)
     list(APPEND SOURCES
+        CUDSS.cpp
+        CUDSS.hpp
         PCGSolver.cu
         PCGSolver.hpp
         mas_utils/BSRAdjacency.cu

@@ -3,6 +3,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include "EigenSolver.hpp"
 #include <iostream>
+
+#include <spdlog/spdlog.h>
 ////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10,6 +12,17 @@
 ////////////////////////////////////////////////////////////////////////////////
 namespace polysolve::linear
 {
+
+    namespace
+    {
+        using clock = std::chrono::steady_clock;
+
+        double elapsed_seconds(const std::chrono::time_point<clock> &begin)
+        {
+            return std::chrono::duration<double>(clock::now() - begin).count();
+        }
+    }
+
     // Get info on the last solve step
     template <typename SparseSolver>
     void EigenDirect<SparseSolver>::get_info(json &params) const
@@ -37,14 +50,18 @@ namespace polysolve::linear
     template <typename SparseSolver>
     void EigenDirect<SparseSolver>::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
     {
+        auto phase_begin = clock::now();
         m_Solver.analyzePattern(A);
+        SPDLOG_INFO("[{}] [pattern_analysis] [{:.6f}]", name(), elapsed_seconds(phase_begin));
     }
 
     // Factorize system matrix
     template <typename SparseSolver>
     void EigenDirect<SparseSolver>::factorize(const StiffnessMatrix &A)
     {
+        auto phase_begin = clock::now();
         m_Solver.factorize(A);
+        SPDLOG_INFO("[{}] [numerical_factorization] [{:.6f}]", name(), elapsed_seconds(phase_begin));
         if (m_Solver.info() == Eigen::NumericalIssue)
         {
             throw std::runtime_error("[EigenDirect] NumericalIssue encountered.");
@@ -56,7 +73,9 @@ namespace polysolve::linear
     void EigenDirect<SparseSolver>::solve(
         const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
+        auto phase_begin = clock::now();
         x = m_Solver.solve(b);
+        SPDLOG_INFO("[{}] [solve] [{:.6f}]", name(), elapsed_seconds(phase_begin));
     }
 
     ////////////////////////////////////////////////////////////////////////////////

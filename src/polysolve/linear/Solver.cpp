@@ -65,6 +65,7 @@ namespace polysolve::linear {
 #endif
 #ifdef POLYSOLVE_WITH_CUDA
 #include "PCGSolver.hpp"
+#include "CUDSS.hpp"
 #endif
 
 #include <unsupported/Eigen/IterativeSolvers>
@@ -408,6 +409,10 @@ namespace polysolve::linear
         else if (solver == "CUDA_PCG")
         {
             return std::make_unique<CudaPCG>();
+        }
+        else if (solver == "CUDSS")
+        {
+            return std::make_unique<CUDSS>();
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
         }

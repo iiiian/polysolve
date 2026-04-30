@@ -17,6 +17,11 @@
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include <sys/resource.h>
+
+#ifdef HYPRE_WITH_MPI
+#include <mpi.h>
+#endif
 
 using namespace polysolve;
 using namespace polysolve::linear;
@@ -124,6 +129,13 @@ namespace
         }
         return rhs;
     }
+
+    size_t getPeakRSS()
+    {
+        struct rusage rusage;
+        getrusage(RUSAGE_SELF, &rusage);
+        return (size_t)(rusage.ru_maxrss * 1024L);
+    }
 } // namespace
 
 int main(int argc, char *argv[])
@@ -210,6 +222,31 @@ int main(int argc, char *argv[])
     }
 
     Eigen::SparseMatrix<double> A;
+    Eigen::VectorXd x, b;
+
+#ifdef HYPRE_WITH_MPI
+    int done_already;
+    int myid = 0, num_procs = 1;
+
+    MPI_Initialized(&done_already);
+    if (!done_already)
+    {
+        MPI_Init(&argc, &argv);
+    }
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    if (myid != 0)
+    {
+        while (true)
+        {
+            solver->analyze_pattern(A, 0);
+            solver->factorize(A);
+            solver->solve(b, x);
+        }
+    }
+#endif
+
     if (!loadMarket(A, matrix_path))
     {
         throw std::runtime_error("failed to load matrix market matrix: " + matrix_path);
@@ -220,7 +257,9 @@ int main(int argc, char *argv[])
     }
     A.makeCompressed();
 
-    Eigen::VectorXd b(A.rows());
+    SPDLOG_INFO("[{}] [matrix_info] [size={}] [nnzs={}]", solver_config["solver"], A.rows(), A.nonZeros());
+
+    b.resize(A.rows());
     if (program.present("-b"))
     {
         const std::string rhs_path = program.get<std::string>("-b");
@@ -254,7 +293,7 @@ int main(int argc, char *argv[])
             iteration < warmup ? std::make_unique<ScopedOutputSilencer>() : nullptr;
 
         auto solver = Solver::create(solver_config, *logger);
-        Eigen::VectorXd x(A.cols());
+        x.resize(A.cols());
         x.setZero();
 
         if (solver->is_dense())
@@ -267,6 +306,7 @@ int main(int argc, char *argv[])
         }
         else
         {
+            SPDLOG_INFO("[{}] [start_analyze_pattern]", solver_config["solver"]);
             solver->analyze_pattern(A, A.rows());
         }
 
@@ -276,11 +316,27 @@ int main(int argc, char *argv[])
         }
         else
         {
+            SPDLOG_INFO("[{}] [start_factorize]", solver_config["solver"]);
             solver->factorize(A);
         }
 
+        SPDLOG_INFO("[{}] [start_solve]", solver_config["solver"]);
         solver->solve(b, x);
+        double residual = (b - A * x).norm();
+        SPDLOG_INFO("[{}] [residual={}]", solver_config["solver"], residual);
     }
+
+    SPDLOG_INFO("[{}] [peak_memory={}]", solver_config["solver"], getPeakRSS());
+
+#ifdef HYPRE_WITH_MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Abort(MPI_COMM_WORLD, 0);
+    int finalized;
+    MPI_Finalized(&finalized);
+    if (!finalized)
+        MPI_Finalize();
+    HYPRE_Finalize();
+#endif
 
     return 0;
 }

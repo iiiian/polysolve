@@ -471,6 +471,20 @@
         "default": null,
         "type": "object",
         "optional": [
+            "max_iter",
+            "relative_tolerance",
+            "absolute_tolerance",
+            "block_size",
+            "theta",
+            "do_hybrid_precond",
+            "select_bad_dofs_from_l1_norm",
+            "gmm_bic_threshold",
+            "decompose_subdomains",
+            "min_subdomain_size",
+            "max_subdomain_size",
+            "expand_subdomains",
+            "use_incomplete_cholesky_precond",
+            "rho"
         ],
         "doc": "Settings for the Hybrid solver."
     },
@@ -479,8 +493,22 @@
         "default": null,
         "type": "object",
         "optional": [
+            "max_iter",
+            "relative_tolerance",
+            "absolute_tolerance",
+            "block_size",
+            "theta",
+            "do_hybrid_precond",
+            "select_bad_dofs_from_l1_norm",
+            "gmm_bic_threshold",
+            "decompose_subdomains",
+            "min_subdomain_size",
+            "max_subdomain_size",
+            "expand_subdomains",
+            "max_dense_size",
+            "use_float_on_subdomains"
         ],
-        "doc": "Settings for the Hybrid solver."
+        "doc": "Settings for the GPU Hybrid solver."
     },
     {
         "pointer": "/CUDA_PCG",
@@ -501,6 +529,174 @@
             "bad_dof_kmeans_expand_neighbors"
         ],
         "doc": "Settings for the CUDA PCG solver."
+    },
+    {
+        "pointer": "/Hybrid/max_iter",
+        "default": 10000,
+        "type": "int",
+        "doc": "Maximum number of iterations."
+    },
+    {
+        "pointer": "/Hybrid/relative_tolerance",
+        "default": 1e-10,
+        "type": "float",
+        "doc": "Relative convergence tolerance"
+    },
+    {
+        "pointer": "/Hybrid/absolute_tolerance",
+        "default": 0.0,
+        "type": "float",
+        "doc": "Absolute convergence tolerance"
+    },
+    {
+        "pointer": "/Hybrid/block_size",
+        "default": 1,
+        "type": "int",
+        "doc": "Block size for the hybrid solver."
+    },
+    {
+        "pointer": "/Hybrid/theta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Strong threshold."
+    },
+    {
+        "pointer": "/Hybrid/do_hybrid_precond",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to do hybrid preconditioning."
+    },
+    {
+        "pointer": "/Hybrid/select_bad_dofs_from_l1_norm",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
+    },
+    {
+        "pointer": "/Hybrid/gmm_bic_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "GMM-BIC threshold."
+    },
+    {
+        "pointer": "/Hybrid/decompose_subdomains",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to decompose subdomains into independent clusters."
+    },
+    {
+        "pointer": "/Hybrid/min_subdomain_size",
+        "default": 1,
+        "type": "int",
+        "doc": "Minimum subdomain size."
+    },
+    {
+        "pointer": "/Hybrid/max_subdomain_size",
+        "default": 10000000,
+        "type": "int",
+        "doc": "Maximum subdomain size."
+    },
+    {
+        "pointer": "/Hybrid/expand_subdomains",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to expand subdomains by including neighboring DoFs."
+    },
+    {
+        "pointer": "/Hybrid/use_incomplete_cholesky_precond",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use incomplete Cholesky as global preconditioner"
+    },
+    {
+        "pointer": "/Hybrid/rho",
+        "default": 3.25,
+        "type": "float",
+        "doc": "Sparsity parameter for incomplete Cholesky."
+    },
+    {
+        "pointer": "/GPUHybrid/max_iter",
+        "default": 10000,
+        "type": "int",
+        "doc": "Maximum number of iterations."
+    },
+    {
+        "pointer": "/GPUHybrid/relative_tolerance",
+        "default": 1e-10,
+        "type": "float",
+        "doc": "Relative convergence tolerance"
+    },
+    {
+        "pointer": "/GPUHybrid/absolute_tolerance",
+        "default": 0.0,
+        "type": "float",
+        "doc": "Absolute convergence tolerance"
+    },
+    {
+        "pointer": "/GPUHybrid/block_size",
+        "default": 1,
+        "type": "int",
+        "doc": "Block size for the hybrid solver."
+    },
+    {
+        "pointer": "/GPUHybrid/theta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Strong threshold."
+    },
+    {
+        "pointer": "/GPUHybrid/do_hybrid_precond",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to do hybrid preconditioning."
+    },
+    {
+        "pointer": "/GPUHybrid/select_bad_dofs_from_l1_norm",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
+    },
+    {
+        "pointer": "/GPUHybrid/gmm_bic_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "GMM-BIC threshold."
+    },
+    {
+        "pointer": "/GPUHybrid/decompose_subdomains",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to decompose subdomains into independent clusters."
+    },
+    {
+        "pointer": "/GPUHybrid/min_subdomain_size",
+        "default": 1,
+        "type": "int",
+        "doc": "Minimum subdomain size."
+    },
+    {
+        "pointer": "/GPUHybrid/max_subdomain_size",
+        "default": 10000000,
+        "type": "int",
+        "doc": "Maximum subdomain size."
+    },
+    {
+        "pointer": "/GPUHybrid/expand_subdomains",
+        "default": true,
+        "type": "bool",
+        "doc": "Whether or not to expand subdomains by including neighboring DoFs."
+    },
+    {
+        "pointer": "/GPUHybrid/max_dense_size",
+        "default": 1000,
+        "type": "int",
+        "doc": "Maximum size for using dense inverse on subdomains."
+    },
+    {
+        "pointer": "/GPUHybrid/use_float_on_subdomains",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to precondition subdomains in single precision."
     },
     {
         "pointer": "/CUDA_PCG/block_dim",

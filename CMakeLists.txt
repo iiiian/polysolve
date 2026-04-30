@@ -89,6 +89,7 @@ option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                    
 option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
+option(POLYSOLVE_WITH_ICHOL         "Enable Ichol"                                       ON)
 
 # Sanitizer options
 option(POLYSOLVE_SANITIZE_ADDRESS   "Sanitize Address"                                  OFF)
@@ -254,6 +255,13 @@ target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_JSON_SPEC_DIR="${PR
 # Dependencies
 ################################################################################
 
+# CCCL
+if(POLYSOLVE_WITH_CUDA)
+  include(cccl)
+  target_link_libraries(polysolve_linear PUBLIC CCCL::CCCL)
+  target_link_libraries(polysolve PUBLIC CCCL::CCCL)
+endif()
+
 # Cuda runtime and cuSparse
 if (POLYSOLVE_WITH_CUDA)
     find_package(CUDAToolkit REQUIRED)
@@ -374,6 +382,12 @@ if(POLYSOLVE_WITH_SPECTRA)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_SPECTRA)
 endif()
 
+if(POLYSOLVE_WITH_ICHOL)
+    include(mschol)
+    target_link_libraries(polysolve_linear PUBLIC mschol::mschol)
+    target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_ICHOL)
+endif()
+
 # cuSolver solvers
 if(POLYSOLVE_WITH_CUSOLVER)
     if (NOT POLYSOLVE_WITH_CUDA)
@@ -405,13 +419,6 @@ if(POLYSOLVE_WITH_UNICODE)
     if(MSVC)
         target_compile_options(polysolve_linear PUBLIC /utf-8)
     endif()
-endif()
-
-# CCCL
-if(POLYSOLVE_WITH_CUDA)
-  include(cccl)
-  target_link_libraries(polysolve_linear PUBLIC CCCL::CCCL)
-  target_link_libraries(polysolve PUBLIC CCCL::CCCL)
 endif()
 
 # KaMinPar

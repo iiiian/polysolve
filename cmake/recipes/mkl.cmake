@@ -22,7 +22,7 @@ set_property(CACHE MKL_INTERFACE PROPERTY STRINGS ${MKL_INTERFACE_CHOICES})
 message(STATUS "MKL interface layer: ${MKL_INTERFACE}")
 
 # Threading layer: sequential, tbb or openmp
-set(MKL_THREADING "tbb" CACHE STRING "Threading layer to use with MKL (sequential, tbb or openmp)")
+set(MKL_THREADING "openmp" CACHE STRING "Threading layer to use with MKL (sequential, tbb or openmp)")
 set(MKL_THREADING_CHOICES sequential tbb openmp)
 set_property(CACHE MKL_THREADING PROPERTY STRINGS ${MKL_THREADING_CHOICES})
 message(STATUS "MKL threading layer: ${MKL_THREADING}")

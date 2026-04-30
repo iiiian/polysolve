@@ -1375,7 +1375,7 @@ namespace polysolve::linear
         bad_subdomain_assignments.resize(num_procs);
 
         std::vector<std::pair<int, int>> subdomain_sizes;
-        subdomain_sizes.reserve(bad_indices_arrays.size());
+        subdomain_sizes.reserve(bad_indices_sets.size());
         
         for (auto &subdomain : bad_indices_sets)
         {
@@ -1402,8 +1402,12 @@ namespace polysolve::linear
             bad_subdomain_assignments[chosen_proc].push_back(i);
             assigned_sizes[chosen_proc] += size;
         }
+
+        const int max_size = subdomain_sizes.size() > 0 ? subdomain_sizes.front().second : 0;
+        const int min_size = subdomain_sizes.size() > 0 ? subdomain_sizes.back().second : 0;
+
         SPDLOG_INFO("[{}] [subdomain_load_balance] [{}] [max_size={}] [min_size={}] [total_dofs={}]", \
-            name(), elapsed_seconds(phase_begin), subdomain_sizes.back().second, subdomain_sizes.front().second, total_bad_dofs);
+            name(), elapsed_seconds(phase_begin), max_size, min_size, total_bad_dofs);
     }
     
     ////////////////////////////////////////////////////////////////////////////////

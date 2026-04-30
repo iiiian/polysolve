@@ -15,12 +15,16 @@ set(SOURCES
     Pardiso.hpp
     SaddlePointSolver.cpp
     SaddlePointSolver.hpp
+    Hybrid.cpp
+    Hybrid.hpp
 )
 
 if(POLYSOLVE_WITH_CUDA)
     list(APPEND SOURCES
         CUDSS.cpp
         CUDSS.hpp
+#        GPUHybrid.cu
+#        GPUHybrid.hpp
         PCGSolver.cu
         PCGSolver.hpp
         mas_utils/BSRAdjacency.cu

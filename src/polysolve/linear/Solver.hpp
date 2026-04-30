@@ -3,6 +3,7 @@
 #include <polysolve/Types.hpp>
 
 #include <memory>
+#include <set>
 
 #define POLYSOLVE_DELETE_MOVE_COPY(Base) \
     Base(Base &&) = delete;              \
@@ -116,6 +117,9 @@ namespace polysolve::linear
         /// Set solver tolerance 
         virtual void set_tolerance(const double tol) {}
 
+        /// Set problematic DoFs for hybrid solvers
+        virtual void set_problematic_dofs(const std::set<int> &bad_dofs) {}
+
         ///
         /// @brief         { Solve the linear system Ax = b }
         ///
@@ -129,6 +133,9 @@ namespace polysolve::linear
 
         /// @brief Name of the solver type (for debugging purposes)
         virtual std::string name() const { return ""; }
+
+        Eigen::MatrixXd positions_;
+        Eigen::MatrixXi elements_;
     };
 
 } // namespace polysolve::linear

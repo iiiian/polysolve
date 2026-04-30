@@ -66,7 +66,9 @@ namespace polysolve::linear {
 #ifdef POLYSOLVE_WITH_CUDA
 #include "PCGSolver.hpp"
 #include "CUDSS.hpp"
+//#include "GPUHybrid.hpp"
 #endif
+#include "Hybrid.hpp"
 
 #include <unsupported/Eigen/IterativeSolvers>
 
@@ -413,6 +415,10 @@ namespace polysolve::linear
         else if (solver == "CUDSS")
         {
             return std::make_unique<CUDSS>();
+        //}
+        //else if (solver == "GPUHybrid")
+        //{
+        //    return std::make_unique<GPUHybrid>();
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
         }
@@ -457,6 +463,10 @@ namespace polysolve::linear
         {
             return PrecondHelperSym<MINRES>::create(precond, "Eigen::MINRES");
 #endif
+        }
+        else if (solver == "Hybrid")
+        {
+            return std::make_unique<Hybrid>();
         }
         else if (solver == "SaddlePointSolver")
         {
@@ -548,6 +558,8 @@ namespace polysolve::linear
 #endif
 #ifdef POLYSOLVE_WITH_CUDA
             "CUDA_PCG",
+            "CUDSS", 
+            //"GPUHybrid",
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
             "Hypre",
@@ -572,7 +584,8 @@ namespace polysolve::linear
             "Eigen::FullPivHouseholderQR",
             "Eigen::CompleteOrthogonalDecomposition",
             "Eigen::LLT",
-            "Eigen::LDLT"
+            "Eigen::LDLT",
+            "Hybrid"
             // "Eigen::BDCSVD",
             // "Eigen::JacobiSVD"
         }};

@@ -2,9 +2,9 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 #include "Solver.hpp"
+#include "Hybrid.hpp"
 
 #include <vector>
-#include <deque>
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>
@@ -17,13 +17,13 @@
 #include <thrust/device_vector.h>
 #include <cublas_v2.h>
 
-
 extern "C" {
     HYPRE_Int hypre_ParVectorAxpy(HYPRE_Complex alpha, HYPRE_ParVector x, HYPRE_ParVector y);
 }
 
 namespace polysolve::linear
 {
+
     class GPUHybrid : public Solver
     {
 
@@ -47,9 +47,6 @@ namespace polysolve::linear
 
         void check_settings() const;
 
-        // Analyze sparsity pattern
-        virtual void analyze_pattern(const StiffnessMatrix &A, const int precond_num) override;
-
         // Factorize system matrix
         virtual void factorize(const StiffnessMatrix &A) override;
 
@@ -69,7 +66,7 @@ namespace polysolve::linear
             return "GPUAMG"; 
         }
 
-        //virtual void set_problematic_dofs(const std::set<int> &bad_dofs) override {TODO}
+        virtual void set_problematic_dofs(const std::set<int> &bad_dofs) override {h_all_bad_dofs = bad_dofs;}
 
     protected:
         // AMG settings
@@ -81,22 +78,24 @@ namespace polysolve::linear
         int min_subdomain_size = 1;
         int max_subdomain_size = 1e9;
         double gmm_bic_threshold = 0.1;
-        int max_dense_size = 1000;
-        bool use_float_on_subdomains = false;
         bool expand_subdomains = true;
+        int max_dense_size = 0;
+        bool use_float_on_subdomains = false;
 
         // General solver settings
         int dimension_ = 1; // 1 = scalar (Laplace), 2 or 3 = vector (Elasticity)
         int max_iter_ = 10000;
         double rel_conv_tol_ = 1e-10;
         double abs_conv_tol_ = 0.0;
+        double conditioning_threshold = 100.0;
         bool do_mixed_precond = false;
+
+        // solve information
+        HYPRE_Int num_iterations;
+        HYPRE_Complex final_res_norm;
 
     private:
         bool has_matrix_ = false;
-
-        // problem-specific data
-        Eigen::SparseMatrix<double, Eigen::RowMajor> sparse_A;
 
         // Hypre variables
         HYPRE_IJMatrix A;
@@ -105,139 +104,89 @@ namespace polysolve::linear
         HYPRE_IJVector ij_b;
 
         // hybrid preconditioner data
-        std::vector<thrust::device_vector<int>> bad_indices_arrays;
-        thrust::device_vector<int> all_bad_dof_map;
+        std::set<int> h_all_bad_dofs;
+        std::vector<int> h_subdomain_sizes;
+        thrust::device_vector<int> d_subdomain_sizes;
+        thrust::device_vector<int> d_all_bad_dofs;
+        std::vector<std::vector<int>> bad_indices_arrays;
 
-        // cudss data
-        // cuDSS Handles and Descriptors
+        thrust::device_vector<int> d_inner_indices;
+        thrust::device_vector<int> d_outer_indices;
+        thrust::device_vector<double> d_values;
+
         cudssHandle_t cudss_handle = nullptr;
-        cudssConfig_t config = nullptr;
-        cudssData_t solverData = nullptr;
+        cudssConfig_t cudss_config = nullptr;
+        cudssData_t cudss_solver_data = nullptr;
         
-        cudssMatrix_t batchMatrixA = nullptr;
-        cudssMatrix_t batchMatrixX = nullptr;
-        cudssMatrix_t batchMatrixB = nullptr;
+        cudssMatrix_t batch_A = nullptr;
+        cudssMatrix_t batch_x = nullptr;
+        cudssMatrix_t batch_b = nullptr;
 
         cublasHandle_t cublas_handle = nullptr;
 
         int dense_batch_count = 0;
-        int num_dense_subsystems = 0;
         int max_dense_dim = 0;
-        int sparseBatchCount = 0;
+        int sparse_batch_count = 0;
 
-        // --- Dense Subsystem Mapping (Device Pointers) ---
-        int* d_d_orig_idx = nullptr;
-        int* d_d_batch_id = nullptr;
-        int* d_d_local_offset = nullptr;
-        int* d_d_nrows = nullptr;
+        thrust::device_vector<int> d_sparse_dof_map;
+        thrust::device_vector<int> d_dense_dof_map;
 
-        // --- Dense Factorization & Solve Data (Device Pointers) ---
-        double* d_dense_matrices = nullptr; // Padded matrices (overwritten with LU)
-        double** d_dense_ptrs = nullptr;    // Array of pointers to each matrix
-        int* d_pivots = nullptr;            // Pivot arrays from GETRF
-        int* d_info = nullptr;              // Error info from cuBLAS/cuSolver
-        
-        double* d_dense_x = nullptr;        // Padded RHS/Solution vectors
-        double** d_dense_x_ptrs = nullptr;  // Array of pointers to each RHS vector
+        // dense solve data
+        thrust::device_vector<double> d_dense_invs;
+        thrust::device_vector<double*> d_dense_ptrs;
+        thrust::device_vector<int> d_pivots;
+        thrust::device_vector<int> d_info;
+        thrust::device_vector<double> d_dense_x;
+        thrust::device_vector<double*> d_dense_x_ptrs;
+        thrust::device_vector<double> d_dense_b;
+        thrust::device_vector<double*> d_dense_b_ptrs;
+        thrust::device_vector<int> d_dense_dof_offsets;
+        thrust::device_vector<int> d_dense_true_sizes;
 
-        void free_device_memory();
+        std::vector<int> h_dense_dof_starts;
 
-        // Dimensions (kept as class members to ensure pointers survive across phases)
-        int m_nrows = 0;
-        int m_ncols = 0;
-        int m_nnz = 0;
-        int m_batchCount = 1;
+        // sparse solve data
+        std::vector<int> h_sparse_nrows, h_sparse_ncols, h_sparse_nnz, h_sparse_vec_ncols, h_sparse_ld;
 
-        std::vector<int> h_nrows;
-        std::vector<int> h_ncols;
-        std::vector<int> h_nnz;
-        std::vector<int> h_vec_ncols;
-        std::vector<int> h_ld;
-
-        std::vector<void*> h_csrRowOffsets_void;
-        std::vector<void*> h_csrColIndices_void;
-        std::vector<void*> h_csrValues_void;
-        std::vector<void*> h_x_void;
-        std::vector<void*> h_b_void;
-
-        // Device memory pointers (Arrays)
-        int* d_csrRowOffsets = nullptr;
-        int* d_csrColIndices = nullptr;
-        double* d_csrValues = nullptr;
-        double* d_x = nullptr;
-        double* d_b = nullptr;
-
-        int* d_all_rowOffsets = nullptr;
-        int* d_all_colIndices = nullptr;
-        double* d_all_values = nullptr;
-
-        // Device memory pointers (Arrays of pointers for cuDSS Batch API)
-        void **d_csrRowOffsets_void = nullptr;
-        void **d_csrColIndices_void = nullptr;
-        void **d_csrValues_void = nullptr;
-        void **d_x_void = nullptr;
-        void **d_b_void = nullptr;
-
-        void **d_sparse_x = nullptr;
-        void **d_sparse_b = nullptr;
-
-        int* d_matrix_dof_starts = nullptr; // For binary search in kernels
-
-        double* d_x_curr;
-        double* d_x_prev;
-        double* d_x_new;
-        double* d_d;
-        double* d_rho_sq;
-        double* d_omega;
-
-        std::vector<int> row_starts;
-        std::vector<int> nnz_starts;
-        std::vector<int> dof_starts;
-
-        double* d_max_estimated_eigenvalues = nullptr;
-
-        std::vector<int> h_sparse_nrows;
-        std::vector<int> h_sparse_ncols;
-        std::vector<int> h_sparse_nnz;
-        std::vector<int> h_sparse_vec_ncols;
-        std::vector<int> h_sparse_ld;
-        
-        std::vector<void*> h_sparse_csrRowOffsets;
-        std::vector<void*> h_sparse_csrColIndices;
-        std::vector<void*> h_sparse_csrValues;
-        std::vector<void*> h_sparse_x;
-        std::vector<void*> h_sparse_b;
+        thrust::device_vector<int> d_sparse_inner_indices, d_sparse_outer_indices;
+        thrust::device_vector<double> d_sparse_values;
+        thrust::device_vector<float> d_sparse_single_values;
+        thrust::device_vector<double> d_sparse_x, d_sparse_b;
+        thrust::device_vector<float> d_sparse_single_values;
+        thrust::device_vector<void*> d_sparse_inner_void, d_sparse_outer_void, d_sparse_values_void;
+        thrust::device_vector<void*> d_sparse_x_void, d_sparse_b_void;
 
     public:
+        void free_device_memory();
+
+        // factorization helpers
         void copy_matrix_to_hypre();
 
         // solve helpers
         void init_hypre_vectors(const int size);
-        void set_hypre_vec(HYPRE_IJVector &ij_x, HYPRE_ParVector &par_x, double* x);
 
-        // linear algebra helpers
-        void matmul(double* x, double* result);
-        double dot(double* x, double* y);
-        void vector_copy(double* x, double* y);
-        void vector_add(double alpha, double* x, double* y);
-        void vector_scale(double alpha, double* x);
+        // hybrid preconditioner helpers
+        void decompose_subdomains_to_disjoint_subsets(const Eigen::SparseMatrix<double>& sparse_A);
+        void filter_subdomains(const Eigen::SparseMatrix<double>& sparse_A);
+        void expand_subdomains_to_strongly_connected(const Eigen::SparseMatrix<double>& sparse_A);
+        void select_bad_dofs();
+        void factorize_submatrix();
+
+        // linear algebra
+        void set_hypre_vec(HYPRE_IJVector &ij_x, HYPRE_ParVector &par_x, const thrust::device_vector<double>& x);
+        void matmul(const thrust::device_vector<double>& x, thrust::device_vector<double>& result);
+        double dot(const thrust::device_vector<double>& x, const thrust::device_vector<double>& y);
+        void vector_copy(const thrust::device_vector<double>& x, thrust::device_vector<double>& y);
+        void vector_add(double alpha, const thrust::device_vector<double>& x, thrust::device_vector<double>& y);
+        void vector_scale(double alpha, thrust::device_vector<double>& x);
 
         // preconditioning functions
-        void custom_mixed_precond_iter(const HYPRE_Solver &precond, double* r, double* z, double* buffer, double* z2);
-        void amg_precond_iter(const HYPRE_Solver &precond, double* b, double* x);
-        void dss_precond_iter(double* z, double* r, double* next_z);
-
-        // hybrid preconditioner preparation functions
-        void prepare_dss();
-        void decompose_subdomains_to_disjoint_subsets(std::vector<std::set<int>> &overlap_extensions);
-        void select_bad_indices();
-        void factorize_submatrix();
-        void assemble_D(int bad_i, int i, Eigen::SparseMatrix<double, Eigen::RowMajor>& D);
-        void allocate_subdomains();
+        void custom_mixed_precond_iter(const HYPRE_Solver &precond, thrust::device_vector<double> &r, thrust::device_vector<double> &z, thrust::device_vector<double> &buffer, thrust::device_vector<double> &z2);
+        void amg_precond_iter(const HYPRE_Solver &precond, thrust::device_vector<double>& b, thrust::device_vector<double> &x);
+        void dss_precond_iter(thrust::device_vector<double> &z, thrust::device_vector<double> &r, thrust::device_vector<double> &next_z);
 
         // Krylov solve methods
-        void pcg_solve(double* rhs, double* result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
-
+        void pcg_solve(thrust::device_vector<double> &rhs, thrust::device_vector<double> &result, HYPRE_ParVector &par_b, HYPRE_ParVector &par_x, HYPRE_Solver &precond);
     };
 
 } // namespace polysolve::linear

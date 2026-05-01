@@ -66,7 +66,7 @@ namespace polysolve::linear {
 #ifdef POLYSOLVE_WITH_CUDA
 #include "PCGSolver.hpp"
 #include "CUDSS.hpp"
-//#include "GPUHybrid.hpp"
+#include "GPUHybrid.hpp"
 #endif
 #include "Hybrid.hpp"
 
@@ -415,10 +415,10 @@ namespace polysolve::linear
         else if (solver == "CUDSS")
         {
             return std::make_unique<CUDSS>();
-        //}
-        //else if (solver == "GPUHybrid")
-        //{
-        //    return std::make_unique<GPUHybrid>();
+        }
+        else if (solver == "GPUHybrid")
+        {
+            return std::make_unique<GPUHybrid>();
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
         }
@@ -559,7 +559,7 @@ namespace polysolve::linear
 #ifdef POLYSOLVE_WITH_CUDA
             "CUDA_PCG",
             "CUDSS", 
-            //"GPUHybrid",
+            "GPUHybrid",
 #endif
 #ifdef POLYSOLVE_WITH_HYPRE
             "Hypre",

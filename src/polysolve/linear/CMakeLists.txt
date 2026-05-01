@@ -23,8 +23,8 @@ if(POLYSOLVE_WITH_CUDA)
     list(APPEND SOURCES
         CUDSS.cpp
         CUDSS.hpp
-#        GPUHybrid.cu
-#        GPUHybrid.hpp
+        GPUHybrid.cu
+        GPUHybrid.hpp
         PCGSolver.cu
         PCGSolver.hpp
         mas_utils/BSRAdjacency.cu

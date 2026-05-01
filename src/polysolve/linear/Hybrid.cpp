@@ -223,6 +223,7 @@ namespace polysolve::linear
         {
             auto phase_begin = clock::now();
             
+            bad_indices_sets.clear();
             bad_indices_arrays.clear();
             select_bad_dofs(shared_A);
 

@@ -152,7 +152,7 @@ namespace polysolve::linear
         thrust::device_vector<double> d_sparse_values;
         thrust::device_vector<float> d_sparse_single_values;
         thrust::device_vector<double> d_sparse_x, d_sparse_b;
-        thrust::device_vector<float> d_sparse_single_values;
+        thrust::device_vector<float> d_sparse_single_x, d_sparse_single_b;
         thrust::device_vector<void*> d_sparse_inner_void, d_sparse_outer_void, d_sparse_values_void;
         thrust::device_vector<void*> d_sparse_x_void, d_sparse_b_void;
 

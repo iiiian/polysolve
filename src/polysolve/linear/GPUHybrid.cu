@@ -531,13 +531,26 @@ namespace polysolve::linear
 
         if (sparse_batch_count > 0)
         {
-            thrust::gather(
-                thrust::device,
-                d_sparse_dof_map.begin(), 
-                d_sparse_dof_map.end(), 
-                next_z.begin(), 
-                d_sparse_b.begin()
-            );
+            if (use_float_on_subdomains)
+            {
+                thrust::gather(
+                    thrust::device,
+                    d_sparse_dof_map.begin(), 
+                    d_sparse_dof_map.end(), 
+                    next_z.begin(), 
+                    d_sparse_single_b.begin()
+                );
+            }
+            else
+            {
+                thrust::gather(
+                    thrust::device,
+                    d_sparse_dof_map.begin(), 
+                    d_sparse_dof_map.end(), 
+                    next_z.begin(), 
+                    d_sparse_b.begin()
+                );
+            }
 
             CHECK_CUDSS(cudssExecute(cudss_handle, CUDSS_PHASE_SOLVE, cudss_config, cudss_solver_data, batch_A, batch_x, batch_b));
         }
@@ -588,14 +601,26 @@ namespace polysolve::linear
 
         if (sparse_batch_count > 0)
         {
-
-            thrust::scatter(
-                thrust::device,
-                d_sparse_x.begin(),
-                d_sparse_x.begin() + d_sparse_dof_map.size(),
-                d_sparse_dof_map.begin(),
-                next_z.begin()
-            );
+            if (use_float_on_subdomains)
+            {
+                thrust::scatter(
+                    thrust::device,
+                    d_sparse_single_x.begin(),
+                    d_sparse_single_x.begin() + d_sparse_dof_map.size(),
+                    d_sparse_dof_map.begin(),
+                    next_z.begin()
+                );
+            }
+            else
+            {
+                thrust::scatter(
+                    thrust::device,
+                    d_sparse_x.begin(),
+                    d_sparse_x.begin() + d_sparse_dof_map.size(),
+                    d_sparse_dof_map.begin(),
+                    next_z.begin()
+                );
+            }
         }
 
         if (dense_batch_count > 0)
@@ -999,7 +1024,6 @@ namespace polysolve::linear
 
         if (total_sparse_dofs > 0)
         {
-
             std::vector<int> h_sparse_dof_map;
 
             for (int i = 0; i < bad_indices_arrays.size(); ++i)
@@ -1019,41 +1043,48 @@ namespace polysolve::linear
             thrust::device_vector<int> d_sparse_batch_offsets(h_sparse_dof_starts.begin(), h_sparse_dof_starts.end());
             thrust::device_vector<int> d_sparse_batch_sizes(h_sparse_nrows.begin(), h_sparse_nrows.end());
 
+            int total_sparse_dofs = d_sparse_dof_map.size();
+            
             int* raw_bad_dofs = thrust::raw_pointer_cast(d_sparse_dof_map.data());
             int* raw_batch_offsets = thrust::raw_pointer_cast(d_sparse_batch_offsets.data());
             int* raw_batch_sizes = thrust::raw_pointer_cast(d_sparse_batch_sizes.data());
             int* raw_outer = thrust::raw_pointer_cast(d_outer_indices.data());
             int* raw_inner = thrust::raw_pointer_cast(d_inner_indices.data());
+            
+            thrust::device_vector<int> d_row_nnz(total_sparse_dofs, 0);
+            int* raw_row_nnz = thrust::raw_pointer_cast(d_row_nnz.data());
+            
+            thrust::fill(d_sparse_nnz.begin(), d_sparse_nnz.end(), 0);
             int* raw_sparse_nnz = thrust::raw_pointer_cast(d_sparse_nnz.data());
 
             thrust::for_each(thrust::device,
                 thrust::make_counting_iterator(0),
-                thrust::make_counting_iterator(sparse_batch_count),
-                [=] __device__ (int batch_idx) {
+                thrust::make_counting_iterator(total_sparse_dofs),
+                [=] __device__ (int i) {
+                    
+                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + sparse_batch_count, i);
+                    int batch_idx = (batch_ptr - raw_batch_offsets) - 1;
                     
                     int offset = raw_batch_offsets[batch_idx];
                     int size = raw_batch_sizes[batch_idx];
-                    int batch_nnz_count = 0;
                     
-                    for (int r = 0; r < size; ++r) {
-                        int global_row = raw_bad_dofs[offset + r];
-                        
-                        int row_start = raw_outer[global_row];
-                        int row_end = raw_outer[global_row + 1];
-                        
-                        for (int j = row_start; j < row_end; ++j) {
-                            int global_col = raw_inner[j];
-                            
-                            int* sub_begin = raw_bad_dofs + offset;
-                            int* sub_end = sub_begin + size;
-                            
-                            if (thrust::binary_search(thrust::seq, sub_begin, sub_end, global_col)) {
-                                batch_nnz_count++;
-                            }
+                    int global_row = raw_bad_dofs[i];
+                    int row_start = raw_outer[global_row];
+                    int row_end = raw_outer[global_row + 1];
+                    
+                    int* sub_begin = raw_bad_dofs + offset;
+                    int* sub_end = sub_begin + size;
+                    
+                    int row_nnz = 0;
+                    for (int j = row_start; j < row_end; ++j) {
+                        int global_col = raw_inner[j];
+                        if (thrust::binary_search(thrust::seq, sub_begin, sub_end, global_col)) {
+                            row_nnz++;
                         }
                     }
                     
-                    raw_sparse_nnz[batch_idx] = batch_nnz_count;
+                    raw_row_nnz[i] = row_nnz;
+                    atomicAdd(&raw_sparse_nnz[batch_idx], row_nnz);
                 }
             );
 
@@ -1067,60 +1098,84 @@ namespace polysolve::linear
             d_sparse_values.clear();
             d_sparse_x.clear();
             d_sparse_b.clear();
+            d_sparse_single_x.clear();
+            d_sparse_single_b.clear();
+            
             d_sparse_outer_indices.resize(total_sparse_dofs + sparse_batch_count);
             d_sparse_inner_indices.resize(total_sparse_nnz);
-            d_sparse_values.resize(total_sparse_nnz);
-            d_sparse_x.resize(total_sparse_dofs);
-            d_sparse_b.resize(total_sparse_dofs);
 
-            thrust::device_vector<int> d_sparse_nnz_starts = h_sparse_nnz_starts;
-        
-            int* raw_nnz_starts = thrust::raw_pointer_cast(d_sparse_nnz_starts.data());
+            if (use_float_on_subdomains)
+            {
+                d_sparse_single_x.resize(total_sparse_dofs);
+                d_sparse_single_b.resize(total_sparse_dofs);
+                d_sparse_single_values.resize(total_sparse_nnz);
+            }
+            else
+            {
+                d_sparse_x.resize(total_sparse_dofs);
+                d_sparse_b.resize(total_sparse_dofs);
+                d_sparse_values.resize(total_sparse_nnz);
+            }
+
+            thrust::device_vector<int> d_row_nnz_starts(total_sparse_dofs, 0);
+            thrust::exclusive_scan(d_row_nnz.begin(), d_row_nnz.end(), d_row_nnz_starts.begin());
+            
+            int* raw_row_nnz_starts = thrust::raw_pointer_cast(d_row_nnz_starts.data());
             int* raw_sparse_outer = thrust::raw_pointer_cast(d_sparse_outer_indices.data());
             int* raw_sparse_inner = thrust::raw_pointer_cast(d_sparse_inner_indices.data());
             
             double* raw_global_values = thrust::raw_pointer_cast(d_values.data());
             double* raw_sparse_values = thrust::raw_pointer_cast(d_sparse_values.data());
+            float* raw_sparse_single_values = thrust::raw_pointer_cast(d_sparse_single_values.data());
+            bool use_float = use_float_on_subdomains;
 
             thrust::for_each(thrust::device,
                 thrust::make_counting_iterator(0),
-                thrust::make_counting_iterator(sparse_batch_count),
-                [=] __device__ (int batch_idx) {
+                thrust::make_counting_iterator(total_sparse_dofs),
+                [=] __device__ (int i) {
+                    
+                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + sparse_batch_count, i);
+                    int batch_idx = (batch_ptr - raw_batch_offsets) - 1;
                     
                     int offset = raw_batch_offsets[batch_idx];
                     int size = raw_batch_sizes[batch_idx];
                     
+                    int r = i - offset; 
                     int outer_start = offset + batch_idx; 
                     
-                    int nnz_start = raw_nnz_starts[batch_idx];
-                    int current_nnz = nnz_start;
+                    if (r == 0) {
+                        raw_sparse_outer[outer_start] = 0; 
+                    }
                     
-                    raw_sparse_outer[outer_start] = 0; 
+                    int batch_nnz_start = raw_row_nnz_starts[offset];
+                    
+                    raw_sparse_outer[outer_start + r + 1] = (raw_row_nnz_starts[i] + raw_row_nnz[i]) - batch_nnz_start;
 
-                    for (int r = 0; r < size; ++r) {
-                        int global_row = raw_bad_dofs[offset + r];
+                    int current_nnz = raw_row_nnz_starts[i];
+                    
+                    int global_row = raw_bad_dofs[i];
+                    int row_start = raw_outer[global_row];
+                    int row_end = raw_outer[global_row + 1];
+                    
+                    int* sub_begin = raw_bad_dofs + offset;
+                    int* sub_end = sub_begin + size;
+                    
+                    for (int j = row_start; j < row_end; ++j) {
+                        int global_col = raw_inner[j];
                         
-                        int row_start = raw_outer[global_row];
-                        int row_end = raw_outer[global_row + 1];
+                        int* ptr = thrust::lower_bound(thrust::seq, sub_begin, sub_end, global_col);
                         
-                        int* sub_begin = raw_bad_dofs + offset;
-                        int* sub_end = sub_begin + size;
-                        
-                        for (int j = row_start; j < row_end; ++j) {
-                            int global_col = raw_inner[j];
+                        if (ptr != sub_end && *ptr == global_col) {
+                            int local_col = ptr - sub_begin;
                             
-                            int* ptr = thrust::lower_bound(thrust::seq, sub_begin, sub_end, global_col);
-                            
-                            if (ptr != sub_end && *ptr == global_col) {
-                                int local_col = ptr - sub_begin;
-                                
-                                raw_sparse_inner[current_nnz] = local_col;
+                            raw_sparse_inner[current_nnz] = local_col;
+                            if (use_float) {
+                                raw_sparse_single_values[current_nnz] = static_cast<float>(raw_global_values[j]);
+                            } else {
                                 raw_sparse_values[current_nnz] = raw_global_values[j];
-                                current_nnz++;
                             }
+                            current_nnz++;
                         }
-                        
-                        raw_sparse_outer[outer_start + r + 1] = current_nnz - nnz_start;
                     }
                 }
             );
@@ -1135,9 +1190,19 @@ namespace polysolve::linear
             {
                 h_sparse_outer_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_outer_indices.data()) + h_sparse_row_starts[i]));
                 h_sparse_inner_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_inner_indices.data()) + h_sparse_nnz_starts[i]));
-                h_sparse_values_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_values.data()) + h_sparse_nnz_starts[i]));
-                h_sparse_x_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_x.data()) + h_sparse_dof_starts[i]));
-                h_sparse_b_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_b.data()) + h_sparse_dof_starts[i]));
+
+                if (use_float_on_subdomains)
+                {
+                    h_sparse_x_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_single_x.data()) + h_sparse_dof_starts[i]));
+                    h_sparse_b_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_single_b.data()) + h_sparse_dof_starts[i]));
+                    h_sparse_values_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_single_values.data()) + h_sparse_nnz_starts[i]));
+                }
+                else
+                {
+                    h_sparse_x_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_x.data()) + h_sparse_dof_starts[i]));
+                    h_sparse_b_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_b.data()) + h_sparse_dof_starts[i]));
+                    h_sparse_values_void.push_back(static_cast<void*>(thrust::raw_pointer_cast(d_sparse_values.data()) + h_sparse_nnz_starts[i]));
+                }
             }
 
             d_sparse_outer_void = h_sparse_outer_void;
@@ -1146,20 +1211,22 @@ namespace polysolve::linear
             d_sparse_x_void = h_sparse_x_void;
             d_sparse_b_void = h_sparse_b_void;
 
+            auto precision = use_float_on_subdomains ? CUDA_R_32F : CUDA_R_64F;
+
             CHECK_CUDSS(cudssMatrixCreateBatchDn(
                 &batch_x, sparse_batch_count, h_sparse_nrows.data(), h_sparse_vec_ncols.data(), h_sparse_ld.data(), 
-                thrust::raw_pointer_cast(d_sparse_x_void.data()), CUDA_R_32I, CUDA_R_64F, CUDSS_LAYOUT_COL_MAJOR
+                thrust::raw_pointer_cast(d_sparse_x_void.data()), CUDA_R_32I, precision, CUDSS_LAYOUT_COL_MAJOR
             ));
 
             CHECK_CUDSS(cudssMatrixCreateBatchDn(
                 &batch_b, sparse_batch_count, h_sparse_nrows.data(), h_sparse_vec_ncols.data(), h_sparse_ld.data(), 
-                thrust::raw_pointer_cast(d_sparse_b_void.data()), CUDA_R_32I, CUDA_R_64F, CUDSS_LAYOUT_COL_MAJOR
+                thrust::raw_pointer_cast(d_sparse_b_void.data()), CUDA_R_32I, precision, CUDSS_LAYOUT_COL_MAJOR
             ));
 
             CHECK_CUDSS(cudssMatrixCreateBatchCsr(
                 &batch_A, sparse_batch_count, h_sparse_nrows.data(), h_sparse_ncols.data(), h_sparse_nnz.data(), 
                 thrust::raw_pointer_cast(d_sparse_outer_void.data()), nullptr, thrust::raw_pointer_cast(d_sparse_inner_void.data()), thrust::raw_pointer_cast(d_sparse_values_void.data()), 
-                CUDA_R_32I, CUDA_R_64F, CUDSS_MTYPE_SYMMETRIC, 
+                CUDA_R_32I, precision, CUDSS_MTYPE_SYMMETRIC, 
                 CUDSS_MVIEW_FULL, CUDSS_BASE_ZERO
             ));
 

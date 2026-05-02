@@ -121,6 +121,19 @@ namespace polysolve::nonlinear
 
         virtual void get_problematic_dofs(std::set<int> &bad_dofs) {}
 
+        void set_positions(const Eigen::MatrixXd &positions_)
+        {
+            positions = positions_;
+        }
+
+        void set_elements(const Eigen::MatrixXi &elements_)
+        {
+            elements = elements_;
+        }
+
+        Eigen::VectorXd positions;
+        Eigen::MatrixXi elements;
+
         /// --- Misc ----------------------------------------------------------
 
         /// @brief Sample the function along a direction.

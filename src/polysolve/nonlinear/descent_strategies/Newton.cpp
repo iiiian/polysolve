@@ -188,7 +188,11 @@ namespace polysolve::nonlinear
             // TODO: get the correct size
             std::set<int> bad_dofs;
             objFunc.get_problematic_dofs(bad_dofs);
+
             linear_solver->set_problematic_dofs(bad_dofs);
+            linear_solver->set_positions(objFunc.positions);
+            linear_solver->set_elements(objFunc.elements);
+
             linear_solver->analyze_pattern(hessian, hessian.rows());
 
             try

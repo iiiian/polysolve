@@ -134,6 +134,16 @@ namespace polysolve::linear
         /// @brief Name of the solver type (for debugging purposes)
         virtual std::string name() const { return ""; }
 
+        void set_positions(const Eigen::MatrixXd &positions)
+        {
+            positions_ = positions;
+        }
+
+        void set_elements(const Eigen::MatrixXi &elements)
+        {
+            elements_ = elements;
+        }
+
         Eigen::MatrixXd positions_;
         Eigen::MatrixXi elements_;
     };

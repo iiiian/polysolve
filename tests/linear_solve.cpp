@@ -155,6 +155,18 @@ int main(int argc, char *argv[])
         .scan<'i', long long>()
         .nargs(argparse::nargs_pattern::optional)
         .help("Generate a random RHS instead of loading -b. Optionally provide a seed.");
+    auto &problem_info_group = program.add_mutually_exclusive_group();
+    problem_info_group.add_argument("-p")
+        .metavar("problem_info.mtx")
+        .help("Optional Matrix Market vector of problem specific information.");
+    problem_info_group.add_argument("-t", "--threshold")
+        .help("Threshold value to apply.")
+        .scan<'g', double>()
+        .default_value(0.0);
+    problem_info_group.add_argument("--less_than")
+        .default_value(false)
+        .implicit_value(true)
+        .help("Condition to select problematic DoFs relative to threshold. (Defaults to problematic_info(i) > thresh.)");
     program.add_argument("-j")
         .metavar("spec.json")
         .help("Optional solver JSON config. Defaults to {\"solver\":\"Eigen::SimplicialLDLT\"}.");
@@ -306,6 +318,42 @@ int main(int argc, char *argv[])
         }
     }
 
+    std::set<int> problem_specific_bad_dofs;
+    if (program.present("-p"))
+    {
+        const bool less_than = program.get<bool>("--less_than");
+        const double problematic_threshold = program.get<double>("-t");
+        const std::string p_path = program.get<std::string>("-p");
+        Eigen::VectorXd problematic_info(A.rows());
+
+        if (!Eigen::loadMarketVector(problematic_info, p_path))
+        {
+            throw std::runtime_error("failed to load matrix market problem info: " + p_path);
+        }
+        if (problematic_info.size() != A.rows())
+        {
+            throw std::runtime_error("problematic info dimension mismatch");
+        }
+
+        for (int i = 0; i < problematic_info.size(); ++i)
+        {
+            if (less_than)
+            {
+                if (problematic_info(i) < problematic_threshold)
+                {
+                    problem_specific_bad_dofs.insert(i);
+                }
+            }
+            else
+            {
+                if (problematic_info(i) > problematic_threshold)
+                {
+                    problem_specific_bad_dofs.insert(i);
+                }
+            }
+        }
+    }
+
     std::optional<Eigen::MatrixXd> dense_A;
 
     const int iterations = warmup + repeat;
@@ -315,6 +363,7 @@ int main(int argc, char *argv[])
             iteration < warmup ? std::make_unique<ScopedOutputSilencer>() : nullptr;
 
         auto solver = Solver::create(solver_config, *logger);
+        solver->set_problematic_dofs(problem_specific_bad_dofs);
         SPDLOG_INFO("[{}] [matrix_info] [size={}] [nnzs={}]", solver->name(), A.rows(), A.nonZeros());
         x.resize(A.cols());
         x.setZero();

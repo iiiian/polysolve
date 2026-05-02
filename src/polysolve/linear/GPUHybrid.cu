@@ -124,9 +124,9 @@ namespace polysolve::linear
             {
                 theta = params["GPUHybrid"]["theta"];
             }
-            if (params["GPUHybrid"].contains("select_bad_dofs_from_l1_row_norm"))
+            if (params["GPUHybrid"].contains("select_bad_dofs_from_l1_norm"))
             {
-                select_bad_dofs_from_l1_row_norm = params["GPUHybrid"]["select_bad_dofs_from_l1_row_norm"];
+                select_bad_dofs_from_l1_row_norm = params["GPUHybrid"]["select_bad_dofs_from_l1_norm"];
             }
             if (params["GPUHybrid"].contains("block_size"))
             {

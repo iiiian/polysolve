@@ -124,6 +124,10 @@ namespace polysolve::linear
             {
                 theta = params["GPUHybrid"]["theta"];
             }
+            if (params["GPUHybrid"].contains("select_bad_dofs_from_l1_row_norm"))
+            {
+                select_bad_dofs_from_l1_row_norm = params["GPUHybrid"]["select_bad_dofs_from_l1_row_norm"];
+            }
             if (params["GPUHybrid"].contains("block_size"))
             {
                 dimension_ = params["GPUHybrid"]["block_size"];
@@ -865,7 +869,7 @@ namespace polysolve::linear
         h_all_bad_dofs.clear();
         h_all_bad_dofs.insert(h_bad_dofs.begin(), h_bad_dofs.end());
 
-        SPDLOG_INFO("[{}] [bad_dof_selection] [{:.6f}][global_mean={}] [global_var={}] [global_bic={}] [gmm_bic={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", 
+        SPDLOG_INFO("[{}] [bad_dof_selection] [{:.6f}] [global_mean={}] [global_var={}] [global_bic={}] [gmm_bic={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", 
             name(), elapsed_seconds(phase_begin), global_mean, global_var, global_bic, bic, mean_0, mean_1, var_0, var_1, gmm_iter, num_bad_dofs);
     }
 

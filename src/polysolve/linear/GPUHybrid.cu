@@ -852,15 +852,20 @@ namespace polysolve::linear
         double global_bic = -2.0 * global_log_likelihood + 2.0 * log(num_rows);
         double bic = -2.0 * log_likelihood + 5.0 * log(num_rows);
 
-        d_all_bad_dofs.resize(num_rows);
-        auto end_it = thrust::copy_if(thrust::device,
-            thrust::make_counting_iterator(0),
-            thrust::make_counting_iterator(num_rows),
-            d_all_bad_dofs.begin(),
-            [=] __device__ (int i) { return g0[i] < g1[i]; }
-        );
+        int num_bad_dofs = 0;
+        if (abs(bic - global_bic) / abs(global_bic) > gmm_bic_threshold)
+        {
+            d_all_bad_dofs.resize(num_rows);
+            auto end_it = thrust::copy_if(thrust::device,
+                thrust::make_counting_iterator(0),
+                thrust::make_counting_iterator(num_rows),
+                d_all_bad_dofs.begin(),
+                [=] __device__ (int i) { return g0[i] < g1[i]; }
+            );
 
-        int num_bad_dofs = thrust::distance(d_all_bad_dofs.begin(), end_it);
+            num_bad_dofs = thrust::distance(d_all_bad_dofs.begin(), end_it);
+        }
+
         d_all_bad_dofs.resize(num_bad_dofs);
 
         std::vector<int> h_bad_dofs(num_bad_dofs);

@@ -168,6 +168,10 @@ int main(int argc, char *argv[])
         .scan<'i', int>()
         .metavar("repeat")
         .help("Number of iterations after warmup. Default: 1.");
+    program.add_argument("--force_symmetry")
+        .default_value(false)
+        .implicit_value(true)
+        .help("Force matrix to be symmetric. Default: false.");
 
     program.parse_args(argc, argv);
 
@@ -176,6 +180,7 @@ int main(int argc, char *argv[])
     const int repeat = program.get<int>("-r");
     const bool use_random_rhs = program.is_used("--rand");
     const auto rand_seed_argument = program.present<long long>("--rand");
+    const bool force_symmetry = program.get<bool>("--force_symmetry");
 
     if (warmup < 0)
     {
@@ -255,9 +260,26 @@ int main(int argc, char *argv[])
     {
         throw std::runtime_error("matrix must be square");
     }
-    A.makeCompressed();
+    if (force_symmetry)
+    {
+        std::vector<Eigen::Triplet<double>> triplets;
+        triplets.reserve(2 * (A.nonZeros() - A.rows()) + A.rows());
 
-    SPDLOG_INFO("[{}] [matrix_info] [size={}] [nnzs={}]", solver_config["solver"], A.rows(), A.nonZeros());
+        for (int k = 0; k < A.outerSize(); ++k)
+        {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+            {   
+                triplets.push_back(Eigen::Triplet<double>(it.row(), it.col(), it.value()));
+                if (it.col() != it.row())
+                {
+                    triplets.push_back(Eigen::Triplet<double>(it.col(), it.row(), it.value()));
+                }
+            }
+        }
+
+        A.setFromTriplets(triplets.begin(), triplets.end());
+    }
+    A.makeCompressed();
 
     b.resize(A.rows());
     if (program.present("-b"))
@@ -293,6 +315,7 @@ int main(int argc, char *argv[])
             iteration < warmup ? std::make_unique<ScopedOutputSilencer>() : nullptr;
 
         auto solver = Solver::create(solver_config, *logger);
+        SPDLOG_INFO("[{}] [matrix_info] [size={}] [nnzs={}]", solver->name(), A.rows(), A.nonZeros());
         x.resize(A.cols());
         x.setZero();
 
@@ -306,7 +329,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            SPDLOG_INFO("[{}] [start_analyze_pattern]", solver_config["solver"]);
+            SPDLOG_INFO("[{}] [start_analyze_pattern]", solver->name());
             solver->analyze_pattern(A, A.rows());
         }
 
@@ -316,17 +339,15 @@ int main(int argc, char *argv[])
         }
         else
         {
-            SPDLOG_INFO("[{}] [start_factorize]", solver_config["solver"]);
+            SPDLOG_INFO("[{}] [start_factorize]", solver->name());
             solver->factorize(A);
         }
 
-        SPDLOG_INFO("[{}] [start_solve]", solver_config["solver"]);
+        SPDLOG_INFO("[{}] [start_solve]", solver->name());
         solver->solve(b, x);
         double residual = (b - A * x).norm();
-        SPDLOG_INFO("[{}] [residual={}]", solver_config["solver"], residual);
+        SPDLOG_INFO("[{}] [residual={}] [peak_memory={}]", solver->name(), residual, getPeakRSS());
     }
-
-    SPDLOG_INFO("[{}] [peak_memory={}]", solver_config["solver"], getPeakRSS());
 
 #ifdef HYPRE_WITH_MPI
     MPI_Barrier(MPI_COMM_WORLD);

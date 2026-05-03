@@ -124,7 +124,7 @@ namespace polysolve::linear
         bool decompose_subdomains = false;
         int min_subdomain_size = 1;
         int max_subdomain_size = 1e9;
-        double gmm_bic_threshold = 0.1;
+        double gmm_jump_threshold = 100.0;
         bool expand_subdomains = true;
 
         // General solver settings

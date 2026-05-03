@@ -81,7 +81,6 @@ namespace polysolve::linear
 
         int done_already;
         MPI_Initialized(&done_already);
-        HYPRE_Initialize();
 
         if (!done_already)
         {
@@ -93,7 +92,7 @@ namespace polysolve::linear
             MPI_Init(&argc, &argvv);
         }
 
-        HYPRE_Init();
+        
         CHECK_CUDA(cudaSetDevice(0));
         HYPRE_SetMemoryLocation(HYPRE_MEMORY_DEVICE);
         HYPRE_SetExecutionPolicy(HYPRE_EXEC_DEVICE);
@@ -152,9 +151,9 @@ namespace polysolve::linear
             {
                 max_dense_size = params["GPUHybrid"]["max_dense_size"];
             }  
-            if (params["GPUHybrid"].contains("gmm_bic_threshold"))
+            if (params["GPUHybrid"].contains("gmm_jump_threshold"))
             {
-                gmm_bic_threshold = params["GPUHybrid"]["gmm_bic_threshold"];
+                gmm_jump_threshold = params["GPUHybrid"]["gmm_jump_threshold"];
             }  
             if (params["GPUHybrid"].contains("expand_subdomains"))
             {
@@ -175,7 +174,10 @@ namespace polysolve::linear
 
     void GPUHybrid::check_settings() const
     {
-
+        if (max_dense_size > 0)
+        {
+            throw std::runtime_error("Dense solves on subdomains are deprecated.");
+        }
     }
 
     void GPUHybrid::factorize(const StiffnessMatrix &Ain)
@@ -259,6 +261,7 @@ namespace polysolve::linear
         }
 
         copy_matrix_to_hypre();
+        has_matrix_ = true;
 
         d_outer_indices.clear();
         d_inner_indices.clear();
@@ -841,19 +844,8 @@ namespace polysolve::linear
             }
         }
 
-        double global_log_likelihood = thrust::transform_reduce(thrust::device,
-            d_row_norms.begin(), d_row_norms.end(),
-            [=] __device__ (double x) -> double{
-                return log((1.0 / sqrt(2.0 * M_PI * global_var))) + (-0.5 * (x - global_mean) * (x - global_mean) / global_var);
-            },
-            0.0, thrust::plus<double>()
-        );
-
-        double global_bic = -2.0 * global_log_likelihood + 2.0 * log(num_rows);
-        double bic = -2.0 * log_likelihood + 5.0 * log(num_rows);
-
         int num_bad_dofs = 0;
-        if (abs(bic - global_bic) / abs(global_bic) > gmm_bic_threshold)
+        if (abs(mean_1) / abs(mean_0) > gmm_jump_threshold)
         {
             d_all_bad_dofs.resize(num_rows);
             auto end_it = thrust::copy_if(thrust::device,
@@ -874,8 +866,8 @@ namespace polysolve::linear
         h_all_bad_dofs.clear();
         h_all_bad_dofs.insert(h_bad_dofs.begin(), h_bad_dofs.end());
 
-        SPDLOG_INFO("[{}] [bad_dof_selection] [{:.6f}] [global_mean={}] [global_var={}] [global_bic={}] [gmm_bic={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", 
-            name(), elapsed_seconds(phase_begin), global_mean, global_var, global_bic, bic, mean_0, mean_1, var_0, var_1, gmm_iter, num_bad_dofs);
+        SPDLOG_INFO("[{}] [bad_dof_selection] [{:.6f}] [global_mean={}] [global_var={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", 
+            name(), elapsed_seconds(phase_begin), global_mean, global_var, mean_0, mean_1, var_0, var_1, gmm_iter, num_bad_dofs);
     }
 
     void GPUHybrid::filter_subdomains(const Eigen::SparseMatrix<double> &sparse_A)

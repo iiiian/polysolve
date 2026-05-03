@@ -129,9 +129,9 @@ namespace polysolve::linear
             {
                 expand_subdomains = params["Hybrid"]["expand_subdomains"];
             }
-            if (params["Hybrid"].contains("gmm_bic_threshold"))
+            if (params["Hybrid"].contains("gmm_jump_threshold"))
             {
-                gmm_bic_threshold = params["Hybrid"]["gmm_bic_threshold"];
+                gmm_jump_threshold = params["Hybrid"]["gmm_jump_threshold"];
             }
         }
     }
@@ -901,22 +901,11 @@ namespace polysolve::linear
                 break;
             }
         }
-        
-        Eigen::VectorXd local_global_likelihood = (1.0 / sqrt(2 * M_PI * global_var)) * (-0.5 * (row_norms.segment(starts[myid], my_size()).array() - global_mean).array().square() / global_var).exp();
-        double local_global_log_likehood = local_global_likelihood.array().log().sum();
-        double global_log_likelihood;
-        MPI_Reduce(&local_global_log_likehood, &global_log_likelihood, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
-        double local_log_likelihood = total_local_gamma.array().log().sum();
-        double log_likelihood;
-        MPI_Reduce(&local_log_likelihood, &log_likelihood, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
         double global_bic, bic;
         if (myid == 0)
         {
-            global_bic = -2.0 * global_log_likelihood + 2.0 * log(row_norms.size());
-            bic = -2.0 * log_likelihood + 5.0 * log(row_norms.size());
-            if (abs(bic - global_bic) / abs(global_bic) > gmm_bic_threshold)
+            if (abs(mean_1) / abs(mean_0) > gmm_jump_threshold)
             {
                 for (int i = 0; i < row_norms.size(); ++i)
                 {
@@ -931,8 +920,8 @@ namespace polysolve::linear
         MPI_Win_free(&row_norm_win);
         MPI_Win_free(&gamma_win);
 
-        SPDLOG_INFO("[{}] [bad_dof_selection] [{}] [global_mean={}] [global_var={}] [global_bic={}] [gmm_bic={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", \
-            name(), elapsed_seconds(phase_begin), global_mean, global_var, global_bic, bic, mean_0, mean_1, var_0, var_1, gmm_iter, all_bad_dofs.size());
+        SPDLOG_INFO("[{}] [bad_dof_selection] [{}] [global_mean={}] [global_var={}] [mean_0={}] [mean_1={}] [var_0={}] [var_1={}] [gmm_iters={}] [num_bad_dofs={}]", \
+            name(), elapsed_seconds(phase_begin), global_mean, global_var, mean_0, mean_1, var_0, var_1, gmm_iter, all_bad_dofs.size());
     }
 
     void Hybrid::factorize_submatrix(SharedSparseMatrix &sparse_A)

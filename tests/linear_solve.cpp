@@ -5,6 +5,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <unsupported/Eigen/SparseExtra>
+#include <_hypre_utilities.h>
 
 #include <cstdio>
 #include <cstdint>
@@ -229,6 +230,23 @@ int main(int argc, char *argv[])
         in >> solver_config;
     }
 
+#ifdef HYPRE_WITH_MPI
+    int done_already;
+    int myid = 0, num_procs = 1;
+
+    MPI_Initialized(&done_already);
+    if (!done_already)
+    {
+        MPI_Init(&argc, &argv);
+    }
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+
+    HYPRE_Initialize();
+
     auto logger = spdlog::stderr_color_mt("linear_solve");
     logger->set_level(spdlog::level::off);
 
@@ -242,19 +260,9 @@ int main(int argc, char *argv[])
     Eigen::VectorXd x, b;
 
 #ifdef HYPRE_WITH_MPI
-    int done_already;
-    int myid = 0, num_procs = 1;
-
-    MPI_Initialized(&done_already);
-    if (!done_already)
-    {
-        MPI_Init(&argc, &argv);
-    }
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &myid);
-    MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
     if (myid != 0)
     {
+        auto solver = Solver::create(solver_config, *logger);
         while (true)
         {
             solver->analyze_pattern(A, 0);
@@ -400,13 +408,12 @@ int main(int argc, char *argv[])
 
 #ifdef HYPRE_WITH_MPI
     MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Abort(MPI_COMM_WORLD, 0);
     int finalized;
     MPI_Finalized(&finalized);
     if (!finalized)
         MPI_Finalize();
-    HYPRE_Finalize();
 #endif
+    HYPRE_Finalize();
 
     return 0;
 }

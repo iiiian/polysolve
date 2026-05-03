@@ -478,7 +478,7 @@
             "theta",
             "do_hybrid_precond",
             "select_bad_dofs_from_l1_norm",
-            "gmm_bic_threshold",
+            "gmm_jump_threshold",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -500,7 +500,7 @@
             "theta",
             "do_hybrid_precond",
             "select_bad_dofs_from_l1_norm",
-            "gmm_bic_threshold",
+            "gmm_jump_threshold",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -573,10 +573,10 @@
         "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
     },
     {
-        "pointer": "/Hybrid/gmm_bic_threshold",
-        "default": 0.1,
+        "pointer": "/Hybrid/gmm_jump_threshold",
+        "default": 100.0,
         "type": "float",
-        "doc": "GMM-BIC threshold."
+        "doc": "GMM jump threshold."
     },
     {
         "pointer": "/Hybrid/decompose_subdomains",
@@ -657,10 +657,10 @@
         "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
     },
     {
-        "pointer": "/GPUHybrid/gmm_bic_threshold",
-        "default": 0.1,
+        "pointer": "/GPUHybrid/gmm_jump_threshold",
+        "default": 100.0,
         "type": "float",
-        "doc": "GMM-BIC threshold."
+        "doc": "GMM jump threshold."
     },
     {
         "pointer": "/GPUHybrid/decompose_subdomains",

@@ -6,6 +6,7 @@
 #include <vector>
 #include <deque>
 #include <unordered_map>
+#include <iostream>
 
 #include <Eigen/Core>
 #include <Eigen/Sparse>

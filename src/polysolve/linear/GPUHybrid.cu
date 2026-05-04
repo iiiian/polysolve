@@ -162,6 +162,14 @@ namespace polysolve::linear
             if (params["GPUHybrid"].contains("use_float_on_subdomains"))
             {
                 use_float_on_subdomains = params["GPUHybrid"]["use_float_on_subdomains"];
+            }
+            if (params["GPUHybrid"].contains("gmm_tol"))
+            {
+                gmm_tol = params["GPUHybrid"]["gmm_tol"];
+            }
+            if (params["GPUHybrid"].contains("max_gmm_iterations"))
+            {
+                max_gmm_iterations = params["GPUHybrid"]["max_gmm_iterations"];
             }   
         }
     } 
@@ -768,8 +776,6 @@ namespace polysolve::linear
         double w0 = 0.5;
         double w1 = 0.5;
 
-        int max_gmm_iterations = 20;
-        double gmm_tol = 1e-3;
         double var_reg = 1e-6;
 
         thrust::device_vector<double> d_gamma0(num_rows);

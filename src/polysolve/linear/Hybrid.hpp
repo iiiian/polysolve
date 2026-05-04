@@ -126,6 +126,8 @@ namespace polysolve::linear
         int min_subdomain_size = 1;
         int max_subdomain_size = 1e9;
         double gmm_jump_threshold = 100.0;
+        double gmm_tol = 1e-3;
+        int max_gmm_iterations = 20;
         bool expand_subdomains = true;
 
         // General solver settings

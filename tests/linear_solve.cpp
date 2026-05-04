@@ -131,6 +131,46 @@ namespace
         return rhs;
     }
 
+    template <typename Derived>
+    bool loadMarketDense(Eigen::PlainObjectBase<Derived>& mat, const std::string& filename) {
+        std::ifstream in(filename);
+        if (!in) return false;
+
+        std::string line;
+        int rows = 0, cols = 0;
+
+        while (std::getline(in, line)) {
+            size_t start = line.find_first_not_of(" \t\r\n");
+            
+            if (start == std::string::npos || line[start] == '%') {
+                continue;
+            }
+            
+            std::stringstream ss(line.substr(start));
+            ss >> rows >> cols;
+            
+            int nonzeros;
+            if (ss >> nonzeros) {
+                std::cerr << "Error: File appears to be coordinate format, expected array." << "\n";
+                return false;
+            }
+            break;
+        }
+
+        mat.resize(rows, cols);
+
+        for (int j = 0; j < mat.cols(); ++j) {
+            for (int i = 0; i < mat.rows(); ++i) {
+                if (!(in >> mat(i, j))) {
+                    std::cerr << "Error: Unexpected end of file or invalid data format." << "\n";
+                    return false; 
+                }
+            }
+        }
+        
+        return true;
+    }
+
     size_t getPeakRSS()
     {
         struct rusage rusage;
@@ -156,18 +196,23 @@ int main(int argc, char *argv[])
         .scan<'i', long long>()
         .nargs(argparse::nargs_pattern::optional)
         .help("Generate a random RHS instead of loading -b. Optionally provide a seed.");
-    auto &problem_info_group = program.add_mutually_exclusive_group();
-    problem_info_group.add_argument("-p")
+    program.add_argument("-i")
         .metavar("problem_info.mtx")
         .help("Optional Matrix Market vector of problem specific information.");
-    problem_info_group.add_argument("-t", "--threshold")
+    program.add_argument("-t", "--threshold")
         .help("Threshold value to apply.")
         .scan<'g', double>()
         .default_value(0.0);
-    problem_info_group.add_argument("--less_than")
+    program.add_argument("--less_than")
         .default_value(false)
         .implicit_value(true)
         .help("Condition to select problematic DoFs relative to threshold. (Defaults to problematic_info(i) > thresh.)");
+    program.add_argument("-p")
+        .metavar("positions.mtx")
+        .help("Optional Matrix Market file specifiying positions.");
+    program.add_argument("-e")
+        .metavar("elements.mtx")
+        .help("Optional Matrix Market file specifiying connectivity.");
     program.add_argument("-j")
         .metavar("spec.json")
         .help("Optional solver JSON config. Defaults to {\"solver\":\"Eigen::SimplicialLDLT\"}.");
@@ -326,12 +371,33 @@ int main(int argc, char *argv[])
         }
     }
 
-    std::set<int> problem_specific_bad_dofs;
+    Eigen::MatrixXd positions;
+    Eigen::MatrixXi elements;
+
     if (program.present("-p"))
+    {
+        const std::string positions_path = program.get<std::string>("-p");
+        if (!loadMarketDense(positions, positions_path))
+        {
+            throw std::runtime_error("failed to load matrix market positions: " + positions_path);
+        }
+    }
+
+    if (program.present("-e"))
+    {
+        const std::string elements_path = program.get<std::string>("-e");
+        if (!loadMarketDense(elements, elements_path))
+        {
+            throw std::runtime_error("failed to load matrix market elements: " + elements_path);
+        }
+    }
+
+    std::set<int> problem_specific_bad_dofs;
+    if (program.present("-i"))
     {
         const bool less_than = program.get<bool>("--less_than");
         const double problematic_threshold = program.get<double>("-t");
-        const std::string p_path = program.get<std::string>("-p");
+        const std::string p_path = program.get<std::string>("-i");
         Eigen::VectorXd problematic_info(A.rows());
 
         if (!Eigen::loadMarketVector(problematic_info, p_path))
@@ -372,6 +438,8 @@ int main(int argc, char *argv[])
 
         auto solver = Solver::create(solver_config, *logger);
         solver->set_problematic_dofs(problem_specific_bad_dofs);
+        solver->set_positions(positions);
+        solver->set_elements(elements);
         SPDLOG_INFO("[{}] [matrix_info] [size={}] [nnzs={}]", solver->name(), A.rows(), A.nonZeros());
         x.resize(A.cols());
         x.setZero();

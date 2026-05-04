@@ -133,6 +133,14 @@ namespace polysolve::linear
             {
                 gmm_jump_threshold = params["Hybrid"]["gmm_jump_threshold"];
             }
+            if (params["Hybrid"].contains("gmm_tol"))
+            {
+                gmm_tol = params["Hybrid"]["gmm_tol"];
+            }
+            if (params["Hybrid"].contains("max_gmm_iterations"))
+            {
+                max_gmm_iterations = params["Hybrid"]["max_gmm_iterations"];
+            }
         }
     }
 
@@ -737,8 +745,12 @@ namespace polysolve::linear
         pt.put<double>("nei_num.value", rho);
         pt.put<double>("alpha.value", 1e-4);
         pt.put<std::ptrdiff_t>("max_su_size.value", 64);
-        pt.put<int>("num_threads.value", 4);
-        pt.put<int>("subst_num_threads.value", 4);
+
+        std::string thread_val = std::getenv("OMP_NUM_THREADS");
+        const int nthreads = thread_val.empty() ? 1 : std::stoi(thread_val);
+
+        pt.put<int>("num_threads.value", nthreads);
+        pt.put<int>("subst_num_threads.value", nthreads);
         
         Eigen::Matrix<size_t, -1, -1> test_elements = elements_.cast<size_t>();
         mschol::chol_hierarchy builder(test_elements.transpose(), positions_.transpose(), positions_.cols() == 2 ? "trig" : "tets");
@@ -779,7 +791,7 @@ namespace polysolve::linear
         inc_chol_precond->analyse_pattern(remapped_A);
         inc_chol_precond->factorize(remapped_A);
         
-        SPDLOG_INFO("[{}] [setup_ichol_precond] [{:.6f}] [num_levels={}]", name(), elapsed_seconds(phase_begin), levels.size());
+        SPDLOG_INFO("[{}] [setup_ichol_precond] [{:.6f}] [num_levels={}] [nthreads={}]", name(), elapsed_seconds(phase_begin), levels.size(), nthreads);
 
         {
             auto phase_begin = clock::now();
@@ -851,8 +863,6 @@ namespace polysolve::linear
         double w0 = 0.5;
         double w1 = 0.5;
 
-        int max_gmm_iterations = 20;
-        double gmm_tol = 1e-3;
         double var_reg = 1e-6;
         Eigen::VectorXd total_local_gamma(my_size());
         int gmm_iter;

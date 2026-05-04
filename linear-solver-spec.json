@@ -479,6 +479,8 @@
             "do_hybrid_precond",
             "select_bad_dofs_from_l1_norm",
             "gmm_jump_threshold",
+            "gmm_tol",
+            "max_gmm_iterations",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -501,6 +503,8 @@
             "do_hybrid_precond",
             "select_bad_dofs_from_l1_norm",
             "gmm_jump_threshold",
+            "gmm_tol",
+            "max_gmm_iterations",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -577,6 +581,18 @@
         "default": 100.0,
         "type": "float",
         "doc": "GMM jump threshold."
+    },
+    {
+        "pointer": "/Hybrid/gmm_tol",
+        "default": 1e-3,
+        "type": "float",
+        "doc": "GMM convergence tolerance."
+    },
+    {
+        "pointer": "/Hybrid/max_gmm_iterations",
+        "default": 20,
+        "type": "int",
+        "doc": "GMM max iters."
     },
     {
         "pointer": "/Hybrid/decompose_subdomains",
@@ -661,6 +677,18 @@
         "default": 100.0,
         "type": "float",
         "doc": "GMM jump threshold."
+    },
+    {
+        "pointer": "/GPUHybrid/gmm_tol",
+        "default": 1e-3,
+        "type": "float",
+        "doc": "GMM convergence tolerance."
+    },
+    {
+        "pointer": "/GPUHybrid/max_gmm_iterations",
+        "default": 20,
+        "type": "int",
+        "doc": "GMM max iters."
     },
     {
         "pointer": "/GPUHybrid/decompose_subdomains",

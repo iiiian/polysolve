@@ -176,7 +176,7 @@ namespace polysolve::linear
     {
         if (max_dense_size > 0)
         {
-            throw std::runtime_error("Dense solves on subdomains are deprecated.");
+            SPDLOG_INFO("[{}] [warning] [max_dense_size={}]", name(), max_dense_size);
         }
     }
 

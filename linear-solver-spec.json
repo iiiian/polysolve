@@ -481,6 +481,7 @@
             "gmm_jump_threshold",
             "gmm_tol",
             "max_gmm_iterations",
+            "conditioning_threshold",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -505,6 +506,7 @@
             "gmm_jump_threshold",
             "gmm_tol",
             "max_gmm_iterations",
+            "conditioning_threshold",
             "decompose_subdomains",
             "min_subdomain_size",
             "max_subdomain_size",
@@ -575,6 +577,12 @@
         "default": true,
         "type": "bool",
         "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
+    },
+    {
+        "pointer": "/Hybrid/conditioning_threshold",
+        "default": 100.0,
+        "type": "float",
+        "doc": "Conditioning threshold used for filtering."
     },
     {
         "pointer": "/Hybrid/gmm_jump_threshold",
@@ -671,6 +679,12 @@
         "default": true,
         "type": "bool",
         "doc": "Whether or not to select bad DoFs from row norm (if false, the problem-dependent ones are used)."
+    },
+    {
+        "pointer": "/Hybrid/conditioning_threshold",
+        "default": 100.0,
+        "type": "float",
+        "doc": "Conditioning threshold used for filtering."
     },
     {
         "pointer": "/GPUHybrid/gmm_jump_threshold",

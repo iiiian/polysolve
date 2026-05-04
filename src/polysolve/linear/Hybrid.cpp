@@ -141,6 +141,10 @@ namespace polysolve::linear
             {
                 max_gmm_iterations = params["Hybrid"]["max_gmm_iterations"];
             }
+            if (params["Hybrid"].contains("conditioning_threshold"))
+            {
+                conditioning_threshold = params["Hybrid"]["conditioning_threshold"];
+            }   
         }
     }
 

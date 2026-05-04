@@ -719,7 +719,7 @@ namespace polysolve::linear
 
     std::string CudaPCG::name() const
     {
-        return "CUDA_PCG";
+        return "MAS";
     }
 
 } // namespace polysolve::linear

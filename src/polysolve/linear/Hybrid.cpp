@@ -1099,11 +1099,12 @@ namespace polysolve::linear
     void Hybrid::recover_solution(Eigen::Ref<VectorXd> result)
     {
 #ifdef POLYSOLVE_WITH_ICHOL
+        Eigen::VectorXd result_copy = result;
         if (use_incomplete_cholesky_precond)
         {
             for (int i = 0; i < result.size(); ++i)
             {
-                result(remap_dof(i)) = result(i);
+                result(remap_dof(i)) = result_copy(i);
             }
         }
 #endif

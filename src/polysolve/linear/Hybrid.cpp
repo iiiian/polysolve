@@ -269,14 +269,6 @@ namespace polysolve::linear
             SPDLOG_INFO("[{}] [setup_problematic_dof_precond] [{:.6f}]", name(), elapsed_seconds(phase_begin));
         }
 
-
-#ifdef POLYSOLVE_WITH_ICHOL
-        if (use_incomplete_cholesky_precond)
-        {
-            setup_ichol_precond(shared_A);
-        }
-#endif
-
         if (has_matrix_)
         {
             HYPRE_IJMatrixDestroy(A);
@@ -290,6 +282,13 @@ namespace polysolve::linear
             copy_matrix_to_hypre(shared_A);
             SPDLOG_INFO("[{}] [copy_matrix_to_hypre] [{:.6f}]", name(), elapsed_seconds(phase_begin));
         }
+
+#ifdef POLYSOLVE_WITH_ICHOL
+        if (use_incomplete_cholesky_precond)
+        {
+            setup_ichol_precond(shared_A);
+        }
+#endif
 
         MPI_Win_free(&A_win);
     }

@@ -2,7 +2,12 @@ FROM nvidia/cuda:13.2.0-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
+# Default is slow archive source. Swap it with normal ubuntu source.
+RUN sed -i \
+        -e 's|http://archive.ubuntu.com/ubuntu/|mirror://mirrors.ubuntu.com/mirrors.txt|g' \
+        -e 's|http://security.ubuntu.com/ubuntu/|mirror://mirrors.ubuntu.com/mirrors.txt|g' \
+        /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
@@ -21,6 +26,7 @@ RUN apt-get update \
         openmpi-bin \
         pkg-config \
         xz-utils \
+        libsuitesparse-dev \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,7 +49,7 @@ RUN cmake -S . -B ./build/release -G Ninja \
         -DPOLYSOLVE_WITH_HYPRE=ON \
         -DPOLYSOLVE_WITH_TESTS=ON \
         -DCMAKE_CUDA_ARCHITECTURES=all-major \
-        -DPOLYSOLVE_WITH_ICHOL=OFF
+        -DPOLYSOLVE_WITH_ICHOL=ON
 
 RUN cmake --build ./build/release
 

@@ -99,9 +99,9 @@ namespace polysolve::linear
             {
                 do_mixed_precond = params["Hybrid"]["do_hybrid_precond"];
             }
-            if (params["Hybrid"].contains("select_bad_dofs_from_l1_row_norm"))
+            if (params["Hybrid"].contains("select_bad_dofs_from_l1_norm"))
             {
-                select_bad_dofs_from_l1_row_norm = params["Hybrid"]["select_bad_dofs_from_l1_row_norm"];
+                select_bad_dofs_from_l1_row_norm = params["Hybrid"]["select_bad_dofs_from_l1_norm"];
             }
 #ifdef POLYSOLVE_WITH_ICHOL
             if (params["Hybrid"].contains("use_incomplete_cholesky_precond"))

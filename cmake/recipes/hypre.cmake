@@ -14,7 +14,8 @@ set(HYPRE_ENABLE_BIGINT        OFF CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_MIXEDINT OFF CACHE BOOL "" FORCE)
 set(HYPRE_ENABLE_FEI    OFF CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_OPENMP OFF CACHE INTERNAL "" FORCE)
-set(HYPRE_ENABLE_UMPIRE OFF CACHE INTERNAL "" FORCE)
+set(HYPRE_ENABLE_UMPIRE ON CACHE INTERNAL "" FORCE)
+set(HYPRE_BUILD_UMPIRE ON CACHE INTERNAL "" FORCE)
 
 # HYPRE unconditionally defines an "uninstall" target, which conflicts with other buggy libraries
 # as modern cmake requires unique target name. This is a hacky workaround until upstream is fixed.

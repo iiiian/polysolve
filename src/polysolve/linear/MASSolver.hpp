@@ -7,7 +7,7 @@
 
 namespace polysolve::linear
 {
-    enum class CudaPCGStatus
+    enum class MASSolverStatus
     {
         Running,
         ReachRelativeTolerance,
@@ -15,30 +15,30 @@ namespace polysolve::linear
         ReachMaxIterations,
     };
 
-    inline std::string pcg_status_to_string(CudaPCGStatus stat)
+    inline std::string mas_status_to_string(MASSolverStatus stat)
     {
         switch (stat)
         {
-        case CudaPCGStatus::Running:
+        case MASSolverStatus::Running:
             return "Running";
-        case CudaPCGStatus::ReachRelativeTolerance:
+        case MASSolverStatus::ReachRelativeTolerance:
             return "Reach relative tolerance";
-        case CudaPCGStatus::ReachAbsoluteTolerance:
+        case MASSolverStatus::ReachAbsoluteTolerance:
             return "Reach absolute tolerance";
-        case CudaPCGStatus::ReachMaxIterations:
+        case MASSolverStatus::ReachMaxIterations:
             return "Reach max iterations";
         default:
             return "Unknown";
         }
     }
 
-    class CudaPCG : public Solver
+    class MASSolver : public Solver
     {
 
     public:
-        CudaPCG();
-        ~CudaPCG() override;
-        POLYSOLVE_DELETE_MOVE_COPY(CudaPCG)
+        MASSolver();
+        ~MASSolver() override;
+        POLYSOLVE_DELETE_MOVE_COPY(MASSolver)
 
     public:
         //////////////////////
@@ -67,8 +67,8 @@ namespace polysolve::linear
         std::string name() const override;
 
     private:
-        class CudaPCGImpl;
-        std::unique_ptr<CudaPCGImpl> impl_;
+        class MASSolverImpl;
+        std::unique_ptr<MASSolverImpl> impl_;
     };
 
 } // namespace polysolve::linear

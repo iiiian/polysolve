@@ -64,7 +64,7 @@ namespace polysolve::linear {
 #include "CuSolverDN.cuh"
 #endif
 #ifdef POLYSOLVE_WITH_CUDA
-#include "PCGSolver.hpp"
+#include "MASSolver.hpp"
 #include "CUDSS.hpp"
 #include "GPUHybrid.hpp"
 #endif
@@ -408,9 +408,9 @@ namespace polysolve::linear
 #endif
 #ifdef POLYSOLVE_WITH_CUDA
         }
-        else if (solver == "CUDA_PCG")
+        else if (solver == "MAS")
         {
-            return std::make_unique<CudaPCG>();
+            return std::make_unique<MASSolver>();
         }
         else if (solver == "CUDSS")
         {
@@ -557,7 +557,7 @@ namespace polysolve::linear
             "cuSolverDN_float",
 #endif
 #ifdef POLYSOLVE_WITH_CUDA
-            "CUDA_PCG",
+            "MAS",
             "CUDSS", 
             "GPUHybrid",
 #endif

@@ -1,4 +1,4 @@
-#include "PCGSolver.hpp"
+#include "MASSolver.hpp"
 
 #include <Eigen/Core>
 #include <spdlog/spdlog.h>
@@ -133,7 +133,7 @@ namespace polysolve::linear
 
     } // namespace
 
-    class CudaPCG::CudaPCGImpl
+    class MASSolver::MASSolverImpl
     {
     public:
         enum class BadDofSelectionStrategy
@@ -160,7 +160,7 @@ namespace polysolve::linear
         int permuted_dim_ = 0; ///< Dim with block padding.
         int iterations_ = 0;
         double residual_norm_ = 0.0;
-        CudaPCGStatus status_ = CudaPCGStatus::Running;
+        MASSolverStatus status_ = MASSolverStatus::Running;
 
         // == IMPORTANT ==
         // You must declare cu::stream and memory_pool before any device storage!
@@ -199,7 +199,7 @@ namespace polysolve::linear
         Buf<double> scalar_rr_;
 
     public:
-        CudaPCGImpl()
+        MASSolverImpl()
         {
             if (cu::devices.size() == 0)
             {
@@ -258,7 +258,7 @@ namespace polysolve::linear
         {
             params["solver_iter"] = iterations_;
             params["solver_error"] = residual_norm_;
-            params["solver_status"] = pcg_status_to_string(status_);
+            params["solver_status"] = mas_status_to_string(status_);
         }
 
         void analyze_pattern(const StiffnessMatrix &, const int) {}
@@ -434,11 +434,11 @@ namespace polysolve::linear
 
         void solve(const Eigen::Ref<const Eigen::VectorXd> b, Eigen::Ref<Eigen::VectorXd> x)
         {
-            status_ = CudaPCGStatus::Running;
+            status_ = MASSolverStatus::Running;
 
             if (b.size() != x.size() || !check_buffer_size(b.size()))
             {
-                throw std::runtime_error("[CudaPCG] Size mismatch. Did you forget to call factorize?");
+                throw std::runtime_error("[MAS] Size mismatch. Did you forget to call factorize?");
             }
 
             CudaRuntime rt{*default_stream_, default_mem_pool_->as_ref()};
@@ -566,7 +566,7 @@ namespace polysolve::linear
             const double rz0 = device2host(scalar_rz_->data(), rt);
             if (ctd::isnan(rz0) || !ctd::isfinite(rz0))
             {
-                throw std::runtime_error("[CudaPCG] Invalid initial residual.");
+                throw std::runtime_error("[MAS] Invalid initial residual.");
             }
 
             // Compute rr = r^T r.
@@ -623,8 +623,8 @@ namespace polysolve::linear
                         if (rz_new <= rel_tol_ * rel_tol_ * rz0 || rz_new <= abs_tol_ * abs_tol_)
                         {
                             status_ = (rz_new <= abs_tol_ * abs_tol_)
-                                          ? CudaPCGStatus::ReachAbsoluteTolerance
-                                          : CudaPCGStatus::ReachRelativeTolerance;
+                                          ? MASSolverStatus::ReachAbsoluteTolerance
+                                          : MASSolverStatus::ReachRelativeTolerance;
                             converged = true;
                         }
                     }
@@ -636,8 +636,8 @@ namespace polysolve::linear
                         if (rr <= rel_tol_ * rel_tol_ * rr0 || rr <= abs_tol_ * abs_tol_)
                         {
                             status_ = (rr <= abs_tol_ * abs_tol_)
-                                          ? CudaPCGStatus::ReachAbsoluteTolerance
-                                          : CudaPCGStatus::ReachRelativeTolerance;
+                                          ? MASSolverStatus::ReachAbsoluteTolerance
+                                          : MASSolverStatus::ReachRelativeTolerance;
                             converged = true;
                         }
                     }
@@ -668,7 +668,7 @@ namespace polysolve::linear
 
             if (iterations_ == max_iter_)
             {
-                status_ = CudaPCGStatus::ReachMaxIterations;
+                status_ = MASSolverStatus::ReachMaxIterations;
             }
 
             SPDLOG_INFO(
@@ -679,14 +679,14 @@ namespace polysolve::linear
         }
     };
 
-    CudaPCG::CudaPCG()
-        : impl_(std::make_unique<CudaPCGImpl>())
+    MASSolver::MASSolver()
+        : impl_(std::make_unique<MASSolverImpl>())
     {
     }
 
-    CudaPCG::~CudaPCG() = default;
+    MASSolver::~MASSolver() = default;
 
-    void CudaPCG::set_parameters(const json &params)
+    void MASSolver::set_parameters(const json &params)
     {
         const std::string solver_name = name();
         if (!params.contains(solver_name))
@@ -697,27 +697,27 @@ namespace polysolve::linear
         impl_->set_parameters(params[solver_name]);
     }
 
-    void CudaPCG::get_info(json &params) const
+    void MASSolver::get_info(json &params) const
     {
         impl_->get_info(params);
     }
 
-    void CudaPCG::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
+    void MASSolver::analyze_pattern(const StiffnessMatrix &A, const int precond_num)
     {
         impl_->analyze_pattern(A, precond_num);
     }
 
-    void CudaPCG::factorize(const StiffnessMatrix &A)
+    void MASSolver::factorize(const StiffnessMatrix &A)
     {
         impl_->factorize(A);
     }
 
-    void CudaPCG::solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
+    void MASSolver::solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
         impl_->solve(b, x);
     }
 
-    std::string CudaPCG::name() const
+    std::string MASSolver::name() const
     {
         return "MAS";
     }

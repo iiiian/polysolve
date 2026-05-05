@@ -707,7 +707,7 @@ namespace polysolve::linear::mas
                 return;
             }
 
-            throw std::runtime_error("[CudaPCG] MAS only supports block size 1, 2, or 3.");
+            throw std::runtime_error("[MAS] MAS only supports block size 1, 2, or 3.");
         }
 
         __global__ void gather_multi_level_z(
@@ -903,7 +903,7 @@ namespace polysolve::linear::mas
             bool host_success = device2host(success.data(), rt);
             if (!host_success)
             {
-                throw std::runtime_error("[CudaPCG] MAS packed inverse failed.");
+                throw std::runtime_error("[MAS] MAS packed inverse failed.");
             }
         }
 
@@ -1075,11 +1075,11 @@ namespace polysolve::linear::mas
     {
         if (!initialized_)
         {
-            throw std::runtime_error("[CudaPCG] MASPreconditioner is not initialized.");
+            throw std::runtime_error("[MAS] MASPreconditioner is not initialized.");
         }
         if (r.size() != z.size() || r.size() != vector_size_)
         {
-            throw std::runtime_error("[CudaPCG] Invalid vector size for MAS preconditioner.");
+            throw std::runtime_error("[MAS] Invalid vector size for MAS preconditioner.");
         }
 
         cu::fill_bytes(rt.stream, *(coarse_vectors_.multi_level_r), 0);

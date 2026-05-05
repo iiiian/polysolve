@@ -127,7 +127,7 @@ TEST_CASE("all", "[solver]")
         json params;
         params[s]["tolerance"] = 1e-10;
         solver->set_parameters(params);
-        if (s == "CUDA_PCG")
+        if (s == "MAS")
         {
             params[s]["relative_tolerance"] = 0.0;
             params[s]["absolute_tolerance"] = 1e-8;
@@ -215,12 +215,12 @@ TEST_CASE("cuda_pcg_block_dims", "[solver]")
 
     for (int block_dim : {1, 2, 3})
     {
-        auto solver = Solver::create("CUDA_PCG", "");
+        auto solver = Solver::create("MAS", "");
         json params;
-        params["CUDA_PCG"]["block_dim"] = block_dim;
-        params["CUDA_PCG"]["relative_tolerance"] = 0.0;
-        params["CUDA_PCG"]["absolute_tolerance"] = 1e-6;
-        params["CUDA_PCG"]["use_preconditioned_residual_norm"] = false;
+        params["MAS"]["block_dim"] = block_dim;
+        params["MAS"]["relative_tolerance"] = 0.0;
+        params["MAS"]["absolute_tolerance"] = 1e-6;
+        params["MAS"]["use_preconditioned_residual_norm"] = false;
         solver->set_parameters(params);
 
         // Eigen::VectorXd b(A.rows());

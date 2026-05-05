@@ -174,9 +174,9 @@ namespace polysolve::linear::mas
             const int dim_blocks = div_round_up(rows_num, block_dim);
 
             // Upload input CSC to device.
-            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "CUDA_PCG topology_adj input_csc");
-            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj input_csc");
-            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj input_csc");
+            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "MAS topology_adj input_csc");
+            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "MAS topology_adj input_csc");
+            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "MAS topology_adj input_csc");
             cudaMemcpyAsync(
                 d_col_ptr->data(),
                 A_csc.outerIndexPtr(),
@@ -200,7 +200,7 @@ namespace polysolve::linear::mas
             // Map each nnz index to input col.
             // ---------------------------------------------------------------------------
 
-            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj col_of_nnz");
+            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "MAS topology_adj col_of_nnz");
             build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
                 cols_num, *d_col_ptr, *col_of_nnz);
             d_col_ptr->destroy();
@@ -209,9 +209,9 @@ namespace polysolve::linear::mas
             // Build canonical undirected block-pair keys (min, max) and |val| per scalar nnz.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> all_keys = safe_alloc<uint64_t>(nnz, rt, "CUDA_PCG topology_adj staging");
-            Buf<double> all_abs = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj staging");
-            Buf<int> keep_flags = safe_alloc<int>(nnz, rt, "CUDA_PCG topology_adj staging");
+            Buf<uint64_t> all_keys = safe_alloc<uint64_t>(nnz, rt, "MAS topology_adj staging");
+            Buf<double> all_abs = safe_alloc<double>(nnz, rt, "MAS topology_adj staging");
+            Buf<int> keep_flags = safe_alloc<int>(nnz, rt, "MAS topology_adj staging");
             build_keys_abs_flags<<<div_round_up(nnz, 128), 128, 0, rt.stream.get()>>>(
                 nnz,
                 block_dim,
@@ -229,7 +229,7 @@ namespace polysolve::linear::mas
             auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
                 if (!cub_tmp || cub_tmp->size() < required_size)
                 {
-                    cub_tmp = safe_alloc<char>(required_size, rt, "CUDA_PCG topology_adj cub_tmp");
+                    cub_tmp = safe_alloc<char>(required_size, rt, "MAS topology_adj cub_tmp");
                 }
                 return cub_tmp->data();
             };
@@ -238,9 +238,9 @@ namespace polysolve::linear::mas
             // Filter off-diagonal entries only (diagonal blocks are not edges).
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> offdiag_keys = safe_alloc<uint64_t>(nnz, rt, "CUDA_PCG topology_adj staging");
-            Buf<double> offdiag_abs = safe_alloc<double>(nnz, rt, "CUDA_PCG topology_adj staging");
-            Buf<int> num_selected = safe_alloc<int>(1, rt, "CUDA_PCG topology_adj staging");
+            Buf<uint64_t> offdiag_keys = safe_alloc<uint64_t>(nnz, rt, "MAS topology_adj staging");
+            Buf<double> offdiag_abs = safe_alloc<double>(nnz, rt, "MAS topology_adj staging");
+            Buf<int> num_selected = safe_alloc<int>(1, rt, "MAS topology_adj staging");
 
             size_t select_tmp_size = 0;
             cub::DeviceSelect::Flagged(nullptr,
@@ -286,9 +286,9 @@ namespace polysolve::linear::mas
             // ---------------------------------------------------------------------------
 
             Buf<uint64_t> offdiag_keys_alt =
-                safe_alloc<uint64_t>(offdiag_nnz, rt, "CUDA_PCG topology_adj staging");
+                safe_alloc<uint64_t>(offdiag_nnz, rt, "MAS topology_adj staging");
             Buf<double> offdiag_abs_alt =
-                safe_alloc<double>(offdiag_nnz, rt, "CUDA_PCG topology_adj staging");
+                safe_alloc<double>(offdiag_nnz, rt, "MAS topology_adj staging");
             cub::DoubleBuffer<uint64_t> d_keys(offdiag_keys->data(), offdiag_keys_alt->data());
             cub::DoubleBuffer<double> d_abs(offdiag_abs->data(), offdiag_abs_alt->data());
 
@@ -325,9 +325,9 @@ namespace polysolve::linear::mas
             // Reduce-by-key: sum |val| per undirected block pair to get L1 edge weight.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(offdiag_nnz, rt, "CUDA_PCG topology_adj reduce");
-            Buf<double> edge_weights = safe_alloc<double>(offdiag_nnz, rt, "CUDA_PCG topology_adj reduce");
-            Buf<int> edge_count_buf = safe_alloc<int>(1, rt, "CUDA_PCG topology_adj reduce");
+            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(offdiag_nnz, rt, "MAS topology_adj reduce");
+            Buf<double> edge_weights = safe_alloc<double>(offdiag_nnz, rt, "MAS topology_adj reduce");
+            Buf<int> edge_count_buf = safe_alloc<int>(1, rt, "MAS topology_adj reduce");
 
             size_t reduce_tmp_size = 0;
             cub::DeviceReduce::ReduceByKey(nullptr,
@@ -360,11 +360,11 @@ namespace polysolve::linear::mas
             // ---------------------------------------------------------------------------
 
             const int sym_edge_count = 2 * edge_count;
-            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "CUDA_PCG topology_adj histogram");
+            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "MAS topology_adj histogram");
             count_symmetric_rows<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), edge_count),
                 *hist);
-            Buf<int> d_row_ptr = safe_alloc<int>(dim_blocks + 1, rt, "CUDA_PCG topology_adj histogram");
+            Buf<int> d_row_ptr = safe_alloc<int>(dim_blocks + 1, rt, "MAS topology_adj histogram");
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
@@ -384,8 +384,8 @@ namespace polysolve::linear::mas
             // Quantize weights for MAS coarsening.
             // ---------------------------------------------------------------------------
 
-            Buf<double> min_weight_buf = safe_alloc<double>(1, rt, "CUDA_PCG topology_adj quantize");
-            Buf<double> max_weight_buf = safe_alloc<double>(1, rt, "CUDA_PCG topology_adj quantize");
+            Buf<double> min_weight_buf = safe_alloc<double>(1, rt, "MAS topology_adj quantize");
+            Buf<double> max_weight_buf = safe_alloc<double>(1, rt, "MAS topology_adj quantize");
 
             size_t min_tmp_size = 0;
             cub::DeviceReduce::Min(nullptr,
@@ -419,7 +419,7 @@ namespace polysolve::linear::mas
             double max_weight = device2host(max_weight_buf->data(), rt);
 
             Buf<int64_t> quantized_weights =
-                safe_alloc<int64_t>(edge_count, rt, "CUDA_PCG topology_adj quantize");
+                safe_alloc<int64_t>(edge_count, rt, "MAS topology_adj quantize");
             quantize_weights<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const double>(edge_weights->data(), edge_count),
                 min_weight,
@@ -431,7 +431,7 @@ namespace polysolve::linear::mas
             // Scatter symmetric CSR: write (u,v) and (v,u) per undirected edge.
             // ---------------------------------------------------------------------------
 
-            Buf<int> write_ptr = safe_alloc<int>(dim_blocks, rt, "CUDA_PCG topology_adj outputs");
+            Buf<int> write_ptr = safe_alloc<int>(dim_blocks, rt, "MAS topology_adj outputs");
             cudaMemcpyAsync(
                 write_ptr->data(),
                 d_row_ptr->data(),
@@ -439,8 +439,8 @@ namespace polysolve::linear::mas
                 cudaMemcpyDeviceToDevice,
                 rt.stream.get());
 
-            Buf<int> d_cols = safe_alloc<int>(sym_edge_count, rt, "CUDA_PCG topology_adj outputs");
-            Buf<int64_t> d_weights = safe_alloc<int64_t>(sym_edge_count, rt, "CUDA_PCG topology_adj outputs");
+            Buf<int> d_cols = safe_alloc<int>(sym_edge_count, rt, "MAS topology_adj outputs");
+            Buf<int64_t> d_weights = safe_alloc<int64_t>(sym_edge_count, rt, "MAS topology_adj outputs");
             scatter_symmetric_edges<<<div_round_up(edge_count, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), edge_count),
                 *quantized_weights,
@@ -465,19 +465,19 @@ namespace polysolve::linear::mas
         static_assert(std::is_same_v<StiffnessMatrix::StorageIndex, int>, "MAS only support int32 index type.");
         if (A.cols() != A.rows() || A.cols() == 0 || A.rows() == 0 || A.nonZeros() == 0)
         {
-            throw std::runtime_error("[CudaPcg] Factorization failed due to invalid A");
+            throw std::runtime_error("[MAS] Factorization failed due to invalid A");
         }
         if (A.cols() > std::numeric_limits<int>::max() || A.rows() > std::numeric_limits<int>::max())
         {
-            throw std::runtime_error("[CudaPcg] A is too large. Row/Col number exceeding int32 max.");
+            throw std::runtime_error("[MAS] A is too large. Row/Col number exceeding int32 max.");
         }
         if (A.nonZeros() > std::numeric_limits<int>::max())
         {
-            throw std::runtime_error("[CudaPCG] A is too large. Non-zero number exceeding int32 max.");
+            throw std::runtime_error("[MAS] A is too large. Non-zero number exceeding int32 max.");
         }
         if (block_dim < 1 || block_dim > 3)
         {
-            throw std::runtime_error("[CudaPcg] MAS only supports block size 1, 2, or 3.");
+            throw std::runtime_error("[MAS] MAS only supports block size 1, 2, or 3.");
         }
 
         const StiffnessMatrix *A_csc = &A;

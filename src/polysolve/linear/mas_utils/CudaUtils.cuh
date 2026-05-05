@@ -70,7 +70,7 @@ namespace polysolve::linear::mas
         cudaMemGetInfo(&free_bytes, &total_bytes);
         constexpr size_t mb = 1024ull * 1024ull;
         throw CudaOutOfMemoryError(
-            std::string("[CudaPCG] Failed to allocate ")
+            std::string("[MAS] Failed to allocate ")
             + std::to_string((requested_bytes + mb - 1) / mb)
             + " MB for "
             + context
@@ -114,7 +114,7 @@ namespace polysolve::linear::mas
         cudaMemGetInfo(&free_bytes, &total_bytes);
         constexpr size_t mb = 1024ull * 1024ull;
         throw CudaOutOfMemoryError(
-            std::string("[CudaPCG] Failed to allocate ")
+            std::string("[MAS] Failed to allocate ")
             + std::to_string((requested_bytes + mb - 1) / mb)
             + " MB for "
             + context

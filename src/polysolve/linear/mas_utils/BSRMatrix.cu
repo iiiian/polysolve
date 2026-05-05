@@ -192,9 +192,9 @@ namespace polysolve::linear::mas
             int nnz_total = nnz + padded;
 
             // Upload input CSC to device.
-            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "CUDA_PCG permuted_bsr input_csc");
-            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "CUDA_PCG permuted_bsr input_csc");
-            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "CUDA_PCG permuted_bsr input_csc");
+            Buf<int> d_col_ptr = safe_alloc<int>(cols_num + 1, rt, "MAS permuted_bsr input_csc");
+            Buf<int> d_row_idx = safe_alloc<int>(nnz, rt, "MAS permuted_bsr input_csc");
+            Buf<double> d_vals = safe_alloc<double>(nnz, rt, "MAS permuted_bsr input_csc");
             cudaMemcpyAsync(
                 d_col_ptr->data(),
                 A_csc.outerIndexPtr(),
@@ -218,7 +218,7 @@ namespace polysolve::linear::mas
             Buf<int> d_perm;
             if (!permutation.empty())
             {
-                d_perm = safe_alloc<int>(permutation.size(), rt, "CUDA_PCG permuted_bsr permutation");
+                d_perm = safe_alloc<int>(permutation.size(), rt, "MAS permuted_bsr permutation");
                 cu::copy_bytes(rt.stream, permutation, *d_perm);
                 d_perm_ptr = d_perm->data();
             }
@@ -227,7 +227,7 @@ namespace polysolve::linear::mas
             // Map each nnz index to input col.
             // ---------------------------------------------------------------------------
 
-            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "CUDA_PCG permuted_bsr col_of_nnz");
+            Buf<int> col_of_nnz = safe_alloc<int>(nnz, rt, "MAS permuted_bsr col_of_nnz");
             build_col_of_nnz<<<div_round_up(cols_num, 128), 128, 0, rt.stream.get()>>>(
                 cols_num, *d_col_ptr, *col_of_nnz);
             d_col_ptr->destroy();
@@ -236,9 +236,9 @@ namespace polysolve::linear::mas
             // Convert each non-zero to [key, payload] pair.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> keys_in = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+            Buf<uint64_t> keys_in = safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr staging");
             Buf<uint64_t> payloads_in =
-                safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+                safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr staging");
             build_keys_payloads<<<div_round_up(nnz_total, 128), 128, 0, rt.stream.get()>>>(
                 nnz,
                 padded,
@@ -260,16 +260,16 @@ namespace polysolve::linear::mas
             // Radix sort by key. Result should be in row major order.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> keys_alt = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+            Buf<uint64_t> keys_alt = safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr staging");
             Buf<uint64_t> payloads_alt =
-                safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr staging");
+                safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr staging");
             cub::DoubleBuffer<uint64_t> d_keys(keys_in->data(), keys_alt->data());
             cub::DoubleBuffer<uint64_t> d_payloads(payloads_in->data(), payloads_alt->data());
             Buf<char> cub_tmp;
             auto make_cub_tmp = [&cub_tmp, rt](size_t required_size) {
                 if (!cub_tmp || cub_tmp->size() < required_size)
                 {
-                    cub_tmp = safe_alloc<char>(required_size, rt, "CUDA_PCG permuted_bsr cub_tmp");
+                    cub_tmp = safe_alloc<char>(required_size, rt, "MAS permuted_bsr cub_tmp");
                 }
                 return cub_tmp->data();
             };
@@ -306,9 +306,9 @@ namespace polysolve::linear::mas
             // This step computes non-zero block num + payload count for each block.
             // ---------------------------------------------------------------------------
 
-            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(nnz_total, rt, "CUDA_PCG permuted_bsr rle");
-            Buf<int> counts = safe_alloc<int>(nnz_total, rt, "CUDA_PCG permuted_bsr rle");
-            Buf<int> num_runs = safe_alloc<int>(1, rt, "CUDA_PCG permuted_bsr rle");
+            Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr rle");
+            Buf<int> counts = safe_alloc<int>(nnz_total, rt, "MAS permuted_bsr rle");
+            Buf<int> num_runs = safe_alloc<int>(1, rt, "MAS permuted_bsr rle");
 
             size_t rle_tmp_size = 0;
             cub::DeviceRunLengthEncode::Encode(nullptr,
@@ -336,13 +336,13 @@ namespace polysolve::linear::mas
 
             int nnz_blocks = device2host(num_runs->data(), rt);
             num_runs->destroy();
-            Buf<int> block_rows = safe_alloc<int>(nnz_blocks, rt, "CUDA_PCG permuted_bsr histogram");
+            Buf<int> block_rows = safe_alloc<int>(nnz_blocks, rt, "MAS permuted_bsr histogram");
             // Extract row index from packed key.
             extract_block_rows<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
                 ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
                 *block_rows);
             // Histogram count nnz block per row.
-            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "CUDA_PCG permuted_bsr histogram");
+            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "MAS permuted_bsr histogram");
             size_t hist_tmp_size = 0;
             cub::DeviceHistogram::HistogramEven(nullptr,
                                                 hist_tmp_size,
@@ -363,7 +363,7 @@ namespace polysolve::linear::mas
                                                 nnz_blocks,
                                                 rt.stream.get());
             // Exclusive scan compute CSR row ptr.
-            out_rows = safe_alloc<int>(dim_blocks + 1, rt, "CUDA_PCG permuted_bsr histogram");
+            out_rows = safe_alloc<int>(dim_blocks + 1, rt, "MAS permuted_bsr histogram");
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
@@ -385,7 +385,7 @@ namespace polysolve::linear::mas
             // ---------------------------------------------------------------------------
 
             // Compute Payload offsets for each block.
-            Buf<int> payload_offsets = safe_alloc<int>(nnz_blocks + 1, rt, "CUDA_PCG permuted_bsr outputs");
+            Buf<int> payload_offsets = safe_alloc<int>(nnz_blocks + 1, rt, "MAS permuted_bsr outputs");
             cudaMemsetAsync(counts->data() + nnz_blocks, 0, sizeof(int), rt.stream.get());
             size_t off_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
@@ -404,9 +404,9 @@ namespace polysolve::linear::mas
             cub_tmp->destroy();
 
             // Fill cols and vals.
-            out_cols = safe_alloc<int>(nnz_blocks, rt, "CUDA_PCG permuted_bsr outputs");
+            out_cols = safe_alloc<int>(nnz_blocks, rt, "MAS permuted_bsr outputs");
             out_vals =
-                safe_alloc<double>(nnz_blocks * block_dim * block_dim, 0.0, rt, "CUDA_PCG permuted_bsr outputs");
+                safe_alloc<double>(nnz_blocks * block_dim * block_dim, 0.0, rt, "MAS permuted_bsr outputs");
             fill_bsr_cols_vals<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
                 block_dim,
                 ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
@@ -432,7 +432,7 @@ namespace polysolve::linear::mas
         static_assert(std::is_same_v<StiffnessMatrix::StorageIndex, int>, "MAS only support int32 index type.");
         if (A.nonZeros() > std::numeric_limits<int>::max())
         {
-            throw std::runtime_error("[CudaPcg] A is too large. Non-zero number exceeding int32 max.");
+            throw std::runtime_error("[MAS] A is too large. Non-zero number exceeding int32 max.");
         }
 
         // if A is not compressed. Copy and compress.

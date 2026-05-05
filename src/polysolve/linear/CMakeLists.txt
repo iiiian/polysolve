@@ -25,8 +25,8 @@ if(POLYSOLVE_WITH_CUDA)
         CUDSS.hpp
         GPUHybrid.cu
         GPUHybrid.hpp
-        PCGSolver.cu
-        PCGSolver.hpp
+        MASSolver.cu
+        MASSolver.hpp
         mas_utils/BSRAdjacency.cu
         mas_utils/BSRAdjacency.hpp
         mas_utils/BSRMatrix.cu

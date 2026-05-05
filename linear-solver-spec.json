@@ -16,7 +16,7 @@
             "Pardiso",
             "Hypre",
             "AMGCL",
-            "CUDA_PCG",
+            "MAS",
             "CUDSS",
             "Hybrid",
             "GPUHybrid"
@@ -52,7 +52,7 @@
             "Eigen::BiCGSTAB",
             "Eigen::GMRES",
             "Eigen::MINRES",
-            "CUDA_PCG",
+            "MAS",
             "CUDSS",
             "Hybrid",
             "GPUHybrid"
@@ -517,7 +517,7 @@
         "doc": "Settings for the GPU Hybrid solver."
     },
     {
-        "pointer": "/CUDA_PCG",
+        "pointer": "/MAS",
         "default": null,
         "type": "object",
         "optional": [
@@ -534,7 +534,7 @@
             "bad_dof_kmeans_max_iterations",
             "bad_dof_kmeans_expand_neighbors"
         ],
-        "doc": "Settings for the CUDA PCG solver."
+        "doc": "Settings for the MAS solver."
     },
     {
         "pointer": "/Hybrid/max_iter",
@@ -741,7 +741,7 @@
         "doc": "Whether or not to precondition subdomains in single precision."
     },
     {
-        "pointer": "/CUDA_PCG/block_dim",
+        "pointer": "/MAS/block_dim",
         "default": 1,
         "type": "int",
         "options": [
@@ -752,43 +752,43 @@
         "doc": "Block size of the BSR matrix PCG sovler internally use. Choose 3 for 3d problem, 2 for 2d, etc."
     },
     {
-        "pointer": "/CUDA_PCG/max_iter",
+        "pointer": "/MAS/max_iter",
         "default": 10000,
         "type": "int",
         "doc": "Maximum number of iterations."
     },
     {
-        "pointer": "/CUDA_PCG/relative_tolerance",
+        "pointer": "/MAS/relative_tolerance",
         "default": 0.0,
         "type": "float",
         "doc": "Relative convergence tolerance."
     },
     {
-        "pointer": "/CUDA_PCG/absolute_tolerance",
+        "pointer": "/MAS/absolute_tolerance",
         "default": 1e-8,
         "type": "float",
         "doc": "Absolute convergence tolerance."
     },
     {
-        "pointer": "/CUDA_PCG/lazy_partitioning",
+        "pointer": "/MAS/lazy_partitioning",
         "default": true,
         "type": "bool",
         "doc": "If true, reuse the first graph partition."
     },
     {
-        "pointer": "/CUDA_PCG/use_preconditioned_residual_norm",
+        "pointer": "/MAS/use_preconditioned_residual_norm",
         "default": false,
         "type": "bool",
         "doc": "Use preconditioned residual norm for termination check."
     },
     {
-        "pointer": "/CUDA_PCG/use_bad_dof_precond",
+        "pointer": "/MAS/use_bad_dof_precond",
         "default": false,
         "type": "bool",
         "doc": "Enable an additive bad-DoF cuDSS correction on top of MAS."
     },
     {
-        "pointer": "/CUDA_PCG/bad_dof_strategy",
+        "pointer": "/MAS/bad_dof_strategy",
         "default": "elbow",
         "type": "string",
         "options": [
@@ -798,25 +798,25 @@
         "doc": "Bad-DOF detection strategy used when use_bad_dof_precond is enabled."
     },
     {
-        "pointer": "/CUDA_PCG/bad_dof_kmeans_search_fraction",
+        "pointer": "/MAS/bad_dof_kmeans_search_fraction",
         "default": 0.2,
         "type": "float",
         "doc": "Fraction of largest abs(diag) entries to cluster."
     },
     {
-        "pointer": "/CUDA_PCG/bad_dof_kmeans_jump_threshold",
+        "pointer": "/MAS/bad_dof_kmeans_jump_threshold",
         "default": 10.0,
         "type": "float",
         "doc": "Threshold for cluster centroid ratio jump"
     },
     {
-        "pointer": "/CUDA_PCG/bad_dof_kmeans_max_iterations",
+        "pointer": "/MAS/bad_dof_kmeans_max_iterations",
         "default": 32,
         "type": "int",
         "doc": "Maximum k-means iterations"
     },
     {
-        "pointer": "/CUDA_PCG/bad_dof_kmeans_expand_neighbors",
+        "pointer": "/MAS/bad_dof_kmeans_expand_neighbors",
         "default": 0,
         "type": "int",
         "doc": "Expand each selected bad-DoF by including this many neighboring indices in the partition-sorted ordering (0 disables)."

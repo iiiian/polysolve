@@ -23,7 +23,7 @@ namespace polysolve::linear::mas
     {
         [[noreturn]] void throw_invalid_kaminpar_graph(const std::string &reason)
         {
-            throw std::runtime_error("[CudaPCG] Invalid graph for KaMinPar: " + reason);
+            throw std::runtime_error("[MAS] Invalid graph for KaMinPar: " + reason);
         }
 
         void guard_graph_for_kaminpar(ctd::span<int> row_ptr,

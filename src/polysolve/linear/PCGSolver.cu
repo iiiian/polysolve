@@ -148,7 +148,7 @@ namespace polysolve::linear
         double abs_tol_ = 1e-20;
         double rel_tol_ = 1e-6;
         bool lazy_partitioning_ = false;
-        bool use_preconditioned_residual_norm_ = true;
+        bool use_preconditioned_residual_norm_ = false;
         bool use_bad_dof_precond_ = false;
         BadDofSelectionStrategy bad_dof_strategy_ = BadDofSelectionStrategy::Elbow;
         double bad_dof_kmeans_search_fraction_ = 0.02;

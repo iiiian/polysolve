@@ -270,6 +270,7 @@ namespace polysolve::linear
         {
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
+            A = nullptr;
         }
 
         copy_matrix_to_hypre();
@@ -1513,6 +1514,7 @@ namespace polysolve::linear
         {
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
+            A = nullptr;
         }
 
         free_device_memory();

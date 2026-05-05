@@ -273,13 +273,14 @@ namespace polysolve::linear
         {
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
+            A = nullptr;
         }
 
-        has_matrix_ = true;
         if (!use_incomplete_cholesky_precond)
         {
             auto phase_begin = clock::now();
             copy_matrix_to_hypre(shared_A);
+            has_matrix_ = true;
             SPDLOG_INFO("[{}] [copy_matrix_to_hypre] [{:.6f}]", name(), elapsed_seconds(phase_begin));
         }
 
@@ -799,6 +800,7 @@ namespace polysolve::linear
         {
             auto phase_begin = clock::now();
             copy_matrix_to_hypre(remapped_A);
+            has_matrix_ = true;
             SPDLOG_INFO("[{}] [copy_matrix_to_hypre] [{:.6f}]", name(), elapsed_seconds(phase_begin));
         }
     }
@@ -1422,6 +1424,7 @@ namespace polysolve::linear
         {
             HYPRE_IJMatrixDestroy(A);
             has_matrix_ = false;
+            A = nullptr;
         }
     }
 

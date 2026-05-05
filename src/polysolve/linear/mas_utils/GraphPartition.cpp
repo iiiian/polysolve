@@ -2,17 +2,176 @@
 
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
 
+#include <algorithm>
 #include <cassert>
 #include <cuda/std/span>
 #include <cstdint>
-#include <thread>
-#include <vector>
 #include <iostream>
+#include <sstream>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include <ckaminpar.h>
 
 namespace polysolve::linear::mas
 {
+
+    // Debug code to ensure input adjacency is valid.
+#ifndef NDEBUG
+    namespace
+    {
+        [[noreturn]] void throw_invalid_kaminpar_graph(const std::string &reason)
+        {
+            throw std::runtime_error("[CudaPCG] Invalid graph for KaMinPar: " + reason);
+        }
+
+        void guard_graph_for_kaminpar(ctd::span<int> row_ptr,
+                                      ctd::span<int> cols,
+                                      ctd::span<int64_t> weights)
+        {
+            if (row_ptr.empty())
+            {
+                throw_invalid_kaminpar_graph("row_ptr is empty");
+            }
+            if (row_ptr.front() != 0)
+            {
+                std::ostringstream oss;
+                oss << "row_ptr[0] must be 0, got " << row_ptr.front();
+                throw_invalid_kaminpar_graph(oss.str());
+            }
+
+            const int node_num = static_cast<int>(row_ptr.size()) - 1;
+            const int edge_num = row_ptr.back();
+            if (edge_num < 0)
+            {
+                std::ostringstream oss;
+                oss << "row_ptr.back() is negative: " << edge_num;
+                throw_invalid_kaminpar_graph(oss.str());
+            }
+            if (edge_num != static_cast<int>(cols.size()))
+            {
+                std::ostringstream oss;
+                oss << "row_ptr.back() (" << edge_num << ") != cols.size() (" << cols.size() << ")";
+                throw_invalid_kaminpar_graph(oss.str());
+            }
+            if (!weights.empty() && weights.size() != cols.size())
+            {
+                std::ostringstream oss;
+                oss << "weights.size() (" << weights.size() << ") != cols.size() (" << cols.size() << ")";
+                throw_invalid_kaminpar_graph(oss.str());
+            }
+
+            const bool weighted = !weights.empty();
+            std::vector<std::pair<int, int64_t>> entries;
+            int max_degree = 0;
+            for (int u = 0; u < node_num; ++u)
+            {
+                const int begin = row_ptr[u];
+                const int end = row_ptr[u + 1];
+                if (begin > end)
+                {
+                    std::ostringstream oss;
+                    oss << "row_ptr is not monotone at row " << u << ": " << begin << " > " << end;
+                    throw_invalid_kaminpar_graph(oss.str());
+                }
+                max_degree = std::max(max_degree, end - begin);
+            }
+            entries.reserve(max_degree);
+
+            // Sort each row in-place so the subsequent reverse-edge check is deterministic.
+            for (int u = 0; u < node_num; ++u)
+            {
+                const int begin = row_ptr[u];
+                const int end = row_ptr[u + 1];
+                entries.clear();
+                for (int e = begin; e < end; ++e)
+                {
+                    const int v = cols[e];
+                    if (v < 0 || v >= node_num)
+                    {
+                        std::ostringstream oss;
+                        oss << "neighbor out of range at row " << u << ", edge " << e << ": " << v
+                            << " not in [0, " << node_num << ")";
+                        throw_invalid_kaminpar_graph(oss.str());
+                    }
+                    if (u == v)
+                    {
+                        std::ostringstream oss;
+                        oss << "self-loop at row " << u << ", edge " << e;
+                        throw_invalid_kaminpar_graph(oss.str());
+                    }
+                    if (weighted && weights[e] <= 0)
+                    {
+                        std::ostringstream oss;
+                        oss << "non-positive edge weight at row " << u << ", edge " << e << " (" << u
+                            << " -> " << v << "): " << weights[e];
+                        throw_invalid_kaminpar_graph(oss.str());
+                    }
+                    entries.emplace_back(v, weighted ? weights[e] : int64_t{1});
+                }
+
+                std::sort(
+                    entries.begin(),
+                    entries.end(),
+                    [](const auto &lhs, const auto &rhs) {
+                        if (lhs.first != rhs.first)
+                            return lhs.first < rhs.first;
+                        return lhs.second < rhs.second;
+                    });
+
+                for (int i = 1; i < static_cast<int>(entries.size()); ++i)
+                {
+                    if (entries[i - 1].first == entries[i].first)
+                    {
+                        std::ostringstream oss;
+                        oss << "duplicate neighbor " << entries[i].first << " in row " << u;
+                        throw_invalid_kaminpar_graph(oss.str());
+                    }
+                }
+
+                for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+                {
+                    cols[begin + i] = entries[i].first;
+                    if (weighted)
+                    {
+                        weights[begin + i] = entries[i].second;
+                    }
+                }
+            }
+
+            for (int u = 0; u < node_num; ++u)
+            {
+                for (int e = row_ptr[u]; e < row_ptr[u + 1]; ++e)
+                {
+                    const int v = cols[e];
+                    const auto *reverse_begin = cols.data() + row_ptr[v];
+                    const auto *reverse_end = cols.data() + row_ptr[v + 1];
+                    const auto *reverse_it = std::lower_bound(reverse_begin, reverse_end, u);
+                    if (reverse_it == reverse_end || *reverse_it != u)
+                    {
+                        std::ostringstream oss;
+                        oss << "missing reverse edge for " << u << " -> " << v;
+                        throw_invalid_kaminpar_graph(oss.str());
+                    }
+
+                    if (weighted)
+                    {
+                        const int reverse_edge = static_cast<int>(reverse_it - cols.data());
+                        if (weights[e] != weights[reverse_edge])
+                        {
+                            std::ostringstream oss;
+                            oss << "weight mismatch for edge pair " << u << " <-> " << v
+                                << ": " << weights[e] << " vs " << weights[reverse_edge];
+                            throw_invalid_kaminpar_graph(oss.str());
+                        }
+                    }
+                }
+            }
+        }
+    } // namespace
+#endif
+
     void graph_partition(ctd::span<int> row_ptr,
                          ctd::span<int> cols,
                          ctd::span<int64_t> weights,
@@ -20,6 +179,9 @@ namespace polysolve::linear::mas
                          int &part_num,
                          std::vector<int> &part_id)
     {
+#ifndef NDEBUG
+        guard_graph_for_kaminpar(row_ptr, cols, weights);
+#endif
         int node_num = row_ptr.size() - 1;
         assert(node_num >= 0);
         assert(max_part_size > 0);

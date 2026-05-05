@@ -583,6 +583,7 @@ namespace polysolve::linear
             int* raw_dense_dofs    = thrust::raw_pointer_cast(d_dense_dof_map.data());
             double** raw_rhs_arr   = thrust::raw_pointer_cast(d_dense_b_ptrs.data());
             double** raw_out_arr   = thrust::raw_pointer_cast(d_dense_x_ptrs.data());
+            int local_max_dense_dim = max_dense_dim;
             thrust::for_each(thrust::device,
                 thrust::make_counting_iterator(0),
                 thrust::make_counting_iterator(dense_batch_count),
@@ -595,7 +596,7 @@ namespace polysolve::linear
                         local_b[r] = raw_global_vec[raw_dense_dofs[offset + r]];
                     }
 
-                    for (int r = true_size; r < max_dense_dim; ++r) {
+                    for (int r = true_size; r < local_max_dense_dim; ++r) {
                         local_b[r] = 0.0;
                     }
                 }
@@ -1069,12 +1070,14 @@ namespace polysolve::linear
             thrust::fill(d_sparse_nnz.begin(), d_sparse_nnz.end(), 0);
             int* raw_sparse_nnz = thrust::raw_pointer_cast(d_sparse_nnz.data());
 
+            int local_sparse_batch_count = sparse_batch_count;
+
             thrust::for_each(thrust::device,
                 thrust::make_counting_iterator(0),
                 thrust::make_counting_iterator(total_sparse_dofs),
                 [=] __device__ (int i) {
                     
-                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + sparse_batch_count, i);
+                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + local_sparse_batch_count, i);
                     int batch_idx = (batch_ptr - raw_batch_offsets) - 1;
                     
                     int offset = raw_batch_offsets[batch_idx];
@@ -1146,7 +1149,7 @@ namespace polysolve::linear
                 thrust::make_counting_iterator(total_sparse_dofs),
                 [=] __device__ (int i) {
                     
-                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + sparse_batch_count, i);
+                    int* batch_ptr = thrust::upper_bound(thrust::seq, raw_batch_offsets, raw_batch_offsets + local_sparse_batch_count, i);
                     int batch_idx = (batch_ptr - raw_batch_offsets) - 1;
                     
                     int offset = raw_batch_offsets[batch_idx];

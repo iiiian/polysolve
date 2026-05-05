@@ -730,7 +730,7 @@
     },
     {
         "pointer": "/GPUHybrid/max_dense_size",
-        "default": 1000,
+        "default": 0,
         "type": "int",
         "doc": "Maximum size for using dense inverse on subdomains."
     },

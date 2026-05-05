@@ -131,7 +131,7 @@ namespace polysolve::nonlinear
             elements = elements_;
         }
 
-        Eigen::VectorXd positions;
+        Eigen::MatrixXd positions;
         Eigen::MatrixXi elements;
 
         /// --- Misc ----------------------------------------------------------

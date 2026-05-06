@@ -1,0 +1,10 @@
+{
+    "solver": "MAS",
+    "MAS": {
+        "absolute_tolerance": 0,
+        "block_dim": 1,
+        "max_iter": 10000,
+        "relative_tolerance": 1e-12,
+        "lazy_partitioning": true
+    }
+}

@@ -1,0 +1,12 @@
+{
+    "solver": "GPUHybrid",
+    "GPUHybrid": {
+        "max_iter": 10000,
+        "relative_tolerance": 1e-12,
+        "absolute_tolerance": 0,
+        "block_size": 1,
+        "theta": 0.5,
+        "do_hybrid_precond": false,
+        "max_dense_size": 0
+    }
+}

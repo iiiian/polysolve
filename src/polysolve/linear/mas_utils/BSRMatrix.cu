@@ -307,7 +307,10 @@ namespace polysolve::linear::mas
             // ---------------------------------------------------------------------------
 
             Buf<uint64_t> unique_keys = safe_alloc<uint64_t>(nnz_total, rt, "MAS permuted_bsr rle");
-            Buf<int> counts = safe_alloc<int>(nnz_total, rt, "MAS permuted_bsr rle");
+
+            // We later use this buffer to do exlcusive sum for CSR offsets.
+            // Thus the size is nnz_total + 1.
+            Buf<int> counts = safe_alloc<int>(nnz_total + 1, rt, "MAS permuted_bsr rle");
             Buf<int> num_runs = safe_alloc<int>(1, rt, "MAS permuted_bsr rle");
 
             size_t rle_tmp_size = 0;

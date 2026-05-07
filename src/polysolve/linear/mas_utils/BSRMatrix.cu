@@ -146,6 +146,22 @@ namespace polysolve::linear::mas
             block_rows[tid] = key_to_row(unique_keys[tid]);
         }
 
+        __global__ void histogram(ctd::span<const int> samples,
+                                  ctd::span<int> hist,
+                                  int num_bins
+
+        )
+        {
+            for (int i = blockDim.x * blockIdx.x + threadIdx.x;
+                 i < samples.size();
+                 i += blockDim.x * gridDim.x)
+            {
+                int sample = samples[i];
+                assert(sample >= 0 && sample < num_bins);
+                atomicAdd(&hist[sample], 1);
+            }
+        }
+
         __global__ void fill_bsr_cols_vals(int block_dim,
                                            ctd::span<const uint64_t> unique_keys,
                                            ctd::span<const int> payload_offsets,
@@ -187,8 +203,8 @@ namespace polysolve::linear::mas
             const int rows_num = A_csc.rows();
             const int cols_num = A_csc.cols();
             const int nnz = A_csc.nonZeros();
-            int dim_blocks = div_round_up(rows_num, block_dim);
-            int padded = block_dim * dim_blocks - rows_num;
+            int bsr_dim = div_round_up(rows_num, block_dim);
+            int padded = block_dim * bsr_dim - rows_num;
             int nnz_total = nnz + padded;
 
             // Upload input CSC to device.
@@ -243,7 +259,7 @@ namespace polysolve::linear::mas
                 nnz,
                 padded,
                 block_dim,
-                dim_blocks,
+                bsr_dim,
                 d_perm_ptr,
                 *col_of_nnz,
                 *d_row_idx,
@@ -345,40 +361,27 @@ namespace polysolve::linear::mas
                 ctd::span<const uint64_t>(unique_keys->data(), nnz_blocks),
                 *block_rows);
             // Histogram count nnz block per row.
-            Buf<int> hist = safe_alloc<int>(dim_blocks + 1, 0, rt, "MAS permuted_bsr histogram");
-            size_t hist_tmp_size = 0;
-            cub::DeviceHistogram::HistogramEven(nullptr,
-                                                hist_tmp_size,
-                                                block_rows->data(),
-                                                hist->data(),
-                                                dim_blocks + 1,
-                                                0,
-                                                dim_blocks,
-                                                nnz_blocks,
-                                                rt.stream.get());
-            cub::DeviceHistogram::HistogramEven(make_cub_tmp(hist_tmp_size),
-                                                hist_tmp_size,
-                                                block_rows->data(),
-                                                hist->data(),
-                                                dim_blocks + 1,
-                                                0,
-                                                dim_blocks,
-                                                nnz_blocks,
-                                                rt.stream.get());
+            Buf<int> hist = safe_alloc<int>(bsr_dim + 1, 0, rt, "MAS permuted_bsr histogram");
+            // As of 20260507, CCCL v3.0.0 histogram has a out-of-bound memory write bug.
+            // If in the bug is fixed in the future you shall replace the homebrew histogram.
+            histogram<<<div_round_up(nnz_blocks, 128), 128, 0, rt.stream.get()>>>(
+                *block_rows,
+                *hist,
+                bsr_dim);
             // Exclusive scan compute CSR row ptr.
-            out_rows = safe_alloc<int>(dim_blocks + 1, rt, "MAS permuted_bsr histogram");
+            out_rows = safe_alloc<int>(bsr_dim + 1, rt, "MAS permuted_bsr histogram");
             size_t scan_tmp_size = 0;
             cub::DeviceScan::ExclusiveSum(nullptr,
                                           scan_tmp_size,
                                           hist->data(),
                                           out_rows->data(),
-                                          dim_blocks + 1,
+                                          bsr_dim + 1,
                                           rt.stream.get());
             cub::DeviceScan::ExclusiveSum(make_cub_tmp(scan_tmp_size),
                                           scan_tmp_size,
                                           hist->data(),
                                           out_rows->data(),
-                                          dim_blocks + 1,
+                                          bsr_dim + 1,
                                           rt.stream.get());
             block_rows->destroy();
             hist->destroy();

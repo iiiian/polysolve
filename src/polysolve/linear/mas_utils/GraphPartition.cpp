@@ -9,6 +9,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -194,13 +195,41 @@ namespace polysolve::linear::mas
             return;
         }
 
-        static_assert(sizeof(int) == sizeof(kaminpar_node_id_t), "int and KaMinPar node IDs differ in size");
-        static_assert(sizeof(int) == sizeof(kaminpar_edge_id_t), "int and KaMinPar edge IDs differ in size");
-        static_assert(sizeof(int64_t) == sizeof(kaminpar_edge_weight_t),
-                      "int64 and KaMinPar edge weights differ in size (enable KAMINPAR_64BIT_WEIGHTS?)");
+        static_assert(std::is_same_v<kaminpar_node_id_t, std::uint32_t>,
+                      "KaMinPar node IDs are expected to be uint32_t");
+        static_assert(std::is_same_v<kaminpar_edge_id_t, std::uint32_t>,
+                      "KaMinPar edge IDs are expected to be uint32_t");
+        static_assert(std::is_same_v<kaminpar_block_id_t, std::uint32_t>,
+                      "KaMinPar block IDs are expected to be uint32_t");
+        static_assert(std::is_same_v<kaminpar_edge_weight_t, std::int64_t>,
+                      "KaMinPar edge weights are expected to be int64_t (enable KAMINPAR_64BIT_WEIGHTS)");
+        static_assert(std::is_same_v<kaminpar_block_weight_t, std::int64_t>,
+                      "KaMinPar block weights are expected to be int64_t (enable KAMINPAR_64BIT_WEIGHTS)");
 
-        auto *xadj = reinterpret_cast<kaminpar_edge_id_t *>(row_ptr.data());
-        auto *adjncy = reinterpret_cast<kaminpar_node_id_t *>(cols.data());
+        std::vector<kaminpar_edge_id_t> xadj(row_ptr.size());
+        for (size_t i = 0; i < row_ptr.size(); ++i)
+        {
+            if (row_ptr[i] < 0)
+            {
+                std::ostringstream oss;
+                oss << "[MAS] Invalid graph for KaMinPar: row_ptr[" << i << "] is negative: " << row_ptr[i];
+                throw std::runtime_error(oss.str());
+            }
+            xadj[i] = static_cast<kaminpar_edge_id_t>(row_ptr[i]);
+        }
+
+        std::vector<kaminpar_node_id_t> adjncy(cols.size());
+        for (size_t i = 0; i < cols.size(); ++i)
+        {
+            if (cols[i] < 0)
+            {
+                std::ostringstream oss;
+                oss << "[MAS] Invalid graph for KaMinPar: cols[" << i << "] is negative: " << cols[i];
+                throw std::runtime_error(oss.str());
+            }
+            adjncy[i] = static_cast<kaminpar_node_id_t>(cols[i]);
+        }
+
         auto *adjwgt = weights.empty()
                            ? nullptr
                            : reinterpret_cast<kaminpar_edge_weight_t *>(weights.data());
@@ -217,9 +246,9 @@ namespace polysolve::linear::mas
         kaminpar_set_output_level(partitioner, KAMINPAR_OUTPUT_LEVEL_QUIET);
         kaminpar_borrow_and_mutate_graph(
             partitioner,
-            node_num,
-            xadj,
-            adjncy,
+            static_cast<kaminpar_node_id_t>(node_num),
+            xadj.data(),
+            adjncy.data(),
             nullptr,
             adjwgt);
 
@@ -229,8 +258,9 @@ namespace polysolve::linear::mas
         // It seems like max_part_size - 2 is a good balance.
         part_num = div_round_up(node_num, max_part_size - 2);
         assert(part_num >= 1);
+        const auto k = static_cast<kaminpar_block_id_t>(part_num);
         std::vector<kaminpar_block_weight_t> max_block_weights(
-            part_num,
+            k,
             static_cast<kaminpar_block_weight_t>(max_part_size));
         std::vector<kaminpar_block_id_t> partition(node_num);
 
@@ -238,7 +268,7 @@ namespace polysolve::linear::mas
         // Since our node weight is uniform, this is equivalent to limiting parition size.
         kaminpar_compute_partition_with_max_block_weights(
             partitioner,
-            part_num,
+            k,
             max_block_weights.data(),
             partition.data());
 
@@ -247,6 +277,13 @@ namespace polysolve::linear::mas
 
         for (int i = 0; i < node_num; ++i)
         {
+            if (partition[i] >= k)
+            {
+                std::ostringstream oss;
+                oss << "[MAS] Invalid partition id from KaMinPar at node " << i
+                    << ": " << partition[i] << " not in [0, " << part_num << ")";
+                throw std::runtime_error(oss.str());
+            }
             part_id[i] = static_cast<int>(partition[i]);
         }
     }

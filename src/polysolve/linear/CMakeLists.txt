@@ -33,6 +33,8 @@ if(POLYSOLVE_WITH_CUDA)
         mas_utils/BSRMatrix.hpp
         mas_utils/BadDOFPreconditioner.cu
         mas_utils/BadDOFPreconditioner.hpp
+        mas_utils/BadDofGMMPreconditioner.cu
+        mas_utils/BadDofGMMPreconditioner.hpp
         mas_utils/BadDofKMeanPreconditioner.cu
         mas_utils/BadDofKMeanPreconditioner.hpp
         mas_utils/CuSparseWrapper.hpp

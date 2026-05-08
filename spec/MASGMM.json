@@ -1,0 +1,12 @@
+{
+    "solver": "MAS",
+    "MAS": {
+        "relative_tolerance": 1e-8,
+        "absolute_tolerance": 0.0,
+        "block_dim": 1,
+        "max_iter": 10000,
+        "lazy_partitioning": false,
+        "use_bad_dof_precond": true,
+        "bad_dof_strategy": "gmm"
+    }
+}

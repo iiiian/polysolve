@@ -14,6 +14,7 @@
 #include <cuda/std/optional>
 
 #include <chrono>
+#include <future>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -21,6 +22,7 @@
 #include <polysolve/linear/mas_utils/BSRAdjacency.hpp>
 #include <polysolve/linear/mas_utils/BSRMatrix.hpp>
 #include <polysolve/linear/mas_utils/BadDOFPreconditioner.hpp>
+#include <polysolve/linear/mas_utils/BadDofGMMPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/BadDofKMeanPreconditioner.hpp>
 #include <polysolve/linear/mas_utils/CuSparseWrapper.hpp>
 #include <polysolve/linear/mas_utils/CudaUtils.cuh>
@@ -140,6 +142,7 @@ namespace polysolve::linear
         {
             Elbow,
             KMeans,
+            GMM,
         };
 
         int block_dim_ = 3; ///< BSR block dim.
@@ -155,6 +158,10 @@ namespace polysolve::linear
         double bad_dof_kmeans_jump_threshold_ = 10.0;
         int bad_dof_kmeans_max_iterations_ = 32;
         int bad_dof_kmeans_expand_neighbors_ = 0;
+        double bad_dof_gmm_jump_threshold_ = 10.0;
+        double bad_dof_gmm_tol_ = 1e-3;
+        int bad_dof_gmm_max_iterations_ = 5;
+        int bad_dof_gmm_expand_neighbors_ = 32;
 
         int dim_ = 0;          ///< Input matrix A dim.
         int permuted_dim_ = 0; ///< Dim with block padding.
@@ -168,12 +175,14 @@ namespace polysolve::linear
         ctd::optional<cu::device_ref> default_device_;
         ctd::optional<cu::stream> default_stream_;
         ctd::optional<cu::device_memory_pool> default_mem_pool_;
+        ctd::optional<cu::stream> bad_dof_stream_;
         CuSparseHandle cusparse_handle_;
 
         BSRMatrix A_;
         MASPreconditioner mas_precond_;
         BadDOFPreconditioner bad_dof_precond_;
         BadDofKMeanPreconditioner bad_dof_kmeans_precond_;
+        BadDofGMMPreconditioner bad_dof_gmm_precond_;
         std::vector<int> permutation_;     ///< Permutation from graph partition.
         std::vector<int> inv_permutation_; ///< Permutation from graph partition.
         std::vector<int> part_offsets_;    ///< Partition offsets for sorted blocks.
@@ -209,6 +218,7 @@ namespace polysolve::linear
             default_device_.emplace(cu::devices[0]);
             default_stream_.emplace(*default_device_);
             default_mem_pool_.emplace(*default_device_);
+            bad_dof_stream_.emplace(*default_device_);
         }
 
         void set_parameters(const json &params)
@@ -234,6 +244,10 @@ namespace polysolve::linear
                 {
                     bad_dof_strategy_ = BadDofSelectionStrategy::KMeans;
                 }
+                else if (strategy == "gmm")
+                {
+                    bad_dof_strategy_ = BadDofSelectionStrategy::GMM;
+                }
                 else
                 {
                     bad_dof_strategy_ = BadDofSelectionStrategy::Elbow;
@@ -247,11 +261,23 @@ namespace polysolve::linear
                 bad_dof_kmeans_max_iterations_ = params["bad_dof_kmeans_max_iterations"];
             if (params.contains("bad_dof_kmeans_expand_neighbors"))
                 bad_dof_kmeans_expand_neighbors_ = params["bad_dof_kmeans_expand_neighbors"];
+            if (params.contains("bad_dof_gmm_jump_threshold"))
+                bad_dof_gmm_jump_threshold_ = params["bad_dof_gmm_jump_threshold"];
+            if (params.contains("bad_dof_gmm_tol"))
+                bad_dof_gmm_tol_ = params["bad_dof_gmm_tol"];
+            if (params.contains("bad_dof_gmm_max_iterations"))
+                bad_dof_gmm_max_iterations_ = params["bad_dof_gmm_max_iterations"];
+            if (params.contains("bad_dof_gmm_expand_neighbors"))
+                bad_dof_gmm_expand_neighbors_ = params["bad_dof_gmm_expand_neighbors"];
 
             bad_dof_kmeans_precond_.set_kmeans_search_fraction(bad_dof_kmeans_search_fraction_);
             bad_dof_kmeans_precond_.set_kmeans_jump_threshold(bad_dof_kmeans_jump_threshold_);
             bad_dof_kmeans_precond_.set_kmeans_max_iterations(bad_dof_kmeans_max_iterations_);
             bad_dof_kmeans_precond_.set_kmeans_expand_neighbors(bad_dof_kmeans_expand_neighbors_);
+            bad_dof_gmm_precond_.set_gmm_jump_threshold(bad_dof_gmm_jump_threshold_);
+            bad_dof_gmm_precond_.set_gmm_tol(bad_dof_gmm_tol_);
+            bad_dof_gmm_precond_.set_gmm_max_iterations(bad_dof_gmm_max_iterations_);
+            bad_dof_gmm_precond_.set_gmm_expand_neighbors(bad_dof_gmm_expand_neighbors_);
         }
 
         void get_info(json &params) const
@@ -310,6 +336,22 @@ namespace polysolve::linear
 
             const size_t workspace_bytes = workspace_size == 0 ? 1 : workspace_size;
             spmv_workspace_ = safe_alloc<char>(workspace_bytes, rt, "cusparse_workspace");
+        }
+
+        void factorize_bad_dof_preconditioner(CudaRuntime rt)
+        {
+            if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
+            {
+                bad_dof_kmeans_precond_.factorize(A_, rt);
+            }
+            else if (bad_dof_strategy_ == BadDofSelectionStrategy::GMM)
+            {
+                bad_dof_gmm_precond_.factorize(A_, rt);
+            }
+            else
+            {
+                bad_dof_precond_.factorize(A_, rt);
+            }
         }
 
         void spmv(ctd::span<const double> x, ctd::span<double> y, CudaRuntime rt)
@@ -377,28 +419,34 @@ namespace polysolve::linear
             dim_ = A.rows();
             permuted_dim_ = view.block_dim * view.dim;
 
-            // Initialize MAS.
-            phase_begin = clock::now();
-            mas_precond_.factorize(
-                A_,
-                ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
-                rt);
-            rt.stream.sync();
-            SPDLOG_INFO("[MAS] [factorize_mas] [{:.6f}]", elapsed_seconds(phase_begin));
-
+            // Bad DOF precond init is mostly CPU while MAS init is mostly GPU.
+            // Makes perfect sense to overlap them.
             if (use_bad_dof_precond_)
             {
                 phase_begin = clock::now();
-                if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
-                {
-                    bad_dof_kmeans_precond_.factorize(A_, rt);
-                }
-                else
-                {
-                    bad_dof_precond_.factorize(A_, rt);
-                }
+                CudaRuntime bad_rt{*bad_dof_stream_, default_mem_pool_->as_ref()};
+                auto bad_dof_factorize = std::async(std::launch::async, [this, bad_rt] {
+                    factorize_bad_dof_preconditioner(bad_rt);
+                    bad_rt.stream.sync();
+                });
+                mas_precond_.factorize(
+                    A_,
+                    ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
+                    rt);
                 rt.stream.sync();
-                SPDLOG_INFO("[MAS] [factorize_bad_dof] [{:.6f}]", elapsed_seconds(phase_begin));
+                bad_dof_factorize.get();
+                SPDLOG_INFO("[MAS] [factorize_mas_and_bad_dof] [{:.6f}]", elapsed_seconds(phase_begin));
+            }
+            else
+            {
+                // Initialize MAS.
+                phase_begin = clock::now();
+                mas_precond_.factorize(
+                    A_,
+                    ctd::span<const int>(part_offsets_.data(), part_offsets_.size()),
+                    rt);
+                rt.stream.sync();
+                SPDLOG_INFO("[MAS] [factorize_mas] [{:.6f}]", elapsed_seconds(phase_begin));
             }
 
             // Copy permutation to device.
@@ -476,6 +524,10 @@ namespace polysolve::linear
                 {
                     bad_dof_ready = !bad_dof_kmeans_precond_.empty();
                 }
+                else if (bad_dof_strategy_ == BadDofSelectionStrategy::GMM)
+                {
+                    bad_dof_ready = !bad_dof_gmm_precond_.empty();
+                }
                 else
                 {
                     bad_dof_ready = !bad_dof_precond_.empty();
@@ -534,19 +586,33 @@ namespace polysolve::linear
             ctd::span<double> z,
             CudaRuntime rt)
         {
-            mas_precond_.apply(r, z, rt);
-            if (use_bad_dof_precond_)
+            if (!use_bad_dof_precond_)
             {
-                if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
-                {
-                    bad_dof_kmeans_precond_.apply(r, *Ap_, rt);
-                }
-                else
-                {
-                    bad_dof_precond_.apply(r, *Ap_, rt);
-                }
-                axpby(1.0, nullptr, 1.0, nullptr, *Ap_, z, rt);
+                mas_precond_.apply(r, z, rt);
+                return;
             }
+
+            // Overlapping Bad DOF and MAS precond here brings little benefits.
+            // The reason we do it is because cuDSS need to operate in the same stream.
+            CudaRuntime bad_rt{*bad_dof_stream_, default_mem_pool_->as_ref()};
+            rt.stream.sync();
+            mas_precond_.apply(r, z, rt);
+            if (bad_dof_strategy_ == BadDofSelectionStrategy::KMeans)
+            {
+                bad_dof_kmeans_precond_.apply(r, *Ap_, bad_rt);
+            }
+            else if (bad_dof_strategy_ == BadDofSelectionStrategy::GMM)
+            {
+                bad_dof_gmm_precond_.apply(r, *Ap_, bad_rt);
+            }
+            else
+            {
+                bad_dof_precond_.apply(r, *Ap_, bad_rt);
+            }
+
+            rt.stream.sync();
+            bad_rt.stream.sync();
+            axpby(1.0, nullptr, 1.0, nullptr, *Ap_, z, rt);
         }
 
         /// https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf

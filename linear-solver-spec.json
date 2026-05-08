@@ -532,7 +532,11 @@
             "bad_dof_kmeans_search_fraction",
             "bad_dof_kmeans_jump_threshold",
             "bad_dof_kmeans_max_iterations",
-            "bad_dof_kmeans_expand_neighbors"
+            "bad_dof_kmeans_expand_neighbors",
+            "bad_dof_gmm_jump_threshold",
+            "bad_dof_gmm_tol",
+            "bad_dof_gmm_max_iterations",
+            "bad_dof_gmm_expand_neighbors"
         ],
         "doc": "Settings for the MAS solver."
     },
@@ -793,7 +797,8 @@
         "type": "string",
         "options": [
             "elbow",
-            "kmean"
+            "kmean",
+            "gmm"
         ],
         "doc": "Bad-DOF detection strategy used when use_bad_dof_precond is enabled."
     },
@@ -817,7 +822,31 @@
     },
     {
         "pointer": "/MAS/bad_dof_kmeans_expand_neighbors",
-        "default": 0,
+        "default": 128,
+        "type": "int",
+        "doc": "Expand each selected bad-DoF by including this many neighboring indices in the partition-sorted ordering (0 disables)."
+    },
+    {
+        "pointer": "/MAS/bad_dof_gmm_jump_threshold",
+        "default": 10.0,
+        "type": "float",
+        "doc": "Threshold for GMM high/low row-norm mean ratio."
+    },
+    {
+        "pointer": "/MAS/bad_dof_gmm_tol",
+        "default": 1e-3,
+        "type": "float",
+        "doc": "GMM convergence tolerance."
+    },
+    {
+        "pointer": "/MAS/bad_dof_gmm_max_iterations",
+        "default": 20,
+        "type": "int",
+        "doc": "Maximum GMM iterations."
+    },
+    {
+        "pointer": "/MAS/bad_dof_gmm_expand_neighbors",
+        "default": 16,
         "type": "int",
         "doc": "Expand each selected bad-DoF by including this many neighboring indices in the partition-sorted ordering (0 disables)."
     }

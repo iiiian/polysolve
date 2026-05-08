@@ -871,20 +871,24 @@ namespace polysolve::linear
         double w1 = 0.5;
 
         double var_reg = 1e-6;
-        Eigen::VectorXd total_local_gamma(my_size());
         int gmm_iter;
         for (gmm_iter = 0; gmm_iter < max_gmm_iterations; ++gmm_iter)
         {
+            double log_w0 = std::log(w0);
+            double log_w1 = std::log(w1);
+            double log_norm_const_0 = -0.5 * std::log(2.0 * M_PI * var_0);
+            double log_norm_const_1 = -0.5 * std::log(2.0 * M_PI * var_1);
+
+            auto x = row_norms.segment(starts[myid], my_size()).array();
+
+            Eigen::ArrayXd log_g0 = log_w0 + log_norm_const_0 - 0.5 * (x - mean_0).square() / var_0;
+            Eigen::ArrayXd log_g1 = log_w1 + log_norm_const_1 - 0.5 * (x - mean_1).square() / var_1;
+            Eigen::ArrayXd max_log_g = log_g0.cwiseMax(log_g1);
+            Eigen::ArrayXd log_total = max_log_g + ((log_g0 - max_log_g).exp() + (log_g1 - max_log_g).exp()).log();
+
             MPI_Win_fence(0, gamma_win);
-            gamma.segment(starts[myid], my_size()) = w0 * (1.0 / sqrt(2 * M_PI * var_0)) * (-0.5 * (row_norms.segment(starts[myid], my_size()).array() - mean_0).array().square() / var_0).exp();
-            gamma.segment(starts[myid] + row_norms.size(), my_size()) = w1 * (1.0 / sqrt(2 * M_PI * var_1)) * (-0.5 * (row_norms.segment(starts[myid], my_size()).array() - mean_1).array().square() / var_1).exp();
-            MPI_Win_fence(0, gamma_win);
-            
-            total_local_gamma = gamma.segment(starts[myid], my_size()) + gamma.segment(starts[myid] + row_norms.size(), my_size());
-            
-            MPI_Win_fence(0, gamma_win);
-            gamma.segment(starts[myid], my_size()).array() /= total_local_gamma.array();
-            gamma.segment(starts[myid] + row_norms.size(), my_size()).array() /= total_local_gamma.array();
+            gamma.segment(starts[myid], my_size()).array() = (log_g0 - log_total).exp();
+            gamma.segment(starts[myid] + row_norms.size(), my_size()).array() = (log_g1 - log_total).exp();
             MPI_Win_fence(0, gamma_win);
 
             w0 = 1.0 / row_norms.size() * gamma.segment(starts[myid], my_size()).sum();
@@ -913,7 +917,10 @@ namespace polysolve::linear
             var_0 += var_reg;
             var_1 += var_reg;
 
-            if (abs(mean_0 - old_mean_0) / abs(old_mean_0) < gmm_tol && abs(mean_1 - old_mean_1) / abs(old_mean_1) < gmm_tol && abs(var_0 - old_var_0) / abs(old_var_0) < gmm_tol && abs(var_1 - old_var_1) / abs(old_var_1) < gmm_tol)
+            if (abs(mean_0 - old_mean_0) / abs(old_mean_0) < gmm_tol &&
+                abs(mean_1 - old_mean_1) / abs(old_mean_1) < gmm_tol && 
+                abs(var_0 - old_var_0) / abs(old_var_0) < gmm_tol &&
+                abs(var_1 - old_var_1) / abs(old_var_1) < gmm_tol)
             {
                 break;
             }

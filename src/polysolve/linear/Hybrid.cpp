@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <spdlog/spdlog.h>
+#include <thread>
 
 namespace polysolve::linear
 {
@@ -750,8 +751,9 @@ namespace polysolve::linear
         pt.put<double>("alpha.value", 1e-4);
         pt.put<std::ptrdiff_t>("max_su_size.value", 64);
 
-        std::string thread_val = std::getenv("OMP_NUM_THREADS");
-        const int nthreads = thread_val.empty() ? 1 : std::stoi(thread_val);
+        const int nthreads = (std::thread::hardware_concurrency() != 0)
+                             ? std::thread::hardware_concurrency()
+                             : 1;
 
         pt.put<int>("num_threads.value", nthreads);
         pt.put<int>("subst_num_threads.value", nthreads);

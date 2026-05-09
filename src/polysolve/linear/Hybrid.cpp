@@ -340,7 +340,7 @@ namespace polysolve::linear
             int Pmax = 4;        // max number of elements per row in P
 
             // AMG relaxation options:
-            int relax_type = 8;   // 8 = l1-GS, 6 = symm. GS, 3 = GS, 18 = l1-Jacobi
+            int relax_type = 88;   // 8 = l1-GS, 6 = symm. GS, 3 = GS, 18 = l1-Jacobi
             int relax_sweeps = 1; // relaxation sweeps on each level
 
             // Additional options:

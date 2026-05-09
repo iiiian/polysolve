@@ -1085,12 +1085,12 @@ namespace polysolve::linear
     {
         HYPRE_IJVectorCreate(MPI_COMM_WORLD, starts[myid], ends[myid], &ij_x);
         HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
-        HYPRE_IJVectorInitialize(ij_x);
+        //HYPRE_IJVectorInitialize(ij_x);
         HYPRE_IJVectorInitializeShell(ij_x);
 
         HYPRE_IJVectorCreate(MPI_COMM_WORLD, starts[myid], ends[myid], &ij_b);
         HYPRE_IJVectorSetObjectType(ij_b, HYPRE_PARCSR);
-        HYPRE_IJVectorInitialize(ij_b);
+        //HYPRE_IJVectorInitialize(ij_b);
         HYPRE_IJVectorInitializeShell(ij_b);
     }
     

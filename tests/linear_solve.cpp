@@ -20,7 +20,7 @@
 #include <unistd.h>
 #include <sys/resource.h>
 
-#ifdef HYPRE_WITH_MPI
+#ifdef HYPRE_ENABLE_MPI
 #include <mpi.h>
 #endif
 
@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
         in >> solver_config;
     }
 
-#ifdef HYPRE_WITH_MPI
+#ifdef HYPRE_ENABLE_MPI
     int done_already;
     int myid = 0, num_procs = 1;
 
@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
     Eigen::SparseMatrix<double> A;
     Eigen::VectorXd x, b;
 
-#ifdef HYPRE_WITH_MPI
+#ifdef HYPRE_ENABLE_MPI
     if (myid != 0)
     {
         auto solver = Solver::create(solver_config, *logger);
@@ -474,7 +474,7 @@ int main(int argc, char *argv[])
         SPDLOG_INFO("[{}] [residual={}] [peak_memory={}]", solver->name(), residual, getPeakRSS());
     }
 
-#ifdef HYPRE_WITH_MPI
+#ifdef HYPRE_ENABLE_MPI
     MPI_Barrier(MPI_COMM_WORLD);
     int finalized;
     MPI_Finalized(&finalized);

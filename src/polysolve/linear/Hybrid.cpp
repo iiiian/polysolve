@@ -197,10 +197,10 @@ namespace polysolve::linear
         {
             auto phase_begin = clock::now();
 
-            int val_bytes = nnz * sizeof(double);
-            int inner_bytes = nnz * sizeof(int);
-            int outer_bytes = (cols + 1) * sizeof(int);
-            int total_bytes = myid == 0 ? val_bytes + inner_bytes + outer_bytes : 0;
+            uint64_t val_bytes = nnz * sizeof(double);
+            uint64_t inner_bytes = nnz * sizeof(int);
+            uint64_t outer_bytes = (cols + 1) * sizeof(int);
+            uint64_t total_bytes = myid == 0 ? val_bytes + inner_bytes + outer_bytes : 0;
 
             void* A_ptr;
             MPI_Win_allocate_shared(total_bytes, 1, MPI_INFO_NULL, MPI_COMM_WORLD, &A_ptr, &A_win);

@@ -827,33 +827,29 @@ namespace polysolve::linear::mas
                 }
                 __syncthreads();
 
-                if (tx < N)
+                if (tx == pivot)
                 {
-                    if (tx == pivot)
-                    {
-                        s_col[tx] = 0.0;
-                    }
-                    else
-                    {
-                        int row = ctd::min(tx, pivot);
-                        int col = ctd::max(tx, pivot);
-                        s_col[tx] = s_A[index_upper_mat(N, row, col)];
-                    }
+                    s_col[tx] = 0.0;
+                }
+                else
+                {
+                    int row = ctd::min(tx, pivot);
+                    int col = ctd::max(tx, pivot);
+                    s_col[tx] = s_A[index_upper_mat(N, row, col)];
                 }
                 __syncthreads();
 
-                if (tx < N && tx != pivot)
+                if (tx != pivot)
                 {
-                    double a_ik = s_col[tx];
-                    for (int col = tx; col < N; ++col)
+                    double scale = s_col[tx] / s_pivot;
+                    for (int col = 0; col < N; ++col)
                     {
-                        if (col == pivot)
+                        if (col < tx || col == pivot)
                         {
                             continue;
                         }
 
-                        double updated =
-                            s_A[index_upper_mat(N, tx, col)] - a_ik * s_col[col] / s_pivot;
+                        double updated = s_A[index_upper_mat(N, tx, col)] - scale * s_col[col];
                         if (!ctd::isfinite(updated))
                         {
                             *success = false;
@@ -875,7 +871,7 @@ namespace polysolve::linear::mas
                         s_A[index_upper_mat(N, pivot, pivot)] = updated;
                     }
                 }
-                else if (tx < N)
+                else
                 {
                     double updated = s_col[tx] / s_pivot;
                     if (!ctd::isfinite(updated))

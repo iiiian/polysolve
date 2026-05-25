@@ -334,8 +334,7 @@ namespace polysolve::linear
                 CUSPARSE_SPMV_ALG_DEFAULT,
                 &workspace_size);
 
-            const size_t workspace_bytes = workspace_size == 0 ? 1 : workspace_size;
-            spmv_workspace_ = safe_alloc<char>(workspace_bytes, rt, "cusparse_workspace");
+            spmv_workspace_ = safe_alloc<char>(workspace_size, rt, "cusparse_workspace");
         }
 
         void factorize_bad_dof_preconditioner(CudaRuntime rt)

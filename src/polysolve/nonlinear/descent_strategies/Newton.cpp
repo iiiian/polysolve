@@ -1,5 +1,7 @@
 #include "Newton.hpp"
 
+#include "ForcingTermStrategy.hpp"
+
 #include <polysolve/Utils.hpp>
 
 #if defined(SPDLOG_FMT_EXTERNAL)
@@ -8,8 +10,19 @@
 #include <spdlog/fmt/bundled/color.h>
 #endif
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 namespace polysolve::nonlinear
 {
+    namespace
+    {
+        void copy_newton_param(const json &src, json &dst, const std::string &dst_key, const std::string &name)
+        {
+            dst[dst_key][name] = src["Newton"][name];
+        }
+    } // namespace
 
     std::vector<std::shared_ptr<DescentStrategy>> Newton::create_solver(
         const bool sparse,
@@ -21,10 +34,16 @@ namespace polysolve::nonlinear
     {
         // Copies stuff from main newton
         json proj_solver_params = R"({"ProjectedNewton": {}})"_json;
-        proj_solver_params["ProjectedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
-
         json reg_solver_params = R"({"RegularizedNewton": {}})"_json;
-        reg_solver_params["RegularizedNewton"]["residual_tolerance"] = solver_params["Newton"]["residual_tolerance"];
+
+        for (const char *name : {
+                 "residual_tolerance",
+                 "forcing_term_strategy"})
+        {
+            copy_newton_param(solver_params, proj_solver_params, "ProjectedNewton", name);
+            copy_newton_param(solver_params, reg_solver_params, "RegularizedNewton", name);
+        }
+
         reg_solver_params["RegularizedNewton"]["reg_weight_min"] = solver_params["Newton"]["reg_weight_min"];
         reg_solver_params["RegularizedNewton"]["reg_weight_max"] = solver_params["Newton"]["reg_weight_max"];
         reg_solver_params["RegularizedNewton"]["reg_weight_inc"] = solver_params["Newton"]["reg_weight_inc"];
@@ -59,13 +78,15 @@ namespace polysolve::nonlinear
 
     Newton::Newton(const bool sparse,
                    const double residual_tolerance,
+                   const std::string &param_key,
                    const json &solver_params,
                    const json &linear_solver_params,
                    const double characteristic_length,
                    spdlog::logger &logger,
                    const NormType norm_type)
         : Superclass(solver_params, characteristic_length, logger),
-          is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance), norm_type(norm_type)
+          is_sparse(sparse), characteristic_length(characteristic_length), residual_tolerance(residual_tolerance), norm_type(norm_type),
+          forcing_term_param_key(param_key), forcing_term_solver_params(solver_params)
     {
         linear_solver = polysolve::linear::Solver::create(linear_solver_params, logger);
 
@@ -74,7 +95,11 @@ namespace polysolve::nonlinear
 
         if (residual_tolerance <= 0)
             log_and_throw_error(logger, "Newton residual_tolerance must be > 0, instead got {}", residual_tolerance);
+
+        create_forcing_term_strategy();
     }
+
+    Newton::~Newton() = default;
 
     Newton::Newton(
         const bool sparse,
@@ -83,7 +108,7 @@ namespace polysolve::nonlinear
         const double characteristic_length,
         spdlog::logger &logger,
         const NormType norm_type)
-        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger, norm_type)
+        : Newton(sparse, extract_param("Newton", "residual_tolerance", solver_params), "Newton", solver_params, linear_solver_params, characteristic_length, logger, norm_type)
     {
     }
 
@@ -94,7 +119,7 @@ namespace polysolve::nonlinear
         const double characteristic_length,
         spdlog::logger &logger,
         const NormType norm_type)
-        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger, norm_type)
+        : Superclass(sparse, extract_param("ProjectedNewton", "residual_tolerance", solver_params), "ProjectedNewton", solver_params, linear_solver_params, characteristic_length, logger, norm_type)
     {
     }
 
@@ -106,7 +131,7 @@ namespace polysolve::nonlinear
         const double characteristic_length,
         spdlog::logger &logger,
         const NormType norm_type)
-        : Superclass(sparse, extract_param("RegularizedNewton", "residual_tolerance", solver_params), solver_params, linear_solver_params, characteristic_length, logger, norm_type),
+        : Superclass(sparse, extract_param("RegularizedNewton", "residual_tolerance", solver_params), "RegularizedNewton", solver_params, linear_solver_params, characteristic_length, logger, norm_type),
           project_to_psd(project_to_psd)
     {
         reg_weight_min = extract_param("RegularizedNewton", "reg_weight_min", solver_params);
@@ -127,16 +152,47 @@ namespace polysolve::nonlinear
 
     // =======================================================================
 
+    void Newton::create_forcing_term_strategy()
+    {
+        forcing_term_strategy = ForcingTermStrategy::create(forcing_term_param_key, forcing_term_solver_params, m_logger);
+    }
+
+    bool Newton::use_adaptive_forcing_term() const
+    {
+        return linear_solver->is_iterative() && forcing_term_strategy->is_adaptive();
+    }
+
+    double Newton::compute_residual_target(const double grad_norm, const double eta) const
+    {
+        if (!use_adaptive_forcing_term() || grad_norm <= 0 || !std::isfinite(grad_norm) || !std::isfinite(eta))
+            return residual_tolerance;
+
+        return std::max(residual_tolerance, eta * grad_norm);
+    }
+
+    // =======================================================================
+
     void Newton::reset(const int ndof)
     {
         Superclass::reset(ndof);
         internal_solver_info = json::array();
+        create_forcing_term_strategy();
     }
 
     void RegularizedNewton::reset(const int ndof)
     {
         Superclass::reset(ndof);
         reg_weight = reg_weight_min;
+    }
+
+    void Newton::post_step(
+        const TVector &,
+        const TVector &,
+        const TVector &,
+        const double step_size,
+        const TVector &)
+    {
+        forcing_term_strategy->accept_step(step_size);
     }
 
     // =======================================================================
@@ -147,16 +203,18 @@ namespace polysolve::nonlinear
         const TVector &grad,
         TVector &direction)
     {
-        const double residual =
-            is_sparse ? solve_sparse_linear_system(objFunc, x, grad, direction)
-                      : solve_dense_linear_system(objFunc, x, grad, direction);
+        const double grad_norm = objFunc.grad_norm(grad, norm_type);
+        const double eta = forcing_term_strategy->begin_iteration(grad, objFunc, norm_type);
+        const double current_residual_tolerance = compute_residual_target(grad_norm, eta);
 
-        double current_residual_tolerance = residual_tolerance;
+        const double residual =
+            is_sparse ? solve_sparse_linear_system(objFunc, x, grad, direction, current_residual_tolerance)
+                      : solve_dense_linear_system(objFunc, x, grad, direction, current_residual_tolerance);
 
         if (std::isnan(residual) || residual > current_residual_tolerance)
         {
             m_logger.debug("[{}] large (or nan) linear solve residual {}>{} (‖∇f‖={})",
-                           name(), residual, current_residual_tolerance, objFunc.grad_norm(grad, norm_type));
+                           name(), residual, current_residual_tolerance, grad_norm);
 
             return false;
         }
@@ -173,7 +231,8 @@ namespace polysolve::nonlinear
     double Newton::solve_sparse_linear_system(Problem &objFunc,
                                               const TVector &x,
                                               const TVector &grad,
-                                              TVector &direction)
+                                              TVector &direction,
+                                              const double residual_target)
     {
         polysolve::StiffnessMatrix hessian;
 
@@ -184,6 +243,10 @@ namespace polysolve::nonlinear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
+
+            const double grad_norm = objFunc.grad_norm(grad, norm_type);
+            if (use_adaptive_forcing_term() && grad_norm > 0 && std::isfinite(grad_norm))
+                linear_solver->set_tolerance(residual_target / grad_norm);
 
             // TODO: get the correct size
             linear_solver->analyze_pattern(hessian, hessian.rows());
@@ -204,7 +267,10 @@ namespace polysolve::nonlinear
             linear_solver->solve(-grad, direction); // H Δx = -g
         }
 
-        const double residual = objFunc.grad_norm(hessian * direction + grad, norm_type); // H Δx + g = 0
+        const TVector linear_model_residual = hessian * direction + grad; // H dx + g = 0
+        const double residual = objFunc.grad_norm(linear_model_residual, norm_type);
+
+        forcing_term_strategy->record_linear_model(grad, linear_model_residual);
 
         json info;
         linear_solver->get_info(info);
@@ -216,7 +282,8 @@ namespace polysolve::nonlinear
     double Newton::solve_dense_linear_system(Problem &objFunc,
                                              const TVector &x,
                                              const TVector &grad,
-                                             TVector &direction)
+                                             TVector &direction,
+                                             const double residual_target)
     {
         Eigen::MatrixXd hessian;
 
@@ -227,6 +294,10 @@ namespace polysolve::nonlinear
 
         {
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
+
+            const double grad_norm = objFunc.grad_norm(grad, norm_type);
+            if (use_adaptive_forcing_term() && grad_norm > 0 && std::isfinite(grad_norm))
+                linear_solver->set_tolerance(residual_target / grad_norm);
 
             try
             {
@@ -244,7 +315,10 @@ namespace polysolve::nonlinear
             }
         }
 
-        const double residual = (hessian * direction + grad).norm(); // H Δx + g = 0
+        const TVector linear_model_residual = hessian * direction + grad; // H dx + g = 0
+        const double residual = objFunc.grad_norm(linear_model_residual, norm_type);
+
+        forcing_term_strategy->record_linear_model(grad, linear_model_residual);
 
         json info;
         linear_solver->get_info(info);

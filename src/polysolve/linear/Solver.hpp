@@ -107,6 +107,9 @@ namespace polysolve::linear
         /// If solver uses dense matrices
         virtual bool is_dense() const { return false; }
 
+        /// If solver is iterative and can use a runtime convergence tolerance
+        virtual bool is_iterative() const { return false; }
+
         /// Set block size for multigrid solvers
         virtual void set_block_size(int block_size) {}
 

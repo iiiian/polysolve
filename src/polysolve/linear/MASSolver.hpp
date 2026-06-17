@@ -60,8 +60,10 @@ namespace polysolve::linear
         // Solve the linear system Ax = b
         void solve(const Ref<const VectorXd> b, Ref<VectorXd> x) override;
 
+        bool is_iterative() const override { return true; }
+
         // Set solver tolerance
-        // void set_tolerance(const double tol) override;
+        void set_tolerance(const double tol) override;
 
         // Name of the solver type (for debugging purposes)
         std::string name() const override;

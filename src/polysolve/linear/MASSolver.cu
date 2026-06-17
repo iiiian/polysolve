@@ -211,6 +211,13 @@ namespace polysolve::linear
                 use_preconditioned_residual_norm_ = params["use_preconditioned_residual_norm"];
         }
 
+        void set_tolerance(const double tol)
+        {
+            rel_tol_ = tol;
+            abs_tol_ = 0;
+            use_preconditioned_residual_norm_ = false;
+        }
+
         void get_info(json &params) const
         {
             params["solver_iter"] = iterations_;
@@ -631,6 +638,11 @@ namespace polysolve::linear
     void MASSolver::solve(const Ref<const VectorXd> b, Ref<VectorXd> x)
     {
         impl_->solve(b, x);
+    }
+
+    void MASSolver::set_tolerance(const double tol)
+    {
+        impl_->set_tolerance(tol);
     }
 
     std::string MASSolver::name() const

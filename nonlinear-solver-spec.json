@@ -161,6 +161,7 @@
         "type": "object",
         "optional": [
             "residual_tolerance",
+            "forcing_term_strategy",
             "reg_weight_min",
             "reg_weight_max",
             "reg_weight_inc",
@@ -175,6 +176,131 @@
         "default": 1e-5,
         "type": "float",
         "doc": "Tolerance of the linear system residual. If residual is above, the direction is rejected."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy",
+        "default": {
+            "type": "An_Mo"
+        },
+        "type": "object",
+        "required": [
+            "type"
+        ],
+        "optional": [
+            "An_Mo",
+            "Eisenstat"
+        ],
+        "doc": "Forcing term strategy for adaptive inexact Newton solves."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/type",
+        "type": "string",
+        "options": [
+            "An_Mo",
+            "Eisenstat",
+            "None"
+        ],
+        "doc": "Forcing term strategy type."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "initial_eta",
+            "p1",
+            "p2",
+            "p3",
+            "shrink_moderate",
+            "shrink_strong",
+            "safeguard_threshold"
+        ],
+        "doc": "Options for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/initial_eta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Initial forcing term for the An-Mo-Liu strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/p1",
+        "default": 0.1,
+        "type": "float",
+        "doc": "First reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/p2",
+        "default": 0.4,
+        "type": "float",
+        "doc": "Second reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/p3",
+        "default": 0.7,
+        "type": "float",
+        "doc": "Third reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/shrink_moderate",
+        "default": 0.8,
+        "type": "float",
+        "doc": "Moderate shrink factor for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/shrink_strong",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Strong shrink factor for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/An_Mo/safeguard_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "Safeguard threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "initial_eta",
+            "eta_max",
+            "gamma",
+            "alpha",
+            "safeguard_threshold"
+        ],
+        "doc": "Options for the safeguarded Eisenstat-Walker forcing term strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat/initial_eta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Initial forcing term for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat/eta_max",
+        "default": 0.9,
+        "type": "float",
+        "doc": "Maximum forcing term for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat/gamma",
+        "default": 0.9,
+        "type": "float",
+        "doc": "Gamma parameter for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat/alpha",
+        "default": 2.0,
+        "type": "float",
+        "doc": "Alpha parameter for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/Newton/forcing_term_strategy/Eisenstat/safeguard_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "Safeguard threshold for the safeguarded Eisenstat-Walker strategy."
     },
     {
         "pointer": "/Newton/reg_weight_min",
@@ -319,7 +445,8 @@
             "type"
         ],
         "optional": [
-            "residual_tolerance"
+            "residual_tolerance",
+            "forcing_term_strategy"
         ],
         "doc": "Options for Newton."
     },
@@ -331,7 +458,8 @@
             "type"
         ],
         "optional": [
-            "residual_tolerance"
+            "residual_tolerance",
+            "forcing_term_strategy"
         ],
         "doc": "Options for projected Newton."
     },
@@ -344,6 +472,7 @@
         ],
         "optional": [
             "residual_tolerance",
+            "forcing_term_strategy",
             "reg_weight_min",
             "reg_weight_max",
             "reg_weight_inc"
@@ -359,6 +488,7 @@
         ],
         "optional": [
             "residual_tolerance",
+            "forcing_term_strategy",
             "reg_weight_min",
             "reg_weight_max",
             "reg_weight_inc"
@@ -373,7 +503,8 @@
             "type"
         ],
         "optional": [
-            "residual_tolerance"
+            "residual_tolerance",
+            "forcing_term_strategy"
         ],
         "doc": "Options for Newton."
     },
@@ -385,7 +516,8 @@
             "type"
         ],
         "optional": [
-            "residual_tolerance"
+            "residual_tolerance",
+            "forcing_term_strategy"
         ],
         "doc": "Options for projected Newton."
     },
@@ -398,6 +530,7 @@
         ],
         "optional": [
             "residual_tolerance",
+            "forcing_term_strategy",
             "reg_weight_min",
             "reg_weight_max",
             "reg_weight_inc"
@@ -413,6 +546,7 @@
         ],
         "optional": [
             "residual_tolerance",
+            "forcing_term_strategy",
             "reg_weight_min",
             "reg_weight_max",
             "reg_weight_inc"
@@ -518,6 +652,131 @@
         "default": 1e-5,
         "type": "float",
         "doc": "Tolerance of the linear system residual. If residual is above, the direction is rejected."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy",
+        "default": {
+            "type": "An_Mo"
+        },
+        "type": "object",
+        "required": [
+            "type"
+        ],
+        "optional": [
+            "An_Mo",
+            "Eisenstat"
+        ],
+        "doc": "Forcing term strategy for adaptive inexact Newton solves."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/type",
+        "type": "string",
+        "options": [
+            "An_Mo",
+            "Eisenstat",
+            "None"
+        ],
+        "doc": "Forcing term strategy type."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "initial_eta",
+            "p1",
+            "p2",
+            "p3",
+            "shrink_moderate",
+            "shrink_strong",
+            "safeguard_threshold"
+        ],
+        "doc": "Options for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/initial_eta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Initial forcing term for the An-Mo-Liu strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/p1",
+        "default": 0.1,
+        "type": "float",
+        "doc": "First reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/p2",
+        "default": 0.4,
+        "type": "float",
+        "doc": "Second reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/p3",
+        "default": 0.7,
+        "type": "float",
+        "doc": "Third reduction-ratio threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/shrink_moderate",
+        "default": 0.8,
+        "type": "float",
+        "doc": "Moderate shrink factor for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/shrink_strong",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Strong shrink factor for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/An_Mo/safeguard_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "Safeguard threshold for the An-Mo-Liu forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat",
+        "default": null,
+        "type": "object",
+        "optional": [
+            "initial_eta",
+            "eta_max",
+            "gamma",
+            "alpha",
+            "safeguard_threshold"
+        ],
+        "doc": "Options for the safeguarded Eisenstat-Walker forcing term strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat/initial_eta",
+        "default": 0.5,
+        "type": "float",
+        "doc": "Initial forcing term for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat/eta_max",
+        "default": 0.9,
+        "type": "float",
+        "doc": "Maximum forcing term for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat/gamma",
+        "default": 0.9,
+        "type": "float",
+        "doc": "Gamma parameter for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat/alpha",
+        "default": 2.0,
+        "type": "float",
+        "doc": "Alpha parameter for the safeguarded Eisenstat-Walker strategy."
+    },
+    {
+        "pointer": "/solver/*/forcing_term_strategy/Eisenstat/safeguard_threshold",
+        "default": 0.1,
+        "type": "float",
+        "doc": "Safeguard threshold for the safeguarded Eisenstat-Walker strategy."
     },
     {
         "pointer": "/solver/*/reg_weight_min",

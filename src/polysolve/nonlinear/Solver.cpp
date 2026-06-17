@@ -472,9 +472,11 @@ namespace polysolve::nonlinear
             }
 
             {
+                const TVector x0 = x;
                 TVector x1 = x + rate * delta_x;
                 if (objFunc.after_line_search_custom_operation(x, x1))
                     objFunc.solution_changed(x1);
+                m_strategies[m_descent_strategy]->post_step(x0, grad, delta_x, rate, x1);
                 x = x1;
             }
 

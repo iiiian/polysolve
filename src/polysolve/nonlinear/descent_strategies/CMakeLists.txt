@@ -8,6 +8,8 @@ set(SOURCES
 	GradientDescent.hpp
 	ADAM.cpp
 	ADAM.hpp
+	ForcingTermStrategy.cpp
+	ForcingTermStrategy.hpp
 	Newton.hpp
 	Newton.cpp
 )

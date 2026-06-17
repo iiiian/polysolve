@@ -7,6 +7,8 @@
 
 namespace polysolve::nonlinear
 {
+    class ForcingTermStrategy;
+
     class Newton : public DescentStrategy
     {
     public:
@@ -23,6 +25,7 @@ namespace polysolve::nonlinear
     protected:
         Newton(const bool sparse,
                const double residual_tolerance,
+               const std::string &param_key,
                const json &solver_params,
                const json &linear_solver_params,
                const double characteristic_length,
@@ -30,6 +33,8 @@ namespace polysolve::nonlinear
                const NormType norm_type);
 
     public:
+        ~Newton() override;
+
         Newton(const bool sparse,
                const json &solver_params,
                const json &linear_solver_params,
@@ -42,10 +47,15 @@ namespace polysolve::nonlinear
     private:
         double solve_sparse_linear_system(Problem &objFunc,
                                           const TVector &x, const TVector &grad,
-                                          TVector &direction);
+                                          TVector &direction,
+                                          const double residual_target);
         double solve_dense_linear_system(Problem &objFunc,
                                          const TVector &x, const TVector &grad,
-                                         TVector &direction);
+                                         TVector &direction,
+                                         const double residual_target);
+        double compute_residual_target(const double grad_norm, const double eta) const;
+        bool use_adaptive_forcing_term() const;
+        void create_forcing_term_strategy();
 
         json internal_solver_info = json::array();
 
@@ -53,6 +63,10 @@ namespace polysolve::nonlinear
         const double characteristic_length;
         double residual_tolerance;
         const NormType norm_type;
+
+        const std::string forcing_term_param_key;
+        const json forcing_term_solver_params;
+        std::unique_ptr<ForcingTermStrategy> forcing_term_strategy;
 
         std::unique_ptr<polysolve::linear::Solver> linear_solver; ///< Linear solver used to solve the linear system
 
@@ -72,6 +86,12 @@ namespace polysolve::nonlinear
 
     public:
         bool compute_update_direction(Problem &objFunc, const TVector &x, const TVector &grad, TVector &direction) override;
+
+        void post_step(const TVector &x,
+                       const TVector &grad,
+                       const TVector &direction,
+                       const double step_size,
+                       const TVector &x_next) override;
 
         void reset(const int ndof) override;
         void update_solver_info(json &solver_info, const double per_iteration) override;

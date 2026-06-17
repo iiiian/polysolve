@@ -50,6 +50,13 @@ namespace polysolve::nonlinear
             const TVector &grad,
             TVector &direction) = 0;
 
+        virtual void post_step(
+            const TVector &x,
+            const TVector &grad,
+            const TVector &direction,
+            const double step_size,
+            const TVector &x_next) {}
+
     protected:
         spdlog::logger &m_logger;
     };

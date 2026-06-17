@@ -128,6 +128,57 @@ public:
     std::string name() override { return "Quadratic"; }
 };
 
+class QuarticProblem : public TestProblem
+{
+public:
+    double value(const TVector &x) override
+    {
+        return 0.25 * x(0) * x(0) * x(0) * x(0) + 0.5 * x(0) * x(0);
+    }
+
+    void gradient(const TVector &x, TVector &gradv) override
+    {
+        gradv.resize(1);
+        gradv(0) = x(0) * x(0) * x(0) + x(0);
+    }
+
+    void hessian(const TVector &x, THessian &hessian) override
+    {
+        hessian.resize(1, 1);
+        hessian.coeffRef(0, 0) = 3 * x(0) * x(0) + 1;
+    }
+
+    void hessian(const TVector &x, Eigen::MatrixXd &hessian) override
+    {
+        hessian.resize(1, 1);
+        hessian(0, 0) = 3 * x(0) * x(0) + 1;
+    }
+
+    std::vector<TVector> solutions() override
+    {
+        TVector res(1, 1);
+        res.setZero();
+        return {res};
+    }
+
+    TVector min() override
+    {
+        TVector res(1, 1);
+        res << -3;
+        return res;
+    }
+
+    TVector max() override
+    {
+        TVector res(1, 1);
+        res << 3;
+        return res;
+    }
+
+    int size() override { return 1; }
+    std::string name() override { return "Quartic"; }
+};
+
 class Rosenbrock : public AnalyticTestProblem
 {
     AutodiffScalarHessian eval_fun(const AutodiffHessian &x) const override
@@ -486,6 +537,95 @@ TEST_CASE("nonlinear-gradient-fd", "[solver]")
 {
     test_solvers_gradient_fd(false);
     test_solvers_gradient_fd(true);
+}
+
+TEST_CASE("inexact-newton-iterative-linear-solver", "[solver]")
+{
+    QuarticProblem problem;
+    const double characteristic_length = 1;
+
+    static std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("inexact-newton-test-logger");
+    logger->set_level(spdlog::level::warn);
+
+    json linear_solver_params;
+    linear_solver_params["solver"] = "Eigen::ConjugateGradient";
+    linear_solver_params["precond"] = "Eigen::IdentityPreconditioner";
+    linear_solver_params["Eigen::ConjugateGradient"]["max_iter"] = 100;
+    linear_solver_params["Eigen::ConjugateGradient"]["tolerance"] = 1e-12;
+
+    auto check_solution = [&](const json &solver_params) {
+        auto solver = Solver::create(
+            solver_params, linear_solver_params, characteristic_length, *logger);
+
+        Eigen::VectorXd x(problem.size());
+        x.setConstant(2.0);
+
+        solver->minimize(problem, x);
+
+        Eigen::VectorXd grad;
+        problem.gradient(x, grad);
+        CHECK(grad.norm() < 1e-8);
+        CHECK(solver->current_criteria().iterations > 1);
+    };
+
+    SECTION("top-level default An_Mo")
+    {
+        json solver_params;
+        solver_params["solver"] = "Newton";
+        solver_params["line_search"]["method"] = "None";
+        solver_params["max_iterations"] = 50;
+        solver_params["grad_norm_tol"] = 1e-10;
+        solver_params["rel_grad_norm_tol"] = 0;
+        solver_params["Newton"]["residual_tolerance"] = 1e-12;
+
+        check_solution(solver_params);
+    }
+
+    SECTION("top-level Eisenstat")
+    {
+        json solver_params;
+        solver_params["solver"] = "Newton";
+        solver_params["line_search"]["method"] = "None";
+        solver_params["max_iterations"] = 50;
+        solver_params["grad_norm_tol"] = 1e-10;
+        solver_params["rel_grad_norm_tol"] = 0;
+        solver_params["Newton"]["residual_tolerance"] = 1e-12;
+        solver_params["Newton"]["forcing_term_strategy"]["type"] = "Eisenstat";
+        solver_params["Newton"]["forcing_term_strategy"]["Eisenstat"]["gamma"] = 0.9;
+
+        check_solution(solver_params);
+    }
+
+    SECTION("top-level None")
+    {
+        json solver_params;
+        solver_params["solver"] = "Newton";
+        solver_params["line_search"]["method"] = "None";
+        solver_params["max_iterations"] = 50;
+        solver_params["grad_norm_tol"] = 1e-10;
+        solver_params["rel_grad_norm_tol"] = 0;
+        solver_params["Newton"]["residual_tolerance"] = 1e-12;
+        solver_params["Newton"]["forcing_term_strategy"]["type"] = "None";
+
+        check_solution(solver_params);
+    }
+
+    SECTION("solver-list An_Mo")
+    {
+        json solver_params;
+        solver_params["solver"] = json::array();
+        solver_params["solver"].push_back({
+            {"type", "Newton"},
+            {"residual_tolerance", 1e-12},
+            {"forcing_term_strategy", {{"type", "An_Mo"}, {"An_Mo", {{"p1", 0.1}}}}},
+        });
+        solver_params["line_search"]["method"] = "None";
+        solver_params["max_iterations"] = 50;
+        solver_params["grad_norm_tol"] = 1e-10;
+        solver_params["rel_grad_norm_tol"] = 0;
+
+        check_solution(solver_params);
+    }
 }
 
 TEST_CASE("nonlinear-easier", "[solver]")

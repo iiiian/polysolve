@@ -11,6 +11,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <catch2/catch.hpp>
+#include <algorithm>
 #include <iostream>
 #include <unsupported/Eigen/SparseExtra>
 #include <fstream>
@@ -21,6 +22,24 @@
 
 using namespace polysolve;
 using namespace polysolve::linear;
+
+namespace
+{
+    bool expected_iterative_solver(const std::string &solver_name)
+    {
+        static const std::vector<std::string> iterative_solvers = {
+            "Eigen::LeastSquaresConjugateGradient",
+            "Eigen::DGMRES",
+            "Eigen::ConjugateGradient",
+            "Eigen::BiCGSTAB",
+            "Eigen::GMRES",
+            "Eigen::MINRES",
+            "Hypre",
+            "MAS"};
+
+        return std::find(iterative_solvers.begin(), iterative_solvers.end(), solver_name) != iterative_solvers.end();
+    }
+} // namespace
 
 void loadSymmetric(Eigen::SparseMatrix<double> &A, std::string PATH)
 {
@@ -72,6 +91,16 @@ TEST_CASE("jse", "[solver]")
     const double err = (A * x - b).norm();
     INFO("solver: " + solver->name());
     REQUIRE(err < 1e-8);
+}
+
+TEST_CASE("iterative-interface", "[solver]")
+{
+    for (const auto &solver_name : Solver::available_solvers())
+    {
+        auto solver = Solver::create(solver_name, "");
+        INFO("solver: " + solver_name);
+        CHECK(solver->is_iterative() == expected_iterative_solver(solver_name));
+    }
 }
 
 TEST_CASE("multi-solver", "[solver]")

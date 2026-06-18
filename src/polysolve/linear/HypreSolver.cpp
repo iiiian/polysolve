@@ -36,6 +36,11 @@ namespace polysolve::linear
         {
             HYPRE_Initialize();
         }
+
+        HYPRE_SetMemoryLocation(HYPRE_MEMORY_DEVICE);
+        HYPRE_SetExecutionPolicy(HYPRE_EXEC_DEVICE);
+        HYPRE_SetSpGemmUseCusparse(0);
+        HYPRE_SetUseGpuRand(1);
     }
 
     // Set solver parameters
@@ -102,7 +107,7 @@ namespace polysolve::linear
 #endif
         // HYPRE_IJMatrixSetPrintLevel(A, 2);
         HYPRE_IJMatrixSetObjectType(A, HYPRE_PARCSR);
-        HYPRE_IJMatrixInitialize(A);
+        HYPRE_IJMatrixInitialize_v2(A, HYPRE_MEMORY_HOST);
 
         // HYPRE_IJMatrixSetValues(A, 1, &nnz, &i, cols, values);
 
@@ -129,6 +134,7 @@ namespace polysolve::linear
         }
 
         HYPRE_IJMatrixAssemble(A);
+        HYPRE_IJMatrixMigrate(A, HYPRE_MEMORY_DEVICE);
         HYPRE_IJMatrixGetObject(A, (void **)&parcsr_A);
     }
 
@@ -141,23 +147,25 @@ namespace polysolve::linear
         {
             HYPRE_IJVectorCreate(0, 0, x.size() - 1, &ij_x);
             HYPRE_IJVectorSetObjectType(ij_x, HYPRE_PARCSR);
-            HYPRE_IJVectorInitialize(ij_x);
+            HYPRE_IJVectorInitialize_v2(ij_x, HYPRE_MEMORY_HOST);
 
             HYPRE_IJVectorSetValues(ij_x, x.size(), nullptr, x.data());
 
             HYPRE_IJVectorAssemble(ij_x);
+            HYPRE_IJVectorMigrate(ij_x, HYPRE_MEMORY_DEVICE);
             HYPRE_IJVectorGetObject(ij_x, (void **)&par_x);
         }
 
         void hypre_vec_to_eigen(const HYPRE_IJVector &ij_x, Eigen::Ref<Eigen::VectorXd> &x)
         {
+            HYPRE_IJVectorMigrate(ij_x, HYPRE_MEMORY_HOST);
             HYPRE_IJVectorGetValues(ij_x, x.size(), nullptr, x.data());
         }
 
         void HypreBoomerAMG_SetDefaultOptions(HYPRE_Solver &amg_precond)
         {
             // AMG coarsening options:
-            int coarsen_type = 10; // 10 = HMIS, 8 = PMIS, 6 = Falgout, 0 = CLJP
+            int coarsen_type = 8; // 8 = PMIS
             int agg_levels = 1;    // number of aggressive coarsening levels
             double theta = 0.5;   // strength threshold: 0.25, 0.5, 0.8
 
@@ -166,7 +174,7 @@ namespace polysolve::linear
             int Pmax = 4;        // max number of elements per row in P
 
             // AMG relaxation options:
-            int relax_type = 8;   // 8 = l1-GS, 6 = symm. GS, 3 = GS, 18 = l1-Jacobi
+            int relax_type = 18;  // 18 = l1-Jacobi
             int relax_sweeps = 1; // relaxation sweeps on each level
 
             // Additional options:
@@ -176,12 +184,15 @@ namespace polysolve::linear
             HYPRE_BoomerAMGSetCoarsenType(amg_precond, coarsen_type);
             HYPRE_BoomerAMGSetAggNumLevels(amg_precond, agg_levels);
             HYPRE_BoomerAMGSetRelaxType(amg_precond, relax_type);
+            HYPRE_BoomerAMGSetRelaxOrder(amg_precond, 0);
             HYPRE_BoomerAMGSetNumSweeps(amg_precond, relax_sweeps);
             HYPRE_BoomerAMGSetStrongThreshold(amg_precond, theta);
             HYPRE_BoomerAMGSetInterpType(amg_precond, interp_type);
             HYPRE_BoomerAMGSetPMaxElmts(amg_precond, Pmax);
             HYPRE_BoomerAMGSetPrintLevel(amg_precond, print_level);
             HYPRE_BoomerAMGSetMaxLevels(amg_precond, max_levels);
+            HYPRE_BoomerAMGSetKeepTranspose(amg_precond, 1);
+            HYPRE_BoomerAMGSetRAP2(amg_precond, 0);
 
             // Use as a preconditioner (one V-cycle, zero tolerance)
             HYPRE_BoomerAMGSetMaxIter(amg_precond, 1);

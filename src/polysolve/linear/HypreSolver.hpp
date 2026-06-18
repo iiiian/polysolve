@@ -8,6 +8,7 @@
 
 #include <HYPRE_utilities.h>
 #include <HYPRE.h>
+#include <HYPRE_IJ_mv.h>
 #include <HYPRE_parcsr_ls.h>
 #include <HYPRE_parcsr_mv.h>
 

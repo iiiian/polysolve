@@ -6,6 +6,10 @@ endif()
 
 message(STATUS "Third-party: creating target 'HYPRE::HYPRE'")
 
+if(NOT POLYSOLVE_WITH_CUDA)
+    message(FATAL_ERROR "HYPRE is configured as a GPU-only dependency; enable POLYSOLVE_WITH_CUDA.")
+endif()
+
 set(HYPRE_ENABLE_MPI           OFF CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_PRINT_ERRORS  ON  CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_BIGINT        OFF CACHE INTERNAL "" FORCE)
@@ -14,13 +18,8 @@ set(HYPRE_ENABLE_FEI           OFF CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_OPENMP        OFF CACHE INTERNAL "" FORCE)
 set(HYPRE_ENABLE_UMPIRE        OFF CACHE INTERNAL "" FORCE)
 
-if (POLYSOLVE_WITH_CUDA)
-    set(HYPRE_USING_GPU            ON  CACHE INTERNAL "" FORCE)
-    set(HYPRE_ENABLE_CUDA          ON  CACHE INTERNAL "" FORCE)
-else()
-    set(HYPRE_USING_GPU            OFF CACHE INTERNAL "" FORCE)
-    set(HYPRE_ENABLE_CUDA          OFF CACHE INTERNAL "" FORCE)
-endif()
+set(HYPRE_USING_GPU            ON  CACHE INTERNAL "" FORCE)
+set(HYPRE_ENABLE_CUDA          ON  CACHE INTERNAL "" FORCE)
 
 # HYPRE unconditionally defines an "uninstall" target, which conflicts with other buggy libraries
 # as modern cmake requires unique target name. This is a hacky workaround until upstream is fixed.

@@ -86,7 +86,7 @@ option(POLYSOLVE_WITH_SPQR          "Enable SPQR library"                       
 option(POLYSOLVE_WITH_MKL           "Enable MKL library"  ${POLYSOLVE_NOT_ON_APPLE_SILICON})
 option(POLYSOLVE_WITH_CUSOLVER      "Enable cuSOLVER library"                           OFF)
 option(POLYSOLVE_WITH_PARDISO       "Enable Pardiso library"                            OFF)
-option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ON)
+option(POLYSOLVE_WITH_HYPRE         "Enable hypre"                                       ${POLYSOLVE_WITH_CUDA})
 option(POLYSOLVE_WITH_AMGCL         "Use AMGCL"                                          ON)
 option(POLYSOLVE_WITH_SPECTRA       "Enable Spectra library"                             ON)
 
@@ -308,6 +308,9 @@ target_link_libraries(polysolve_linear PUBLIC jse::jse)
 
 # Hypre (GNU Lesser General Public License)
 if(POLYSOLVE_WITH_HYPRE)
+    if(NOT POLYSOLVE_WITH_CUDA)
+        message(FATAL_ERROR "POLYSOLVE_WITH_HYPRE requires POLYSOLVE_WITH_CUDA; CPU HYPRE is no longer supported.")
+    endif()
     include(hypre)
     target_link_libraries(polysolve_linear PUBLIC HYPRE::HYPRE)
     target_compile_definitions(polysolve_linear PUBLIC POLYSOLVE_WITH_HYPRE)

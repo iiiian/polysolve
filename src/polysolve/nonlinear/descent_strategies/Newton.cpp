@@ -245,7 +245,7 @@ namespace polysolve::nonlinear
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
 
             const double grad_norm = objFunc.grad_norm(grad, norm_type);
-            if (use_adaptive_forcing_term() && grad_norm > 0 && std::isfinite(grad_norm))
+            if (linear_solver->is_iterative() && grad_norm > 0 && std::isfinite(grad_norm))
                 linear_solver->set_tolerance(residual_target / grad_norm);
 
             // TODO: get the correct size
@@ -296,7 +296,7 @@ namespace polysolve::nonlinear
             POLYSOLVE_SCOPED_STOPWATCH("linear solve", this->inverting_time, m_logger);
 
             const double grad_norm = objFunc.grad_norm(grad, norm_type);
-            if (use_adaptive_forcing_term() && grad_norm > 0 && std::isfinite(grad_norm))
+            if (linear_solver->is_iterative() && grad_norm > 0 && std::isfinite(grad_norm))
                 linear_solver->set_tolerance(residual_target / grad_norm);
 
             try

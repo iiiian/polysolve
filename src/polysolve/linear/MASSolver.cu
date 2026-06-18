@@ -220,9 +220,10 @@ namespace polysolve::linear
 
         void get_info(json &params) const
         {
-            params["solver_iter"] = iterations_;
-            params["solver_error"] = residual_norm_;
-            params["solver_status"] = mas_status_to_string(status_);
+            params["num_iterations"] = iterations_;
+            params["final_res_norm"] = residual_norm_;
+            params["converged"] = status_ == MASSolverStatus::ReachRelativeTolerance
+                                  || status_ == MASSolverStatus::ReachAbsoluteTolerance;
         }
 
         void analyze_pattern(const StiffnessMatrix &, const int) {}
@@ -589,7 +590,7 @@ namespace polysolve::linear
                 axpby(1.0, nullptr, 1.0, scalar_beta_->data(), *z_, *p_, rt);
             }
 
-            if (iterations_ == max_iter_)
+            if (status_ == MASSolverStatus::Running && iterations_ == max_iter_)
             {
                 status_ = MASSolverStatus::ReachMaxIterations;
             }

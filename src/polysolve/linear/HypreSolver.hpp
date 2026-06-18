@@ -69,8 +69,9 @@ namespace polysolve::linear
         bool nodal_coarsening = false;
         bool interp_rbms = false;
 
-        HYPRE_Int num_iterations;
-        HYPRE_Complex final_res_norm;
+        HYPRE_Int num_iterations = 0;
+        HYPRE_Complex final_res_norm = 0.0;
+        bool converged_ = false;
 
     private:
         bool has_matrix_ = false;

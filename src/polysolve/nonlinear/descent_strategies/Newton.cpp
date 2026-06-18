@@ -22,6 +22,25 @@ namespace polysolve::nonlinear
         {
             dst[dst_key][name] = src["Newton"][name];
         }
+
+        void log_linear_solver_info(spdlog::logger &logger, const std::string &solver_name, const json &info)
+        {
+            if (!info.contains("num_iterations") || !info.contains("final_res_norm") || !info.contains("converged"))
+            {
+                return;
+            }
+            if (!info["num_iterations"].is_number_integer() || !info["final_res_norm"].is_number() || !info["converged"].is_boolean())
+            {
+                return;
+            }
+
+            logger.info(
+                "[Newton] linear solver {}: iterations={} residual={:.6e} converged={}",
+                solver_name,
+                info["num_iterations"].get<long long>(),
+                info["final_res_norm"].get<double>(),
+                info["converged"].get<bool>());
+        }
     } // namespace
 
     std::vector<std::shared_ptr<DescentStrategy>> Newton::create_solver(
@@ -275,6 +294,7 @@ namespace polysolve::nonlinear
         json info;
         linear_solver->get_info(info);
         internal_solver_info.push_back(info);
+        log_linear_solver_info(m_logger, linear_solver->name(), info);
 
         return residual;
     }
@@ -323,6 +343,7 @@ namespace polysolve::nonlinear
         json info;
         linear_solver->get_info(info);
         internal_solver_info.push_back(info);
+        log_linear_solver_info(m_logger, linear_solver->name(), info);
 
         return residual;
     }

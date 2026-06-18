@@ -83,6 +83,7 @@ namespace polysolve::linear
     {
         params["num_iterations"] = num_iterations;
         params["final_res_norm"] = final_res_norm;
+        params["converged"] = converged_;
     }
 
     ////////////////////////////////////////////////////////////////////////////////
@@ -337,6 +338,9 @@ namespace polysolve::linear
         /* Run info - needed logging turned on */
         HYPRE_PCGGetNumIterations(solver, &num_iterations);
         HYPRE_PCGGetFinalRelativeResidualNorm(solver, &final_res_norm);
+        HYPRE_Int converged = 0;
+        HYPRE_PCGGetConverged(solver, &converged);
+        converged_ = converged != 0;
 
         // printf("\n");
         // printf("Iterations = %lld\n", num_iterations);

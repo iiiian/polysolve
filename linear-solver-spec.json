@@ -488,7 +488,8 @@
             "expand_subdomains",
             "use_incomplete_cholesky_precond",
             "rho",
-            "additive_mode"
+            "additive_mode",
+            "subdomain_selection_strategy"
         ],
         "doc": "Settings for the Hybrid solver."
     },
@@ -547,6 +548,12 @@
         "default": false,
         "type": "bool",
         "doc": "Whether or not to use additive mode."
+    },
+    {
+        "pointer": "/Hybrid/subdomain_selection_strategy",
+        "default": "gmm",
+        "type": "string",
+        "doc": "Strategy for selecting subdomains."
     },
     {
         "pointer": "/Hybrid/max_iter",

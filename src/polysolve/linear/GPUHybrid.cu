@@ -174,7 +174,11 @@ namespace polysolve::linear
             if (params["GPUHybrid"].contains("conditioning_threshold"))
             {
                 conditioning_threshold = params["GPUHybrid"]["conditioning_threshold"];
-            }   
+            }
+            if (params["GPUHybrid"].contains("additive_mode"))
+            {
+                additive_mode = params["GPUHybrid"]["additive_mode"];
+            }      
         }
     } 
 
@@ -524,6 +528,14 @@ namespace polysolve::linear
         {
             amg_precond_iter(precond, r, z);
             return;
+        }
+        else if (additive_mode)
+        {
+            thrust::fill(buffer.begin(), buffer.end(), 0.0);
+            thrust::fill(z2.begin(), z2.end(), 0.0);
+            amg_precond_iter(precond, r, z);
+            dss_precond_iter(buffer, r, z2);
+            vector_add(1.0, z2, z);
         }
         else
         {

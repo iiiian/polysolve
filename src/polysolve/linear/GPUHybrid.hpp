@@ -83,6 +83,7 @@ namespace polysolve::linear
         bool expand_subdomains = true;
         int max_dense_size = 0;
         bool use_float_on_subdomains = false;
+        bool additive_mode = false;
 
         // General solver settings
         int dimension_ = 1; // 1 = scalar (Laplace), 2 or 3 = vector (Elasticity)

@@ -487,7 +487,8 @@
             "max_subdomain_size",
             "expand_subdomains",
             "use_incomplete_cholesky_precond",
-            "rho"
+            "rho",
+            "additive_mode"
         ],
         "doc": "Settings for the Hybrid solver."
     },
@@ -512,7 +513,8 @@
             "max_subdomain_size",
             "expand_subdomains",
             "max_dense_size",
-            "use_float_on_subdomains"
+            "use_float_on_subdomains",
+            "additive_mode"
         ],
         "doc": "Settings for the GPU Hybrid solver."
     },
@@ -539,6 +541,12 @@
             "bad_dof_gmm_expand_neighbors"
         ],
         "doc": "Settings for the MAS solver."
+    },
+    {
+        "pointer": "/Hybrid/additive_mode",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use additive mode."
     },
     {
         "pointer": "/Hybrid/max_iter",
@@ -677,6 +685,12 @@
         "default": true,
         "type": "bool",
         "doc": "Whether or not to do hybrid preconditioning."
+    },
+    {
+        "pointer": "/GPUHybrid/additive_mode",
+        "default": false,
+        "type": "bool",
+        "doc": "Whether or not to use additive mode."
     },
     {
         "pointer": "/GPUHybrid/select_bad_dofs_from_l1_norm",

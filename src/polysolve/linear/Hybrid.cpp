@@ -145,7 +145,40 @@ namespace polysolve::linear
             if (params["Hybrid"].contains("conditioning_threshold"))
             {
                 conditioning_threshold = params["Hybrid"]["conditioning_threshold"];
+            } 
+            if (params["Hybrid"].contains("additive_mode"))
+            {
+                additive_mode = params["Hybrid"]["additive_mode"];
             }   
+            if (params["Hybrid"].contains("subdomain_selection_strategy"))
+            {
+                const std::string strategy_str = params["Hybrid"]["subdomain_selection_strategy"];
+                if (strategy_str == "knee")
+                {
+                    subdomain_selection_strategy = Hybrid::SubdomainSelectionStrategy::KNEE;
+                }
+                else if (strategy_str == "gmm")
+                {
+                    subdomain_selection_strategy = Hybrid::SubdomainSelectionStrategy::GMM;
+                }
+                else if (strategy_str == "fd")
+                {
+                    subdomain_selection_strategy = Hybrid::SubdomainSelectionStrategy::FD;
+                }
+                else if (strategy_str == "cost")
+                {
+                    subdomain_selection_strategy = Hybrid::SubdomainSelectionStrategy::COST;
+                }
+                else if (strategy_str == "aposteriori")
+                {
+                    subdomain_selection_strategy = Hybrid::SubdomainSelectionStrategy::APOSTERIORI;
+
+                }
+                else
+                {
+                    throw std::runtime_error("Invalid subdomain selection strategy: " + strategy_str);
+                }
+            }
         }
     }
 
@@ -657,6 +690,13 @@ namespace polysolve::linear
             return;
         }
 
+        if (additive_mode)
+        {
+            amg_precond_iter(precond, r, z1);
+            dss_precond_iter(z3, r, z2, vec, vec_win);
+            z = z1 + z2;
+        }
+        else
         {
             amg_precond_iter(precond, r, z1);
             dss_precond_iter(z1, r, z2, vec, vec_win);
@@ -816,6 +856,18 @@ namespace polysolve::linear
         {
             return; 
         }
+
+        /* (subdomain_selection_strategy)
+        {
+            case SubdomainSelectionStrategy::KNEE:
+                break;
+            case SubdomainSelectionStrategy::GMM:
+                break;
+            case SubdomainSelectionStrategy::FD:
+                break;
+            case SubdomainSelectionStrategy::COST:
+                break;
+        }*/
 
         MPI_Win row_norm_win;
         MPI_Win gamma_win;

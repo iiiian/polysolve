@@ -308,12 +308,20 @@ int main(int argc, char *argv[])
     if (myid != 0)
     {
         auto solver = Solver::create(solver_config, *logger);
-        while (true)
+        for (int iteration = 0; iteration < warmup + repeat; ++iteration)
         {
             solver->analyze_pattern(A, 0);
             solver->factorize(A);
             solver->solve(b, x);
         }
+#ifdef HYPRE_ENABLE_MPI
+        int finalized;
+        MPI_Finalized(&finalized);
+        if (!finalized)
+            MPI_Finalize();
+#endif
+        HYPRE_Finalize();
+        return 0;
     }
 #endif
 
@@ -475,7 +483,6 @@ int main(int argc, char *argv[])
     }
 
 #ifdef HYPRE_ENABLE_MPI
-    MPI_Barrier(MPI_COMM_WORLD);
     int finalized;
     MPI_Finalized(&finalized);
     if (!finalized)
